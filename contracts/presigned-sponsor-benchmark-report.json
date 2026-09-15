@@ -1,0 +1,618 @@
+{
+  "generatedAt": "2026-09-16T14:52:29.823Z",
+  "chainId": 10143,
+  "rounds": 6,
+  "workload": {
+    "accounts": 5,
+    "callsPerSubmission": 2,
+    "callType": "ERC20 approve on each of two market base tokens",
+    "timingBoundary": "application payload and Alchemy UserOperation signatures completed before timer"
+  },
+  "caveat": "Privy sponsorship does not expose a prepare/sign/send split; its measured submission includes managed enclave signing.",
+  "summary": {
+    "alchemy": {
+      "submissions": 30,
+      "successful": 30,
+      "failed": 0,
+      "durationMs": 6138,
+      "submissionsPerSecond": 4.887585532746823,
+      "acceptanceP50Ms": 313,
+      "acceptanceP95Ms": 545,
+      "inclusionP50Ms": 898,
+      "inclusionP95Ms": 1201,
+      "sponsored": 30
+    },
+    "privy": {
+      "submissions": 30,
+      "successful": 30,
+      "failed": 0,
+      "durationMs": 27261,
+      "submissionsPerSecond": 1.1004732034774953,
+      "acceptanceP50Ms": 790,
+      "acceptanceP95Ms": 1564,
+      "inclusionP50Ms": 4046,
+      "inclusionP95Ms": 4683,
+      "sponsored": 30
+    }
+  },
+  "nativeGasPaid": {
+    "privy": ["0", "0", "0", "0", "0"],
+    "alchemy": ["0", "0", "0", "0", "0"]
+  },
+  "transactions": {
+    "alchemy": [
+      {
+        "provider": "alchemy",
+        "label": "round 1 trader 1",
+        "acceptedMs": 301,
+        "hash": "0xfb376f62c9e6975055bff3fb5de1e48bf19252afc6042d56572bc8e4fb807fe8",
+        "includedMs": 931,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 1 trader 2",
+        "acceptedMs": 298,
+        "hash": "0x43bcadf7c0821895d2839b8ee32d571e029500e19da94cb7f0a67b8a7b021283",
+        "includedMs": 871,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 1 trader 3",
+        "acceptedMs": 301,
+        "hash": "0x979b0b1c9c1ae8989fe61062a400ac03ceda1acc3632f7054a92ec61bf3a6ff2",
+        "includedMs": 890,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 1 trader 4",
+        "acceptedMs": 535,
+        "hash": "0x6d1207204cc843fc47ac9011b1c48798c8f8ea4fa54cc0607607417501464355",
+        "includedMs": 1091,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 1 trader 5",
+        "acceptedMs": 407,
+        "hash": "0x519f0aefc35626f9e2b88ceb8591fc66457bc87d6dccf2e8d4744a6efc762e15",
+        "includedMs": 1043,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 2 trader 1",
+        "acceptedMs": 516,
+        "hash": "0x0cb11d9694f7bd5f7809fc096ad3e54d66267da516da3677bd05a1f3e2723afb",
+        "includedMs": 787,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 2 trader 2",
+        "acceptedMs": 303,
+        "hash": "0x487ae7b76387ca3574db36c593deae49ac72fabc7614ac2ebaf9f60f6e956bd5",
+        "includedMs": 898,
+        "gasUsed": "547507",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 2 trader 3",
+        "acceptedMs": 516,
+        "hash": "0xa5fdc3c1e8e9ab67e18600163ce4f216677fac65c5ace824c4454a05ea7cf60e",
+        "includedMs": 787,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 2 trader 4",
+        "acceptedMs": 313,
+        "hash": "0x487ae7b76387ca3574db36c593deae49ac72fabc7614ac2ebaf9f60f6e956bd5",
+        "includedMs": 909,
+        "gasUsed": "547507",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 2 trader 5",
+        "acceptedMs": 293,
+        "hash": "0x2477236e0594b922d94ecd2e225bc7c391faf3b41433e34591799671957067dd",
+        "includedMs": 879,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 3 trader 1",
+        "acceptedMs": 290,
+        "hash": "0xb959d8f271e2abfe8d163dd2704241be6dc7ebe7287f69f065530254f6c883d5",
+        "includedMs": 969,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 3 trader 2",
+        "acceptedMs": 308,
+        "hash": "0x75bdc64ea0ce87778b079ef235f82ca21c3df8b5d6bb3bb8d3591b8ae318a91d",
+        "includedMs": 950,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 3 trader 3",
+        "acceptedMs": 545,
+        "hash": "0xb6f9d12013ee9dc3f2f1e61dd0778f2fdebdae43b5c39018392275d908560b40",
+        "includedMs": 1203,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 3 trader 4",
+        "acceptedMs": 414,
+        "hash": "0x4e21922f83137394f9d8551c900d6491d5ac9a7b9f255a5d0a3d60e1f8b93b7a",
+        "includedMs": 979,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 3 trader 5",
+        "acceptedMs": 288,
+        "hash": "0x70549027780b20ac87a1cc7a2aa1aad6ea45aeae248a1760e34e797768c2e1bb",
+        "includedMs": 948,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 4 trader 1",
+        "acceptedMs": 284,
+        "hash": "0xe4bf796cddeba472727aa8089e9aa173158534781f78acd135d8664a433a66d6",
+        "includedMs": 570,
+        "gasUsed": "1072965",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 4 trader 2",
+        "acceptedMs": 286,
+        "hash": "0xe4bf796cddeba472727aa8089e9aa173158534781f78acd135d8664a433a66d6",
+        "includedMs": 731,
+        "gasUsed": "1072965",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 4 trader 3",
+        "acceptedMs": 283,
+        "hash": "0xe4bf796cddeba472727aa8089e9aa173158534781f78acd135d8664a433a66d6",
+        "includedMs": 830,
+        "gasUsed": "1072965",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 4 trader 4",
+        "acceptedMs": 434,
+        "hash": "0xed12544707e52956ede8e9e2c6547153e91d6a919844ad352d65cf16f3d3dc58",
+        "includedMs": 1032,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 4 trader 5",
+        "acceptedMs": 285,
+        "hash": "0xe4bf796cddeba472727aa8089e9aa173158534781f78acd135d8664a433a66d6",
+        "includedMs": 834,
+        "gasUsed": "1072965",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 5 trader 1",
+        "acceptedMs": 283,
+        "hash": "0x3a49c23bb925732bb494b943e94ee78b18359b476c33ad55c72c18826b769f86",
+        "includedMs": 995,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 5 trader 2",
+        "acceptedMs": 560,
+        "hash": "0xe2333084a2078c0b478d0dbddc72bb6bdfd4b3220d19c76c0cf13a3c45c122d5",
+        "includedMs": 932,
+        "gasUsed": "284778",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 5 trader 3",
+        "acceptedMs": 410,
+        "hash": "0x91c6ee7045fafb8874c87dd80c3d5a65df3efb81563a2e5ed4180ebc40cb1761",
+        "includedMs": 994,
+        "gasUsed": "284766",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 5 trader 4",
+        "acceptedMs": 522,
+        "hash": "0x12f27f2a956ecb1b81be9de3383836641306491d64aaf45d3b0e3243b1fc0b5c",
+        "includedMs": 1201,
+        "gasUsed": "547507",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 5 trader 5",
+        "acceptedMs": 468,
+        "hash": "0x12f27f2a956ecb1b81be9de3383836641306491d64aaf45d3b0e3243b1fc0b5c",
+        "includedMs": 1061,
+        "gasUsed": "547507",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 6 trader 1",
+        "acceptedMs": 284,
+        "hash": "0x5107c64eed7fe62ac7e80c3fd104ad16221018fb4765a87a32b26cad84fbe551",
+        "includedMs": 643,
+        "gasUsed": "1072927",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 6 trader 2",
+        "acceptedMs": 382,
+        "hash": "0x5107c64eed7fe62ac7e80c3fd104ad16221018fb4765a87a32b26cad84fbe551",
+        "includedMs": 652,
+        "gasUsed": "1072927",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 6 trader 3",
+        "acceptedMs": 381,
+        "hash": "0x5107c64eed7fe62ac7e80c3fd104ad16221018fb4765a87a32b26cad84fbe551",
+        "includedMs": 667,
+        "gasUsed": "1072927",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 6 trader 4",
+        "acceptedMs": 381,
+        "hash": "0x5107c64eed7fe62ac7e80c3fd104ad16221018fb4765a87a32b26cad84fbe551",
+        "includedMs": 675,
+        "gasUsed": "1072927",
+        "sponsored": true
+      },
+      {
+        "provider": "alchemy",
+        "label": "round 6 trader 5",
+        "acceptedMs": 381,
+        "hash": "0x751e4881572de38afa1dd46473a341ae747133462c2595dcc84f461f92761552",
+        "includedMs": 696,
+        "gasUsed": "284753",
+        "sponsored": true
+      }
+    ],
+    "privy": [
+      {
+        "provider": "privy",
+        "label": "round 1 trader 1",
+        "acceptedMs": 1000,
+        "hash": "0xa9a5d3633048acba19bca3994a683d3765ad6d69f9a98e511ed55f9fe18d7580",
+        "hashMs": 4449,
+        "includedMs": 4670,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 1 trader 2",
+        "acceptedMs": 738,
+        "hash": "0xb099c0be774c833ae42a6855312cbbd35a904a1a215addf70d687b0f89dddc5f",
+        "hashMs": 3614,
+        "includedMs": 4136,
+        "gasUsed": "518588",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 1 trader 3",
+        "acceptedMs": 734,
+        "hash": "0x2e7ecea8f8e3ef327c8c4ac7080c98dbac9318c2447e91101295a2b3a478dc7a",
+        "hashMs": 3220,
+        "includedMs": 3867,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 1 trader 4",
+        "acceptedMs": 872,
+        "hash": "0x06c4070e0c080993b746617e77a7a9e5e23cb035da625251bf89373489fd08cd",
+        "hashMs": 3221,
+        "includedMs": 3794,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 1 trader 5",
+        "acceptedMs": 735,
+        "hash": "0xb099c0be774c833ae42a6855312cbbd35a904a1a215addf70d687b0f89dddc5f",
+        "hashMs": 3443,
+        "includedMs": 4132,
+        "gasUsed": "518588",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 2 trader 1",
+        "acceptedMs": 872,
+        "hash": "0x3b354f1559fbface42736dbf18a831565099866af42fbc7f074838b8a36221fb",
+        "hashMs": 3656,
+        "includedMs": 3836,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 2 trader 2",
+        "acceptedMs": 1564,
+        "hash": "0xebda77a3b5dc4d2086acfcfbb6d3814ba03964cf7055e5a8f6a10558c6408f3b",
+        "hashMs": 4129,
+        "includedMs": 4319,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 2 trader 3",
+        "acceptedMs": 754,
+        "hash": "0x3dafa49c4f3f8a26a387dd7151b2a4961ab52a36123fe63686351651ef520ea4",
+        "hashMs": 3072,
+        "includedMs": 3683,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 2 trader 4",
+        "acceptedMs": 790,
+        "hash": "0xa85a8b9648fe8af33cc3771d0fd49da1820221c272edcda2de37c023ddc35c4c",
+        "hashMs": 3013,
+        "includedMs": 3653,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 2 trader 5",
+        "acceptedMs": 735,
+        "hash": "0x8419a517286b515fea1bbf95ef8739f7fd362e3de43be1ba43da5c2594eee690",
+        "hashMs": 3594,
+        "includedMs": 4174,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 3 trader 1",
+        "acceptedMs": 785,
+        "hash": "0xbfbaabd91d5545d7e9a48eeace13cd01c1744ec2cfd059cc93c9fcd72f7bf03b",
+        "hashMs": 3724,
+        "includedMs": 4046,
+        "gasUsed": "766845",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 3 trader 2",
+        "acceptedMs": 785,
+        "hash": "0xbfbaabd91d5545d7e9a48eeace13cd01c1744ec2cfd059cc93c9fcd72f7bf03b",
+        "hashMs": 3674,
+        "includedMs": 4046,
+        "gasUsed": "766845",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 3 trader 3",
+        "acceptedMs": 748,
+        "hash": "0xbfbaabd91d5545d7e9a48eeace13cd01c1744ec2cfd059cc93c9fcd72f7bf03b",
+        "hashMs": 3486,
+        "includedMs": 4046,
+        "gasUsed": "766845",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 3 trader 4",
+        "acceptedMs": 1022,
+        "hash": "0x2fd31ae3bb3e3b4088d70ac9b7c196f3cf6aae867989a28cb01b6da3226e6578",
+        "hashMs": 3884,
+        "includedMs": 4519,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 3 trader 5",
+        "acceptedMs": 1533,
+        "hash": "0x2ef6c439504f5baabe9204caaf0a514e355a52fed6c3422ac1a62504e350bc52",
+        "hashMs": 4036,
+        "includedMs": 4677,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 4 trader 1",
+        "acceptedMs": 744,
+        "hash": "0xac01feee3533db6a97689db2d4b481084037ca32b1ed8efeeac12d4b4e309766",
+        "hashMs": 3476,
+        "includedMs": 4077,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 4 trader 2",
+        "acceptedMs": 743,
+        "hash": "0x51d4c75aa70b85e6dbdd07de9d82dacfa215577a05159d7509c4cf37ce92ea65",
+        "hashMs": 3538,
+        "includedMs": 4096,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 4 trader 3",
+        "acceptedMs": 938,
+        "hash": "0x0c143284419fe5d3a5fb27115a4b760b211ae60d0a58a6a37938c5344c514796",
+        "hashMs": 3723,
+        "includedMs": 4409,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 4 trader 4",
+        "acceptedMs": 1411,
+        "hash": "0xc06d47c4096599dff2e6b670bb25dcf807d76b4fcf20d6d2ee78d129dc0fc8d2",
+        "hashMs": 4494,
+        "includedMs": 4683,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 4 trader 5",
+        "acceptedMs": 745,
+        "hash": "0x48100a2ff6726ad561e19b711e0211bf6ac5951baad61ad26e88f3112c06c7fa",
+        "hashMs": 3524,
+        "includedMs": 4075,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 5 trader 1",
+        "acceptedMs": 855,
+        "hash": "0x7f8d726cfe3503299af4b637e5b9c4121d062ae7926a8913a0b2f8d0778b7957",
+        "hashMs": 3152,
+        "includedMs": 3774,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 5 trader 2",
+        "acceptedMs": 796,
+        "hash": "0x46fde3a2c531ca620daf5c9088887d1c3f24febff08c44cc2711d282b074a299",
+        "hashMs": 3397,
+        "includedMs": 3956,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 5 trader 3",
+        "acceptedMs": 775,
+        "hash": "0x347d8fb71a540a592131b1cd9d9977bc5235a6a76c3dff1dc4d5065beb82c6b6",
+        "hashMs": 3132,
+        "includedMs": 3634,
+        "gasUsed": "518563",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 5 trader 4",
+        "acceptedMs": 775,
+        "hash": "0x347d8fb71a540a592131b1cd9d9977bc5235a6a76c3dff1dc4d5065beb82c6b6",
+        "hashMs": 3069,
+        "includedMs": 3634,
+        "gasUsed": "518563",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 5 trader 5",
+        "acceptedMs": 1425,
+        "hash": "0x7cb84890ecb1930329855a7eb98f4d8f5f430ee0ababf00261a96d1b983f28e9",
+        "hashMs": 3598,
+        "includedMs": 4164,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 6 trader 1",
+        "acceptedMs": 864,
+        "hash": "0x6012b7775cbf205577980aa25718e6f342d76d862ca5f18a3358b50c0d237406",
+        "hashMs": 3134,
+        "includedMs": 3727,
+        "gasUsed": "518576",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 6 trader 2",
+        "acceptedMs": 989,
+        "hash": "0xbb06af4b594775026bab90d14165009af90424473eff3087f369db48a0b86ca7",
+        "hashMs": 3482,
+        "includedMs": 4062,
+        "gasUsed": "270306",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 6 trader 3",
+        "acceptedMs": 737,
+        "hash": "0x1586eb1679b516fd2a53aeec642331f5b891fa938db06bc99bfc9e48cdc9de3d",
+        "hashMs": 2967,
+        "includedMs": 3570,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 6 trader 4",
+        "acceptedMs": 1776,
+        "hash": "0x4ea882e66ac2be22e3ee7cb191cdcf07ab24c011c28d42360f8c971b6b9b7501",
+        "hashMs": 4535,
+        "includedMs": 4736,
+        "gasUsed": "270319",
+        "sponsored": true
+      },
+      {
+        "provider": "privy",
+        "label": "round 6 trader 5",
+        "acceptedMs": 792,
+        "hash": "0x6012b7775cbf205577980aa25718e6f342d76d862ca5f18a3358b50c0d237406",
+        "hashMs": 3400,
+        "includedMs": 3723,
+        "gasUsed": "518576",
+        "sponsored": true
+      }
+    ]
+  }
+}

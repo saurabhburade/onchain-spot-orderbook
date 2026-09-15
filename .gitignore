@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+out/
+cache/
+broadcast/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+!apps/*/.env.example
+.DS_Store
+**/next-env.d.ts
+**/certificates/
+lcov.info
+coverage/

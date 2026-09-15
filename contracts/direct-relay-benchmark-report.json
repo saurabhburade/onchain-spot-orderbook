@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2026-09-16T14:37:39.030Z",
+  "chainId": 10143,
+  "trader": "0x886540a55CFE78dc462C384a57E43ac275BE74FA",
+  "markets": [
+    {
+      "symbol": "CSTA",
+      "address": "0x1fE14B9677D9Fd5817292799F707A8614459Ca42",
+      "book": "0x0DE012F3dB98c12A5d2cE6DEB89041D4a776Ecb4"
+    },
+    {
+      "symbol": "CSTB",
+      "address": "0x079cC00717AebDe8bD5C57DF8Df0a1a74E8c21cc",
+      "book": "0xACe3E27b721fD62e3553Fb9D9A4674384d354eF0"
+    }
+  ],
+  "methodology": "Transactions were locally pre-signed with sequential nonces. Timed latency begins immediately before raw RPC submission and ends when Monad returns a successful receipt.",
+  "estimatedGas": "436708",
+  "gasLimit": "458543",
+  "gasPrice": "102000000000",
+  "nativeGasPaid": "140314158000000000",
+  "summary": {
+    "samples": 3,
+    "p50Ms": 328,
+    "p95Ms": 365,
+    "minMs": 229,
+    "maxMs": 365,
+    "localSignP95Ms": 2,
+    "under400Ms": 3
+  },
+  "samples": [
+    {
+      "index": 1,
+      "market": "CSTA",
+      "latencyMs": 365,
+      "mode": "eth_sendRawTransactionSync",
+      "hash": "0xb21a39393a8060b96e89bda048964064fe6960a4d08c84f1288b1be9c7b577f7",
+      "gasUsed": "458543"
+    },
+    {
+      "index": 2,
+      "market": "CSTB",
+      "latencyMs": 229,
+      "mode": "eth_sendRawTransactionSync",
+      "hash": "0xbdc61b28e4d890a743b408686cf729e4513f05199b2fc0ffbfdd683ef919ec1f",
+      "gasUsed": "458543"
+    },
+    {
+      "index": 3,
+      "market": "CSTA",
+      "latencyMs": 328,
+      "mode": "eth_sendRawTransactionSync",
+      "hash": "0x3af41b14af0cc9535c21376bc5271da9a4792c5972c1682c85282134897424a0",
+      "gasUsed": "458543"
+    }
+  ]
+}

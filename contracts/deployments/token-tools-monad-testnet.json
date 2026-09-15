@@ -1,0 +1,29 @@
+{
+  "chainId": 10143,
+  "network": "monad-testnet",
+  "rpcUrl": "https://testnet-rpc.monad.xyz",
+  "deploymentBlock": 62828425,
+  "deployer": "0x886540a55CFE78dc462C384a57E43ac275BE74FA",
+  "contracts": {
+    "erc20TokenFactory": "0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc",
+    "tokenFaucet": "0xB8d1b7f2a722A0b5315eaF0840F652A95a758598",
+    "usdc": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
+    "usdt": "0xef271f6433E05757A94e28873911Af92f0D0b9f3"
+  },
+  "faucet": {
+    "claimAmount": "10000000000",
+    "cooldownSeconds": 86400,
+    "reservePerToken": "10000000000000"
+  },
+  "transactions": {
+    "deployFactory": "0xd97a5efb12524dec487a6857b2182b755ef13f404ca374b92dfe54e4c0694ad8",
+    "deployFaucet": "0x9274dcd6338552c8962b45c82bf6a8e2c5c4a53651b3f9084a41e0970506ee28",
+    "createUsdc": "0xb1d16e701386fc54ba78cfbd1cbc70c6c98e7de4e21373321fa097ba3fc2efe7",
+    "createUsdt": "0x9254cce789cb01bdb42ff188e4e8a0caee6f6f8cf897be8fc0025334dcf309ea",
+    "configureUsdc": "0x1111576787e16add460dade34a4faba5f6aa141a8a4d1eb8e59ac42ee22498f7",
+    "configureUsdt": "0x72aa07862649e41f7d438c261f1b6b09372865e3c8b78e8661fb8372908626d5",
+    "fundUsdc": "0x1c29c8f4463ad3f7bde62ba510c699a0b29b84a95fe5308a2b8cb8e0883d206c",
+    "fundUsdt": "0x6d8b597b0d6b257b64a3c80010b0c1e256c7ee5fd644d8754ca2a6fd54b2ff0e"
+  },
+  "sourceVerified": false
+}

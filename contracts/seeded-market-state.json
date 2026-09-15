@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "chainId": 10143,
+  "name": "Orderbook Demo",
+  "symbol": "BOOK",
+  "token": "0x28Ec11223b5a1629b54bB5E14f2eF818DaD66E34",
+  "quoteToken": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
+  "poolId": "0x82b471d442f1273967a052f0940603c0111e829e57e8dbaca9a7f81aa00aac60",
+  "book": "0x7B6143d57D66183268d65D9E8Bf897490B5A326a",
+  "bids": 102,
+  "asks": 102,
+  "openOrdersByWallet": [36, 40, 44, 40, 44],
+  "bestBid": "999000",
+  "bestAsk": "1001000"
+}

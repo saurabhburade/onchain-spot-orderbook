@@ -1,0 +1,41 @@
+{
+  "chainId": 31337,
+  "rpcUrl": "http://127.0.0.1:8545",
+  "deploymentBlock": 18196,
+  "poolCreatedBlock": 18198,
+  "seededBlock": 18219,
+  "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "tokens": {
+    "MON": {
+      "address": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
+      "decimals": 18
+    },
+    "USDC": {
+      "address": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+      "decimals": 6
+    }
+  },
+  "pool": {
+    "poolId": "0x940fa4f561e904023d97c99693c926e617384e35a8001be8c408a507c2d04645",
+    "baseAsset": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
+    "quoteAsset": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+    "lotSize": "1000000000000000000",
+    "tickSize": "1000",
+    "minTick": 1,
+    "maxTick": 1000000
+  },
+  "contracts": {
+    "SpotCLOBFactory": "0x9A676e781A523b5d0C0e43731313A708CB607508",
+    "SpotCLOB": "0xd356F66e2B971E774a3D86Db1B67C5D9BA48F772"
+  },
+  "seededBook": {
+    "bids": [{ "price": "428000", "quantity": "3" }, { "price": "427000", "quantity": "2" }],
+    "asks": [{ "price": "429000", "quantity": "2" }, { "price": "430000", "quantity": "3" }]
+  },
+  "actors": {
+    "sellerA": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+    "sellerB": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+    "buyerA": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+    "buyerB": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65"
+  }
+}

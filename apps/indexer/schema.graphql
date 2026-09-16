@@ -1,0 +1,166 @@
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderKind {
+  LIMIT
+  MARKET
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+}
+
+type Market
+  @index(fields: ["book"])
+  @index(fields: [["createdAt", "DESC"]])
+  @index(fields: ["quoteAsset", ["createdAt", "DESC"]])
+{
+  id: ID!
+  book: String!
+  baseAsset: String! @index
+  quoteAsset: String! @index
+  lotSize: BigInt!
+  tickSize: BigInt!
+  minTick: BigInt!
+  maxTick: BigInt!
+  tradingFeeBps: Int!
+  baseDecimals: Int!
+  quoteDecimals: Int!
+  agnosticPricing: Boolean!
+  bestBid: BigInt!
+  bestAsk: BigInt!
+  lastPrice: BigInt!
+  lastTradeAt: Int!
+  sequence: BigInt!
+  orderCount: BigInt!
+  openOrderCount: BigInt!
+  tradeCount: BigInt!
+  baseVolume: BigInt!
+  quoteVolume: BigInt!
+  quoteFees: BigInt!
+  creator: String
+  createdAt: Int!
+  createdBlock: Int!
+  createdTxHash: String!
+  updatedAt: Int!
+  updatedBlock: Int!
+}
+
+type Order
+  @index(fields: ["marketId", ["createdAt", "DESC"]])
+  @index(fields: ["trader", ["createdAt", "DESC"]])
+  @index(fields: ["marketId", "status", ["createdAt", "DESC"]])
+{
+  id: ID!
+  orderId: String!
+  marketId: String!
+  book: String!
+  trader: String!
+  baseAsset: String!
+  quoteAsset: String!
+  side: OrderSide!
+  kind: OrderKind!
+  status: OrderStatus!
+  isOpen: Boolean!
+  price: BigInt!
+  quantity: BigInt!
+  filledQuantity: BigInt!
+  remainingQuantity: BigInt!
+  quoteQuantity: BigInt!
+  expiry: BigInt!
+  clientOrderId: BigInt!
+  createdAt: Int!
+  createdBlock: Int!
+  createdTxHash: String!
+  updatedAt: Int!
+  updatedBlock: Int!
+  updatedTxHash: String!
+}
+
+type Trade
+  @index(fields: ["marketId", ["timestamp", "DESC"]])
+  @index(fields: ["makerOrderId"])
+  @index(fields: ["takerOrderId"])
+{
+  id: ID!
+  marketId: String!
+  book: String!
+  makerOrderId: String!
+  takerOrderId: String!
+  baseAsset: String!
+  quoteAsset: String!
+  price: BigInt!
+  quantity: BigInt!
+  quoteQuantity: BigInt!
+  timestamp: Int!
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}
+
+type MarketCandle @index(fields: ["marketId", "intervalSeconds", ["startTimestamp", "ASC"]]) {
+  id: ID!
+  marketId: String!
+  intervalSeconds: Int!
+  startTimestamp: Int!
+  endTimestamp: Int!
+  open: BigInt!
+  high: BigInt!
+  low: BigInt!
+  close: BigInt!
+  lotVolume: BigInt!
+  baseVolume: BigInt!
+  quoteVolume: BigInt!
+  tradeCount: Int!
+  firstBlock: Int!
+  lastBlock: Int!
+  firstLogIndex: Int!
+  lastLogIndex: Int!
+  firstTxHash: String!
+  lastTxHash: String!
+}
+
+type MarketIntervalStats @index(fields: ["marketId", "intervalSeconds", ["startTimestamp", "ASC"]]) {
+  id: ID!
+  marketId: String!
+  intervalSeconds: Int!
+  startTimestamp: Int!
+  endTimestamp: Int!
+  orderPlacedCount: BigInt!
+  limitOrderCount: BigInt!
+  marketOrderCount: BigInt!
+  filledOrderCount: BigInt!
+  partialFillEventCount: BigInt!
+  cancelledOrderCount: BigInt!
+  tradeCount: BigInt!
+  openOrderCountStart: BigInt!
+  openOrderCountEnd: BigInt!
+  lotVolume: BigInt!
+  baseVolume: BigInt!
+  quoteVolume: BigInt!
+  quoteFees: BigInt!
+  firstBlock: Int!
+  lastBlock: Int!
+  firstLogIndex: Int!
+  lastLogIndex: Int!
+  firstTxHash: String!
+  lastTxHash: String!
+}
+
+type BookUpdate @index(fields: ["marketId", ["sequence", "DESC"]]) {
+  id: ID!
+  marketId: String!
+  book: String!
+  bestBid: BigInt!
+  bestAsk: BigInt!
+  sequence: BigInt!
+  timestamp: Int!
+  blockNumber: Int!
+  logIndex: Int!
+  txHash: String!
+}

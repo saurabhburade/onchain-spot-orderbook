@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: clob-indexer
+description: Monad spot CLOB markets, orders, trades, and book updates
+disable_default_cross_chain: true
+address_format: lowercase
+
+field_selection:
+  transaction_fields:
+    - hash
+    - from
+
+contracts:
+  - name: SpotCLOBFactory
+    events:
+      - event: "PairCreated(bytes32 indexed pairId, address indexed baseAsset, address indexed quoteAsset, address book, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick, uint16 tradingFeeBps)"
+      - event: "PairCreated(bytes32 indexed pairId, address indexed baseAsset, address indexed quoteAsset, address book, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick)"
+        name: PairCreatedLegacy
+      - event: "AgnosticPricingConfigured(bytes32 indexed pairId, uint8 baseDecimals, uint8 quoteDecimals)"
+      - event: "PairTradingFeeUpdated(bytes32 indexed pairId, uint16 previousFeeBps, uint16 newFeeBps)"
+
+  - name: SpotCLOB
+    events:
+      - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick, uint16 tradingFeeBps)"
+      - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick)"
+        name: MarketActivatedLegacy
+      - event: "OrderPlaced(bytes32 indexed orderId, address indexed trader, bytes32 indexed poolId, address baseAsset, address quoteAsset, uint8 side, uint128 price, uint128 quantity, uint64 expiry, uint64 clientOrderId)"
+      - event: "TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)"
+      - event: "TradingFeeCharged(bytes32 indexed poolId, bytes32 indexed orderId, address indexed feePayer, address quoteAsset, uint256 amount)"
+      - event: "OrderFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 totalFilledQuantity)"
+      - event: "OrderPartiallyFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 remainingQuantity)"
+      - event: "MarketOrderExecuted(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint8 side, uint128 requestedQuantity, uint128 filledQuantity, uint256 quoteQuantity)"
+      - event: "BookUpdated(bytes32 indexed poolId, uint128 bestBid, uint128 bestAsk, uint64 sequence)"
+      - event: "OrderCancelled(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint128 remainingQuantity)"
+
+chains:
+  - id: 10143
+    rpc:
+      - url: ${ENVIO_MONAD_SYNC_RPC_URL:-https://rpc-testnet.monadinfra.com}
+        for: sync
+        initial_block_interval: 99
+        interval_ceiling: 99
+        acceleration_additive: 0
+        backoff_multiplicative: 0.5
+        backoff_millis: 2000
+        query_timeout_millis: 20000
+      - url: ${ENVIO_MONAD_REALTIME_RPC_URL:-https://rpc-testnet.monadinfra.com}
+        ws: ${ENVIO_MONAD_REALTIME_WS_URL:-wss://rpc-testnet.monadinfra.com}
+        for: fallback
+        polling_interval: 400
+      - url: ${ENVIO_MONAD_FALLBACK_RPC_URL:-https://rpc.ankr.com/monad_testnet}
+        for: fallback
+        initial_block_interval: 99
+        interval_ceiling: 99
+        acceleration_additive: 0
+    start_block: 63351130
+    contracts:
+      - name: SpotCLOBFactory
+        address: "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C"
+      - name: SpotCLOB

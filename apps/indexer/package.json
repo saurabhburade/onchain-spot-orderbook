@@ -1,0 +1,36 @@
+{
+  "name": "@clob/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser@<1.20.3": "1.20.3",
+      "decode-uri-component@<=0.4.2": "0.5.0",
+      "path-to-regexp@<0.1.13": "0.1.13",
+      "uuid@<11.1.1": "11.1.1",
+      "ws@>=8.0.0 <8.21.0": "8.21.0"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run codegen && tsc --noEmit",
+    "check": "pnpm run codegen && tsc --noEmit",
+    "codegen": "envio codegen",
+    "codegen:local": "envio --config config.local.yaml codegen",
+    "dev": "envio dev",
+    "dev:local": "envio --config config.local.yaml dev",
+    "start": "envio start",
+    "test": "pnpm run codegen && vitest run"
+  },
+  "dependencies": {
+    "envio": "3.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "typescript": "5.8.2",
+    "vitest": "4.1.11"
+  }
+}

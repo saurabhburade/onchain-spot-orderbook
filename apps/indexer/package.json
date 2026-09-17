@@ -20,9 +20,11 @@
     "check": "pnpm run codegen && tsc --noEmit",
     "codegen": "envio codegen",
     "codegen:local": "envio --config config.local.yaml codegen",
-    "dev": "envio dev",
+    "dev": "node scripts/run-envio-resilient.mjs dev",
+    "dev:once": "envio dev",
     "dev:local": "envio --config config.local.yaml dev",
-    "start": "envio start",
+    "start": "node scripts/run-envio-resilient.mjs start",
+    "start:once": "envio start",
     "test": "pnpm run codegen && vitest run"
   },
   "dependencies": {

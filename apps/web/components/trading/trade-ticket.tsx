@@ -203,9 +203,8 @@ export function TradeTicket({
 
     if (transaction.status === "submitted") {
       showToast({
-        description: transactionDescription ?? "Waiting for on-chain confirmation.",
         timeout: 0,
-        title: transaction.message ?? "Transaction submitted.",
+        title: "Transaction submitted.",
         type: "loading",
       });
       return;
@@ -217,6 +216,7 @@ export function TradeTicket({
 
       completedTransaction.current = completionKey;
       showToast({
+        description: transactionDescription,
         timeout: 8_000,
         title: transaction.message ?? "Transaction submitted.",
         type: "success",

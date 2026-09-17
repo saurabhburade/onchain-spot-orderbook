@@ -270,7 +270,7 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
     message:
       clob.transaction.error?.message ??
       (clob.transaction.status === "submitted"
-        ? "Order submitted. Waiting for transaction hash."
+        ? "Transaction submitted."
         : clob.transaction.status === "success"
           ? "Transaction submitted."
           : undefined),

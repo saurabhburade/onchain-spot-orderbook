@@ -35,39 +35,18 @@ contracts:
 chains:
   - id: 10143
     rpc:
-      - url: https://monad-testnet.gateway.tatum.io
-        for: fallback
-        initial_block_interval: 99
-        interval_ceiling: 99
-        acceleration_additive: 0
-        backoff_multiplicative: 0.5
-        backoff_millis: 2000
-        query_timeout_millis: 20000
-      - url: https://monad-mainnet.drpc.org
-        for: fallback
-        initial_block_interval: 99
-        interval_ceiling: 99
-        acceleration_additive: 0
-        backoff_multiplicative: 0.5
-        backoff_millis: 2000
-        query_timeout_millis: 20000
-      - url: ${ENVIO_MONAD_SYNC_RPC_URL:-https://testnet-rpc.monad.xyz}
-        for: fallback
-        initial_block_interval: 99
-        interval_ceiling: 99
+      - url: ${ENVIO_MONAD_SYNC_RPC_URL:-https://rpc.ankr.com/monad_testnet}
+        for: sync
+        initial_block_interval: 999
+        interval_ceiling: 999
         acceleration_additive: 0
         backoff_multiplicative: 0.5
         backoff_millis: 2000
         query_timeout_millis: 20000
       - url: ${ENVIO_MONAD_REALTIME_RPC_URL:-https://rpc-testnet.monadinfra.com}
         ws: ${ENVIO_MONAD_REALTIME_WS_URL:-wss://rpc-testnet.monadinfra.com}
-        for: fallback
+        for: realtime
         polling_interval: 400
-      - url: ${ENVIO_MONAD_FALLBACK_RPC_URL:-https://rpc.ankr.com/monad_testnet}
-        for: fallback
-        initial_block_interval: 99
-        interval_ceiling: 99
-        acceleration_additive: 0
     start_block: 63351130
     contracts:
       - name: SpotCLOBFactory

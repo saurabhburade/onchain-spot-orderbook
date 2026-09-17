@@ -19,7 +19,7 @@ import {
   useClobWallet,
 } from "@/lib/clob";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
-import { type IndexedTrade, useIndexerMarketDetail, useIndexerMarkets } from "@/lib/indexer";
+import { type IndexedTrade, useIndexerMarketDetail, useIndexerOrderHistory, useRpcFirstMarkets } from "@/lib/indexer";
 
 import { AccountPanel } from "./account-panel";
 import type {
@@ -32,6 +32,7 @@ import type {
 } from "./market-data";
 import { deriveMarketSummary, type PriceCandle } from "./market-stats";
 import { OrderBook } from "./order-book";
+import { orderHistoryPrice } from "./order-history";
 import { PriceChart } from "./price-chart";
 import { TradeTicket } from "./trade-ticket";
 
@@ -85,7 +86,7 @@ function MarketHeader({
 }) {
   const router = useRouter();
   const { chainId } = useClobChain();
-  const markets = useIndexerMarkets();
+  const markets = useRpcFirstMarkets();
   return (
     <div className="flex flex-col gap-4 sm:grid sm:min-h-[4.25rem] sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-stretch sm:gap-0">
       <div className="flex min-w-0 items-stretch border-r-[0.5px] border-border">
@@ -120,7 +121,13 @@ function MarketHeader({
               </>
             ) : (
               <p
-                className={`mt-1 whitespace-nowrap font-mono tabular-nums ${label === "Market type" || (label === "24h change" && summary.change?.startsWith("+")) ? "text-chart-3" : "text-foreground"}`}
+                className={`mt-1 whitespace-nowrap font-mono tabular-nums ${
+                  label === "Market type" || (label === "24h change" && summary.change?.startsWith("+"))
+                    ? "text-chart-3"
+                    : label === "24h change" && summary.change?.startsWith("-")
+                      ? "text-destructive"
+                      : "text-foreground"
+                }`}
               >
                 {value}
               </p>
@@ -196,7 +203,8 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
   const clob = useClob(marketId, ORDERBOOK_DEPTH);
   const indexed = useIndexerMarketDetail(marketId);
   const { config } = useClobChain();
-  const { authenticated, connect, ready, wallet } = useClobWallet();
+  const { authenticated, connect, ready, tradingAddress, wallet } = useClobWallet();
+  const indexedOrderHistory = useIndexerOrderHistory(marketId, tradingAddress ?? undefined);
   const pool = clob.pool.data;
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [selectedOrder, setSelectedOrder] = useState<{ marketId: PoolId; price: string; size: string } | null>(null);
@@ -282,12 +290,12 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
   const runMarket = async (input: { side: "buy" | "sell"; quantity: string }) => {
     await clob.executeMarket({ ...input });
   };
-  const mapOrder = useCallback(
+  const mapOpenOrder = useCallback(
     (order: (typeof clob.orderHistory.data)[number]): OpenOrder => ({
       orderId: order.orderId,
       market: summary.symbol,
       side: order.side,
-      type: "Limit",
+      type: order.kind === "market" ? "Market" : "Limit",
       price: order.price,
       amount: `${order.quantity} ${summary.baseAsset}`,
       filled: `${order.filled} ${summary.baseAsset}`,
@@ -297,8 +305,25 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
     }),
     [summary.baseAsset, summary.symbol],
   );
-  const orders = useMemo(() => clob.openOrders.data.map(mapOrder), [clob.openOrders.data, mapOrder]);
-  const orderHistory = useMemo(() => clob.orderHistory.data.map(mapOrder), [clob.orderHistory.data, mapOrder]);
+  const orders = useMemo(() => clob.openOrders.data.map(mapOpenOrder), [clob.openOrders.data, mapOpenOrder]);
+  const orderHistory = useMemo<OpenOrder[]>(
+    () =>
+      pool
+        ? (indexedOrderHistory.data ?? []).map((order) => ({
+            orderId: order.orderId,
+            market: summary.symbol,
+            side: order.side === "BUY" ? "buy" : "sell",
+            type: order.kind === "MARKET" ? "Market" : "Limit",
+            price: orderHistoryPrice(order, pool, formatPrice(BigInt(order.price), pool)),
+            amount: `${formatQuantity(BigInt(order.quantity), pool)} ${summary.baseAsset}`,
+            filled: `${formatQuantity(BigInt(order.filledQuantity), pool)} ${summary.baseAsset}`,
+            status: order.status.toLowerCase().replaceAll("_", "-"),
+            time: formatHistoryTime(BigInt(order.createdAt)),
+            transactionHash: order.createdTxHash,
+          }))
+        : [],
+    [indexedOrderHistory.data, pool, summary.baseAsset, summary.symbol],
+  );
   const marketError = clob.pool.error?.message ?? null;
   return (
     <main className="w-full">
@@ -352,8 +377,8 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
           await clob.cancel(orderId);
         }}
         orderHistory={orderHistory}
-        orderHistoryError={clob.orderHistory.error?.message ?? marketError}
-        orderHistoryLoading={clob.orderHistory.loading}
+        orderHistoryError={indexedOrderHistory.error?.message ?? marketError}
+        orderHistoryLoading={indexedOrderHistory.isPending}
         orders={orders}
         ordersError={clob.openOrders.error?.message ?? marketError}
         ordersLoading={clob.openOrders.loading}

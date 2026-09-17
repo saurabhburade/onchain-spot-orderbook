@@ -47,6 +47,28 @@ export type IndexedRecentTrade = IndexedTrade & {
   side: "BUY" | "SELL";
 };
 
+export type IndexedOrder = {
+  id: string;
+  orderId: PoolId;
+  marketId: PoolId;
+  book: Address;
+  trader: Address;
+  side: "BUY" | "SELL";
+  kind: "LIMIT" | "MARKET";
+  status: "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED";
+  price: string;
+  quantity: string;
+  filledQuantity: string;
+  remainingQuantity: string;
+  quoteQuantity: string;
+  expiry: string;
+  clientOrderId: string;
+  createdAt: number;
+  createdTxHash: Hash;
+  updatedAt: number;
+  updatedTxHash: Hash;
+};
+
 export type IndexedCandle = {
   id: string;
   marketId: PoolId;
@@ -163,6 +185,36 @@ const takerOrdersQuery = `
   }
 `;
 
+const orderHistoryQuery = `
+  query OrderHistory($marketId: String!, $traders: [String!]!, $limit: Int!) {
+    Order(
+      where: { marketId: { _eq: $marketId }, trader: { _in: $traders } }
+      order_by: [{ createdAt: desc }, { orderId: desc }]
+      limit: $limit
+    ) {
+      id
+      orderId
+      marketId
+      book
+      trader
+      side
+      kind
+      status
+      price
+      quantity
+      filledQuantity
+      remainingQuantity
+      quoteQuantity
+      expiry
+      clientOrderId
+      createdAt
+      createdTxHash
+      updatedAt
+      updatedTxHash
+    }
+  }
+`;
+
 const daySeconds = 24 * 60 * 60;
 export const marketChartCandleIntervalSeconds = 60;
 
@@ -212,4 +264,20 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
     latestTrades,
     candles: data.MarketCandle.toReversed(),
   } satisfies IndexedMarketDetail;
+}
+
+export async function fetchIndexedOrderHistory(
+  endpoint: string,
+  marketId: PoolId,
+  trader: Address,
+  signal?: AbortSignal,
+) {
+  const traders = [...new Set([trader, trader.toLowerCase()])];
+  const data = await requestIndexer<{ Order: IndexedOrder[] }>(
+    endpoint,
+    orderHistoryQuery,
+    { marketId, traders, limit: 500 },
+    signal,
+  );
+  return data.Order;
 }

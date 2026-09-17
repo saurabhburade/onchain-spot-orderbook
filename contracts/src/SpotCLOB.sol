@@ -99,9 +99,11 @@ contract SpotCLOB is ISpotCLOB {
         uint64 nextUserOrderId;
         Side side;
         OrderStatus status;
+        OrderKind kind;
         bool resting;
         uint256 feeReserve;
         uint256 escrowRemaining;
+        uint256 filledQuoteQuantity;
     }
 
     event MarketActivated(
@@ -296,6 +298,7 @@ contract SpotCLOB is ISpotCLOB {
         incoming.createdAt = uint64(block.timestamp);
         incoming.side = request.side;
         incoming.status = OrderStatus.Open;
+        incoming.kind = OrderKind.Market;
         _indexUserOrder(internalOrderId, incoming);
 
         orderId = bytes32(uint256(internalOrderId));
@@ -460,7 +463,9 @@ contract SpotCLOB is ISpotCLOB {
             quantity: stored.quantity,
             filledQuantity: stored.quantity - stored.remaining,
             createdAt: stored.createdAt,
-            status: stored.status
+            status: stored.status,
+            kind: stored.kind,
+            filledQuoteQuantity: stored.filledQuoteQuantity
         });
     }
 
@@ -628,6 +633,7 @@ contract SpotCLOB is ISpotCLOB {
         incoming.createdAt = uint64(block.timestamp);
         incoming.side = request.side;
         incoming.status = OrderStatus.Open;
+        incoming.kind = OrderKind.Limit;
         incoming.feeReserve = feeReserve;
         incoming.escrowRemaining = escrowAmount;
         _indexUserOrder(orderId_, incoming);
@@ -723,6 +729,8 @@ contract SpotCLOB is ISpotCLOB {
 
         taker.remaining -= fillQuantity;
         maker.remaining -= fillQuantity;
+        taker.filledQuoteQuantity += tradedQuote;
+        maker.filledQuoteQuantity += tradedQuote;
         level.totalQuantity -= fillQuantity;
         taker.status = taker.remaining == 0 ? OrderStatus.Filled : OrderStatus.PartiallyFilled;
         maker.status = maker.remaining == 0 ? OrderStatus.Filled : OrderStatus.PartiallyFilled;

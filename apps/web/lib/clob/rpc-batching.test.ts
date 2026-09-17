@@ -5,6 +5,11 @@ import { describe, it } from "node:test";
 const clientSource = readFileSync(new URL("./client.ts", import.meta.url), "utf8");
 const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
 const hooksSource = readFileSync(new URL("./hooks.tsx", import.meta.url), "utf8");
+const indexerHooksSource = readFileSync(new URL("../indexer/hooks.ts", import.meta.url), "utf8");
+const marketsScreenSource = readFileSync(
+  new URL("../../components/markets/markets-screen.tsx", import.meta.url),
+  "utf8",
+);
 const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
 
 describe("Monad RPC request batching", () => {
@@ -39,6 +44,24 @@ describe("Monad RPC request batching", () => {
   it("coalesces immutable pool metadata reads", () => {
     assert.match(hooksSource, /poolMetadataCache/);
     assert.match(hooksSource, /cachedReadPoolMetadata/);
+  });
+
+  it("discovers listed markets from the factory RPC before falling back to the indexer", () => {
+    assert.match(hooksSource, /functionName:\s*"allPairsLength"/);
+    assert.match(hooksSource, /functionName:\s*"pairAt"/);
+    assert.match(indexerHooksSource, /export function useRpcFirstMarkets/);
+    assert.match(indexerHooksSource, /if \(rpc\.data\.length === 0\) return rpc\.error \? indexed\.data : \[\]/);
+    assert.match(marketsScreenSource, /useRpcFirstMarkets\(\)/);
+  });
+
+  it("reuses market snapshots when route navigation remounts the markets screen", () => {
+    const useMarketsSource =
+      hooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
+
+    assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.get\(snapshotKey\)/);
+    assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.set\(snapshotKey, markets\)/);
+    assert.match(useMarketsSource, /if \(!marketSnapshotCache\(publicClient\)\.has\(snapshotKey\)\) void refetch\(\)/);
+    assert.match(indexerHooksSource, /refetchOnMount:\s*false/);
   });
 
   it("uses explicit multicalls for grouped contract reads", () => {

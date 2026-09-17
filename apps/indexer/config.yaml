@@ -36,7 +36,7 @@ chains:
   - id: 10143
     rpc:
       - url: ${ENVIO_MONAD_SYNC_RPC_URL:-https://rpc.ankr.com/monad_testnet}
-        for: sync
+        for: fallback
         initial_block_interval: 999
         interval_ceiling: 999
         acceleration_additive: 0

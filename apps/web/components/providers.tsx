@@ -2,6 +2,7 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
 import { monadTestnetChain } from "@/lib/clob";
@@ -20,6 +21,7 @@ export function usePrivyConfigured() {
  * transactions without creating a second user-facing account.
  */
 export function Providers({ children }: { children: ReactNode }) {
+  const { resolvedTheme } = useTheme();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -50,6 +52,7 @@ export function Providers({ children }: { children: ReactNode }) {
           defaultChain: monadTestnetChain,
           supportedChains: [monadTestnetChain],
           appearance: {
+            theme: resolvedTheme === "dark" ? "dark" : "light",
             landingHeader: "Connect to Orderbook",
             loginMessage: "Connect an Ethereum wallet to create markets and trade.",
             showWalletLoginFirst: true,

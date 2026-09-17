@@ -9,6 +9,11 @@ interface ISpotCLOB {
         Sell
     }
 
+    enum OrderKind {
+        Limit,
+        Market
+    }
+
     enum OrderStatus {
         Unknown,
         Open,
@@ -36,6 +41,8 @@ interface ISpotCLOB {
         uint128 filledQuantity;
         uint64 createdAt;
         OrderStatus status;
+        OrderKind kind;
+        uint256 filledQuoteQuantity;
     }
 
     struct MarketOrder {

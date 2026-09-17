@@ -1,15 +1,16 @@
 "use client";
 
-import { ArrowRight, Boxes, Plus, RefreshCw, Search } from "lucide-react";
+import { ArrowRight, Boxes, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClobChain } from "@/lib/clob";
-import { useIndexerMarkets } from "@/lib/indexer";
+import { useRpcFirstMarkets } from "@/lib/indexer";
 
 import { MarketPairIcon } from "./market-pair-icon";
+import { getMarketPage, marketsPerPage } from "./pagination";
 
 const marketSkeletons = ["market-a", "market-b", "market-c", "market-d", "market-e", "market-f"];
 const skeletonColumns = ["price", "change", "volume", "book"];
@@ -41,50 +42,26 @@ function MarketSkeleton() {
 
 export function MarketsScreen() {
   const { chainId } = useClobChain();
-  const markets = useIndexerMarkets();
-  const [activeQuote, setActiveQuote] = useState("all");
+  const markets = useRpcFirstMarkets();
   const [query, setQuery] = useState("");
-  const quoteSymbols = useMemo(
-    () => [...new Set(markets.data.map((market) => market.quoteSymbol))].sort(),
-    [markets.data],
-  );
+  const [page, setPage] = useState(1);
   const visibleMarkets = useMemo(() => {
     const search = query.trim().toLowerCase();
     return markets.data.filter((market) => {
-      const matchesQuote = activeQuote === "all" || market.quoteSymbol === activeQuote;
       const matchesSearch =
         !search ||
         `${market.baseSymbol} ${market.quoteSymbol} ${market.poolId} ${market.clobAddress}`
           .toLowerCase()
           .includes(search);
-      return matchesQuote && matchesSearch;
+      return matchesSearch;
     });
-  }, [activeQuote, markets.data, query]);
+  }, [markets.data, query]);
+  const marketPage = useMemo(() => getMarketPage(visibleMarkets, page), [page, visibleMarkets]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <main className="w-full">
-        <div className="flex flex-col gap-4 border-b-[0.5px] border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-5 xl:px-6">
-          <fieldset className="flex min-h-8 min-w-0 items-center gap-1 overflow-x-auto">
-            <legend className="sr-only">Market filters</legend>
-            {[
-              { label: "All markets", value: "all" },
-              ...quoteSymbols.map((symbol) => ({ label: symbol, value: symbol })),
-            ].map((item) => {
-              const selected = activeQuote === item.value;
-              return (
-                <button
-                  aria-pressed={selected}
-                  className={`h-8 shrink-0 rounded-full px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 ${selected ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}
-                  key={item.value}
-                  onClick={() => setActiveQuote(item.value)}
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </fieldset>
+        <div className="flex flex-col gap-4 border-b-[0.5px] border-border px-4 py-4 sm:flex-row sm:items-center sm:px-6 lg:px-5 xl:px-6">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1 sm:w-60 sm:flex-none">
               <Search
@@ -95,7 +72,10 @@ export function MarketsScreen() {
               <Input
                 aria-label="Search markets"
                 className="h-8 rounded-full bg-muted/60 pr-3 pl-9 text-xs md:text-xs"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search markets"
                 type="search"
                 value={query}
@@ -157,7 +137,7 @@ export function MarketsScreen() {
                 <Boxes aria-hidden="true" className="mx-auto size-7 text-muted-foreground" strokeWidth={1.5} />
                 <p className="mt-3 text-sm font-medium">No listed markets</p>
                 <p className="mt-1 text-pretty text-xs text-muted-foreground">
-                  Markets will appear here after the indexer processes a factory creation event.
+                  Markets will appear here after the factory creates its first pair.
                 </p>
               </div>
             </div>
@@ -175,13 +155,13 @@ export function MarketsScreen() {
             </div>
           ) : null}
 
-          {visibleMarkets.map((market, index) => (
+          {marketPage.items.map((market, index) => (
             <Link
               className={`group grid ${tableGrid} min-h-[72px] min-w-[920px] items-center border-b border-border/70 px-4 transition-colors duration-150 hover:bg-muted/35 focus-visible:bg-muted/35 focus-visible:outline-none sm:px-6 lg:px-5 xl:px-6`}
               href={`/${chainId}/markets/${market.poolId}/trade`}
               key={market.poolId}
             >
-              <span className="text-sm tabular-nums text-muted-foreground">{index + 1}</span>
+              <span className="text-sm tabular-nums text-muted-foreground">{marketPage.startIndex + index + 1}</span>
               <span className="flex min-w-0 items-center gap-3">
                 <MarketPairIcon
                   baseIconUrl={market.baseIconUrl}
@@ -228,6 +208,40 @@ export function MarketsScreen() {
             </Link>
           ))}
         </div>
+
+        {!markets.loading && !markets.error && visibleMarkets.length > marketsPerPage ? (
+          <nav
+            aria-label="Markets pagination"
+            className="flex min-h-14 items-center justify-center gap-1 border-b border-border px-4 py-2"
+          >
+            <Button
+              aria-label="Go to previous markets page"
+              className="size-9 rounded-full"
+              disabled={marketPage.currentPage === 1}
+              onClick={() => setPage(marketPage.currentPage - 1)}
+              size="icon"
+              variant="ghost"
+            >
+              <ChevronLeft aria-hidden="true" />
+            </Button>
+            <span
+              aria-live="polite"
+              className="min-w-24 text-center font-mono text-xs tabular-nums text-muted-foreground"
+            >
+              Page {marketPage.currentPage} of {marketPage.pageCount}
+            </span>
+            <Button
+              aria-label="Go to next markets page"
+              className="size-9 rounded-full"
+              disabled={marketPage.currentPage === marketPage.pageCount}
+              onClick={() => setPage(marketPage.currentPage + 1)}
+              size="icon"
+              variant="ghost"
+            >
+              <ChevronRight aria-hidden="true" />
+            </Button>
+          </nav>
+        ) : null}
       </main>
     </div>
   );

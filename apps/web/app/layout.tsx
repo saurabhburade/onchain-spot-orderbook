@@ -11,8 +11,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Orderbook | Multichain spot exchange",
-  description: "A multichain fully on-chain spot exchange.",
+  title: "Permissionless spot exchange",
+  description: "A permissionless fully on-chain spot exchange.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -31,4 +31,11 @@ describe("listed token icons", () => {
     assert.match(marketSelectorSource, /currentMarket\?\.quoteIconUrl\s*\?\?\s*currentQuoteIconUrl/);
     assert.match(marketSelectorSource, /currentMarket\s*\|\|\s*baseIconUrl\s*\|\|\s*quoteIconUrl/);
   });
+
+  it("uses the destructive color for a negative trading-header 24h change", () => {
+    assert.match(
+      tradingScreenSource,
+      /label === "24h change" && summary\.change\?\.startsWith\("-"\)\s*\? "text-destructive"/,
+    );
+  });
 });

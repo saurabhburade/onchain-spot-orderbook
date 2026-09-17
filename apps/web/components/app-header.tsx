@@ -92,7 +92,6 @@ export function AppHeader({ active, actions }: { active: ActiveNavigation; actio
       <div className="mx-auto flex h-16 w-full max-w-[1540px] items-center gap-3 px-3 sm:px-4 lg:px-5 xl:px-6">
         <Link className="flex shrink-0 items-center gap-2 text-foreground" href={`/${chainId}/markets`}>
           <DiamondMinus aria-hidden="true" className="size-6 rounded-[7px]" strokeWidth={2} />
-          <span className="hidden text-sm font-semibold sm:inline">Orderbook</span>
         </Link>
         <Navigation active={active} />
         <div className="ml-auto flex items-center gap-2">

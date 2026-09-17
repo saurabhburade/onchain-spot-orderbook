@@ -77,6 +77,16 @@ function poolMetadataCache(publicClient: ClobPublicClient) {
   return cache;
 }
 
+const marketSnapshotCaches = new WeakMap<ClobPublicClient, Map<string, MarketListing[]>>();
+
+function marketSnapshotCache(publicClient: ClobPublicClient) {
+  const existing = marketSnapshotCaches.get(publicClient);
+  if (existing) return existing;
+  const cache = new Map<string, MarketListing[]>();
+  marketSnapshotCaches.set(publicClient, cache);
+  return cache;
+}
+
 function registryError(config: ClobNetworkConfig) {
   return config.factoryAddress
     ? undefined
@@ -186,6 +196,28 @@ function cachedReadPoolMetadata(publicClient: ClobPublicClient, poolId: PoolId, 
   return poolMetadataCache(publicClient).get(key, () => readPoolMetadata(publicClient, poolId, factoryAddress));
 }
 
+async function readFactoryMarketIds(publicClient: ClobPublicClient, factoryAddress: Address): Promise<PoolId[]> {
+  const pairCount = await publicClient.readContract({
+    address: factoryAddress,
+    abi: poolRegistryAbi,
+    functionName: "allPairsLength",
+  });
+  if (pairCount > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`Factory ${factoryAddress} returned too many markets to display`);
+  }
+  if (pairCount === 0n) return [];
+
+  return (await publicClient.multicall({
+    allowFailure: false,
+    contracts: Array.from({ length: Number(pairCount) }, (_, index) => ({
+      address: factoryAddress,
+      abi: poolRegistryAbi,
+      functionName: "pairAt" as const,
+      args: [BigInt(index)] as const,
+    })),
+  })) as PoolId[];
+}
+
 export function usePoolMetadata(poolId?: PoolId) {
   const { config, publicClient } = useClobChain();
   const [data, setData] = useState<PoolMetadata | null>(null);
@@ -221,8 +253,10 @@ export function usePoolMetadata(poolId?: PoolId) {
 
 export function useMarkets() {
   const { chainId, config, eventClient, publicClient } = useClobChain();
-  const [data, setData] = useState<MarketListing[]>([]);
-  const [state, setState] = useState<AsyncState>(EMPTY_ASYNC);
+  const snapshotKey = `${chainId}:${config.factoryAddress?.toLowerCase() ?? "unconfigured"}`;
+  const cachedSnapshot = marketSnapshotCache(publicClient).get(snapshotKey);
+  const [data, setData] = useState<MarketListing[]>(() => cachedSnapshot ?? []);
+  const [state, setState] = useState<AsyncState>({ loading: cachedSnapshot === undefined, error: null });
 
   const refetch = useCallback(async () => {
     const error = registryError(config);
@@ -234,8 +268,12 @@ export function useMarkets() {
     setState({ loading: true, error: null });
     try {
       const configuredMarkets = listedMarkets(chainId);
+      const configuredMarketsById = new Map(configuredMarkets.map((market) => [market.poolId.toLowerCase(), market]));
+      const discoveredMarketIds = await readFactoryMarketIds(publicClient, factoryAddress);
+      const marketIds = new Map(discoveredMarketIds.map((poolId) => [poolId.toLowerCase(), poolId]));
+      for (const market of configuredMarkets) marketIds.set(market.poolId.toLowerCase(), market.poolId);
       const metadata = await Promise.all(
-        configuredMarkets.map((market) => cachedReadPoolMetadata(publicClient, market.poolId, factoryAddress)),
+        [...marketIds.values()].map((poolId) => cachedReadPoolMetadata(publicClient, poolId, factoryAddress)),
       );
       const prices =
         metadata.length === 0
@@ -251,24 +289,25 @@ export function useMarkets() {
             })) as (readonly [boolean, bigint, bigint, boolean, bigint, bigint])[]);
       const markets = metadata.map((market, index) => {
         const marketPrices = prices[index];
-        const configuredMarket = configuredMarkets[index];
+        const configuredMarket = configuredMarketsById.get(market.poolId.toLowerCase());
         return {
           ...market,
-          baseIconUrl: configuredMarket.baseIconUrl ?? listedTokenIconUrl(chainId, market.baseAsset),
-          quoteIconUrl: configuredMarket.quoteIconUrl ?? listedTokenIconUrl(chainId, market.quoteAsset),
+          baseIconUrl: configuredMarket?.baseIconUrl ?? listedTokenIconUrl(chainId, market.baseAsset),
+          quoteIconUrl: configuredMarket?.quoteIconUrl ?? listedTokenIconUrl(chainId, market.quoteAsset),
           bestBid: marketPrices[0] ? formatPrice(marketPrices[1], market) : null,
           bestAsk: marketPrices[3] ? formatPrice(marketPrices[4], market) : null,
         } satisfies MarketListing;
       });
+      marketSnapshotCache(publicClient).set(snapshotKey, markets);
       setData(markets);
       setState({ loading: false, error: null });
     } catch (error) {
       setState({ loading: false, error: toError(error) });
     }
-  }, [chainId, config, publicClient]);
+  }, [chainId, config, publicClient, snapshotKey]);
 
   useEffect(() => {
-    void refetch();
+    if (!marketSnapshotCache(publicClient).has(snapshotKey)) void refetch();
     const unsubscribeListedMarkets = subscribeToListedMarkets(() => void refetch());
     const factoryAddress = config.factoryAddress;
     if (!eventClient || !factoryAddress) return unsubscribeListedMarkets;
@@ -283,7 +322,7 @@ export function useMarkets() {
       unsubscribeListedMarkets();
       unsubscribeFactory();
     };
-  }, [config.factoryAddress, eventClient, refetch]);
+  }, [config.factoryAddress, eventClient, publicClient, refetch, snapshotKey]);
 
   return { data, ...state, refetch };
 }
@@ -850,7 +889,13 @@ export function useUserOrders(poolId?: PoolId) {
               expiry: bigint;
               clientOrderId: bigint;
             };
-            state: { filledQuantity: bigint; createdAt: bigint; status: number };
+            state: {
+              filledQuantity: bigint;
+              createdAt: bigint;
+              status: number;
+              kind: number;
+              filledQuoteQuantity: bigint;
+            };
           }[],
           PoolId,
         ];
@@ -914,9 +959,11 @@ export function useUserOrders(poolId?: PoolId) {
         const orders: OpenOrder[] = records.map(({ orderId, order, state: orderState }) => ({
           orderId,
           side: order.side === 0 ? "buy" : "sell",
+          kind: Number(orderState.kind) === 1 ? "market" : "limit",
           priceRaw: order.price,
           quantityLots: order.quantity,
           filledQuantityLots: orderState.filledQuantity,
+          filledQuoteQuantity: orderState.filledQuoteQuantity,
           price: formatPrice(order.price, metadata),
           quantity: formatQuantity(order.quantity, metadata),
           filled: formatQuantity(orderState.filledQuantity, metadata),

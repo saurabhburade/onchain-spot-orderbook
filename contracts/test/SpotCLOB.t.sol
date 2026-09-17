@@ -472,7 +472,7 @@ contract SpotCLOBTest {
     }
 
     function testMarketBuyConsumesMultipleLevelsAndFinalPartialLevel() public {
-        _place(sellerA, ISpotCLOB.Side.Sell, 100, 2, 1);
+        bytes32 firstAsk = _place(sellerA, ISpotCLOB.Side.Sell, 100, 2, 1);
         bytes32 secondAsk = _place(sellerB, ISpotCLOB.Side.Sell, 110, 3, 2);
 
         (bytes32 marketOrder, uint128 filled, uint256 quoteFilled) = buyer.executeMarket(
@@ -481,10 +481,26 @@ contract SpotCLOBTest {
 
         require(filled == 4 && quoteFilled == 420, "wrong market-buy result");
         _assertOrder(marketOrder, 4, ISpotCLOB.OrderStatus.Filled);
+        _assertOrderAccounting(marketOrder, ISpotCLOB.OrderKind.Market, 420);
+        _assertOrderAccounting(firstAsk, ISpotCLOB.OrderKind.Limit, 200);
         _assertOrder(secondAsk, 2, ISpotCLOB.OrderStatus.PartiallyFilled);
+        _assertOrderAccounting(secondAsk, ISpotCLOB.OrderKind.Limit, 220);
         _assertBestAsk(110);
         _assertBalance(address(buyer), address(quote), 999_580, 0);
         _assertBalance(address(buyer), address(base), 4 ether, 0);
+    }
+
+    function testCrossingLimitOrderStoresExactQuoteTotalAndSubmittedPrice() public {
+        bytes32 ask = _place(sellerA, ISpotCLOB.Side.Sell, 100, 2, 1);
+        bytes32 buy = _place(buyer, ISpotCLOB.Side.Buy, 110, 2, 2);
+
+        (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
+            exchange.getOrder(buy);
+        require(order.price == 110, "submitted limit price changed");
+        require(state.kind == ISpotCLOB.OrderKind.Limit, "wrong limit order kind");
+        require(state.filledQuantity == 2, "wrong limit fill quantity");
+        require(state.filledQuoteQuantity == 200, "wrong limit quote total");
+        _assertOrderAccounting(ask, ISpotCLOB.OrderKind.Limit, 200);
     }
 
     function testMarketOrderMinimumFillRevertsAtomicallyThenAllowsExplicitPartial() public {
@@ -926,6 +942,18 @@ contract SpotCLOBTest {
         (, ISpotCLOB.OrderState memory state) = exchange.getOrder(orderId);
         require(state.filledQuantity == expectedFilled, "wrong filled quantity");
         require(state.status == expectedStatus, "wrong order status");
+    }
+
+    function _assertOrderAccounting(
+        bytes32 orderId,
+        ISpotCLOB.OrderKind expectedKind,
+        uint256 expectedFilledQuoteQuantity
+    ) private view {
+        (, ISpotCLOB.OrderState memory state) = exchange.getOrder(orderId);
+        require(state.kind == expectedKind, "wrong order kind");
+        require(
+            state.filledQuoteQuantity == expectedFilledQuoteQuantity, "wrong filled quote quantity"
+        );
     }
 
     function _assertBalance(

@@ -4,7 +4,7 @@ import test from "node:test";
 import { encodeFunctionData, zeroAddress } from "viem";
 
 const require = createRequire(import.meta.url);
-const { clobLensAbi } = require("./abi.ts") as typeof import("./abi");
+const { clobAbi, clobLensAbi } = require("./abi.ts") as typeof import("./abi");
 
 test("lens ABI encodes market snapshot reads", () => {
   const data = encodeFunctionData({
@@ -35,4 +35,29 @@ test("lens ABI exposes best prices and both book sides", () => {
       "asks",
     ],
   );
+});
+
+test("keeps the fresh OrderState tuple order in direct and lens reads", () => {
+  const stateNames = ["quantity", "filledQuantity", "createdAt", "status", "kind", "filledQuoteQuantity"];
+  const getOrder = clobAbi.find((item) => item.name === "getOrder");
+  const getUserOrders = clobLensAbi.find((item) => item.name === "getUserOrders");
+  assert(getOrder && "outputs" in getOrder);
+  assert(getUserOrders && "outputs" in getUserOrders);
+
+  const directState = getOrder.outputs[1];
+  const lensOrders = getUserOrders.outputs[0];
+  assert.equal(directState.type, "tuple");
+  assert.equal(lensOrders.type, "tuple[]");
+  const lensState = lensOrders.components.find((component) => component.name === "state");
+  assert(lensState && lensState.type === "tuple");
+  assert.deepEqual(
+    directState.components.map((component) => component.name),
+    stateNames,
+  );
+  assert.deepEqual(
+    lensState.components.map((component) => component.name),
+    stateNames,
+  );
+  assert.equal(directState.components.at(-1)?.type, "uint256");
+  assert.equal(lensState.components.at(-1)?.type, "uint256");
 });

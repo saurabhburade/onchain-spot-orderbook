@@ -50,11 +50,11 @@ describe("headless sponsored token deployment", () => {
   it("resolves market icons from decoded asset addresses after explicit listing overrides", () => {
     assert.match(
       marketsSource,
-      /baseIconUrl:\s*configuredMarket\.baseIconUrl\s*\?\?\s*listedTokenIconUrl\(chainId,\s*market\.baseAsset\)/,
+      /baseIconUrl:\s*configuredMarket\?\.baseIconUrl\s*\?\?\s*listedTokenIconUrl\(chainId,\s*market\.baseAsset\)/,
     );
     assert.match(
       marketsSource,
-      /quoteIconUrl:\s*configuredMarket\.quoteIconUrl\s*\?\?\s*listedTokenIconUrl\(chainId,\s*market\.quoteAsset\)/,
+      /quoteIconUrl:\s*configuredMarket\?\.quoteIconUrl\s*\?\?\s*listedTokenIconUrl\(chainId,\s*market\.quoteAsset\)/,
     );
   });
 

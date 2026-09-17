@@ -1,16 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { type Address, getAddress } from "viem";
 
 import { erc20Abi } from "@/lib/clob/abi";
 import { useClobChain } from "@/lib/clob/chain-context";
+import { useMarkets } from "@/lib/clob/hooks";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 import type { MarketListing, PoolId, PoolMetadata } from "@/lib/clob/types";
 import { formatPrice, formatQuote } from "@/lib/clob/utils";
 
 import { summarizeIndexedTrades } from "./market-stats";
-import { fetchIndexedMarketDetail, fetchIndexedMarkets } from "./queries";
+import { fetchIndexedMarketDetail, fetchIndexedMarkets, fetchIndexedOrderHistory } from "./queries";
 
 const marketRefreshMs = 15_000;
 const marketDetailRefreshMs = 5_000;
@@ -102,6 +104,7 @@ export function useIndexerMarkets() {
         } satisfies MarketListing;
       });
     },
+    refetchOnMount: false,
     refetchInterval: marketRefreshMs,
   });
 
@@ -113,12 +116,52 @@ export function useIndexerMarkets() {
   };
 }
 
+export function useRpcFirstMarkets() {
+  const rpc = useMarkets();
+  const indexed = useIndexerMarkets();
+  const data = useMemo(() => {
+    if (rpc.data.length === 0) return rpc.error ? indexed.data : [];
+
+    const indexedById = new Map(indexed.data.map((market) => [market.poolId.toLowerCase(), market]));
+    return rpc.data.map((market) => {
+      const indexedMarket = indexedById.get(market.poolId.toLowerCase());
+      return {
+        ...market,
+        lastPrice: indexedMarket?.lastPrice ?? market.lastPrice,
+        change24h: indexedMarket?.change24h ?? market.change24h,
+        volume24h: indexedMarket?.volume24h ?? market.volume24h,
+      } satisfies MarketListing;
+    });
+  }, [indexed.data, rpc.data, rpc.error]);
+  const refetch = useCallback(async () => {
+    await Promise.allSettled([rpc.refetch(), indexed.refetch()]);
+  }, [indexed.refetch, rpc.refetch]);
+
+  return {
+    data,
+    error: data.length > 0 || rpc.loading || !rpc.error || indexed.loading ? null : (indexed.error ?? rpc.error),
+    loading: data.length === 0 && (rpc.loading || (Boolean(rpc.error) && indexed.loading)),
+    refetch,
+  };
+}
+
 export function useIndexerMarketDetail(poolId?: PoolId) {
   const { chainId, config } = useClobChain();
   return useQuery({
     queryKey: ["indexer", "market-detail", chainId, poolId, config.indexerGraphqlUrl],
     queryFn: ({ signal }) => fetchIndexedMarketDetail(config.indexerGraphqlUrl, poolId as PoolId, signal),
     enabled: Boolean(poolId),
+    refetchInterval: marketDetailRefreshMs,
+  });
+}
+
+export function useIndexerOrderHistory(poolId?: PoolId, trader?: Address) {
+  const { chainId, config } = useClobChain();
+  return useQuery({
+    queryKey: ["indexer", "order-history", chainId, poolId, trader?.toLowerCase(), config.indexerGraphqlUrl],
+    queryFn: ({ signal }) =>
+      fetchIndexedOrderHistory(config.indexerGraphqlUrl, poolId as PoolId, trader as Address, signal),
+    enabled: Boolean(poolId && trader),
     refetchInterval: marketDetailRefreshMs,
   });
 }

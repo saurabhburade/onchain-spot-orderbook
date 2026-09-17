@@ -295,7 +295,7 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
       orderId: order.orderId,
       market: summary.symbol,
       side: order.side,
-      type: order.kind === "market" ? "Market" : "Limit",
+      type: "Limit",
       price: order.price,
       amount: `${order.quantity} ${summary.baseAsset}`,
       filled: `${order.filled} ${summary.baseAsset}`,

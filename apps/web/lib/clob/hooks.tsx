@@ -889,13 +889,7 @@ export function useUserOrders(poolId?: PoolId) {
               expiry: bigint;
               clientOrderId: bigint;
             };
-            state: {
-              filledQuantity: bigint;
-              createdAt: bigint;
-              status: number;
-              kind: number;
-              filledQuoteQuantity: bigint;
-            };
+            state: { filledQuantity: bigint; createdAt: bigint; status: number };
           }[],
           PoolId,
         ];
@@ -959,11 +953,9 @@ export function useUserOrders(poolId?: PoolId) {
         const orders: OpenOrder[] = records.map(({ orderId, order, state: orderState }) => ({
           orderId,
           side: order.side === 0 ? "buy" : "sell",
-          kind: Number(orderState.kind) === 1 ? "market" : "limit",
           priceRaw: order.price,
           quantityLots: order.quantity,
           filledQuantityLots: orderState.filledQuantity,
-          filledQuoteQuantity: orderState.filledQuoteQuantity,
           price: formatPrice(order.price, metadata),
           quantity: formatQuantity(order.quantity, metadata),
           filled: formatQuantity(orderState.filledQuantity, metadata),

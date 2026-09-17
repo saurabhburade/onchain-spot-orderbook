@@ -2,7 +2,6 @@ import type { Address, Hash } from "viem";
 
 export type PoolId = `0x${string}`;
 export type OrderSide = "buy" | "sell";
-export type OrderKind = "limit" | "market";
 export type AssetKey = "base" | "quote" | Address;
 
 export type PoolMetadata = {
@@ -101,11 +100,9 @@ export type TokenBalance = {
 export type OpenOrder = {
   orderId: PoolId;
   side: OrderSide;
-  kind: OrderKind;
   priceRaw: bigint;
   quantityLots: bigint;
   filledQuantityLots: bigint;
-  filledQuoteQuantity: bigint;
   price: string;
   quantity: string;
   filled: string;

@@ -48,7 +48,6 @@ export type {
   MarketToken,
   OpenOrder,
   OrderBook,
-  OrderKind,
   OrderSide,
   PoolId,
   PoolMetadata,

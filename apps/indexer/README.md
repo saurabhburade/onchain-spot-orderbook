@@ -49,8 +49,8 @@ pnpm codegen
 pnpm dev
 ```
 
-The default config starts just before factory deployment at block `63351130` and dynamically registers books
-created by `0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C`.
+The default config starts at factory deployment block `63617140` and dynamically registers books
+created by `0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b`.
 
 The current deployment emits the latest event signatures. The indexer also retains handlers for
 the legacy eight-field `PairCreated` and seven-field `MarketActivated` signatures so historical or

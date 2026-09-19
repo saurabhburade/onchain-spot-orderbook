@@ -48,6 +48,7 @@ export function MarketSelector({
   const currentMarket = markets.find((market) => market.poolId.toLowerCase() === currentPoolId.toLowerCase());
   const baseIconUrl = currentMarket?.baseIconUrl ?? currentBaseIconUrl;
   const quoteIconUrl = currentMarket?.quoteIconUrl ?? currentQuoteIconUrl;
+  const selectedMarketLabel = currentMarket ? marketLabel(currentMarket) : currentSymbol;
   const quoteSymbols = useMemo(() => [...new Set(markets.map((market) => market.quoteSymbol))].sort(), [markets]);
   const visibleMarkets = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -115,7 +116,7 @@ export function MarketSelector({
               quoteSymbol={currentMarket?.quoteSymbol ?? ""}
             />
           ) : null}
-          <span className="truncate text-[13px] font-medium">{currentSymbol}</span>
+          <span className="truncate text-[13px] font-medium">{selectedMarketLabel}</span>
         </span>
         <ChevronDown
           aria-hidden="true"

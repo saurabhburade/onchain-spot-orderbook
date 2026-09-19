@@ -2,8 +2,8 @@
 
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 
-import { getClobEventClient, getClobPublicClient } from "./client";
-import { type ClobNetworkConfig, getClobNetwork } from "./config";
+import { type ClobNetworkConfig, getClobNetwork } from "@/config/chains";
+import { getClobEventClient, getClobPublicClient } from "@/config/viem";
 
 type ClobChainContextValue = {
   chainId: number;

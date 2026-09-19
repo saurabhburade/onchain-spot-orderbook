@@ -8,12 +8,13 @@ import { type Address, type ContractFunctionParameters, encodeFunctionData, form
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { erc20Abi, useClobChain, useClobWallet } from "@/lib/clob";
-import { waitForTransaction } from "@/lib/clob/client";
-import { type FaucetTokenConfig, MONAD_TESTNET_CHAIN_ID } from "@/lib/clob/config";
+import { erc20Abi, tokenFaucetAbi } from "@/config/abis";
+import { MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
+import type { FaucetTokenConfig } from "@/config/contracts";
+import { waitForTransaction } from "@/config/viem";
+import { useClobChain, useClobWallet } from "@/lib/clob";
 import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
-import { tokenFaucetAbi } from "@/lib/token-tools/abi";
 
 type TokenState = {
   claimAmount: bigint;

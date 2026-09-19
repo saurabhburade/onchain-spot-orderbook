@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import { type Address, ContractFunctionRevertedError, encodeFunctionData, toFunctionSelector } from "viem";
 
 const require = createRequire(import.meta.url);
-const { poolRegistryAbi } = require("./abi.ts") as typeof import("./abi");
+const { poolRegistryAbi } =
+  require("../../config/abis/pool-registry.ts") as typeof import("../../config/abis/pool-registry");
 const {
   AGNOSTIC_CREATE_PAIR_SELECTOR,
   LEGACY_CREATE_PAIR_SELECTOR,

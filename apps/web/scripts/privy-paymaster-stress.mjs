@@ -15,14 +15,21 @@ import {
   parseAbiParameters,
 } from "viem";
 
+import { clobContractsByChainId } from "../config/contracts.ts";
+
 const CHAIN_ID = 10_143;
 const CAIP2 = `eip155:${CHAIN_ID}`;
 const ACCOUNT_COUNT = 5;
 const MARKET_COUNT = 2;
-const DEFAULT_FACTORY = "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C";
-const DEFAULT_TOKEN_FACTORY = "0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc";
-const DEFAULT_FAUCET = "0xB8d1b7f2a722A0b5315eaF0840F652A95a758598";
-const DEFAULT_USDC = "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3";
+const contracts = clobContractsByChainId[CHAIN_ID];
+const DEFAULT_FACTORY = contracts.factoryAddress;
+const DEFAULT_TOKEN_FACTORY = contracts.tokenFactoryAddress;
+const DEFAULT_FAUCET = contracts.faucetAddress;
+const DEFAULT_USDC = contracts.faucetTokens.find((token) => token.symbol === "USDC")?.address;
+
+if (!DEFAULT_FACTORY || !DEFAULT_TOKEN_FACTORY || !DEFAULT_FAUCET || !DEFAULT_USDC) {
+  throw new Error(`Incomplete contract configuration for chain ${CHAIN_ID}`);
+}
 const MAX_UINT256 = (1n << 256n) - 1n;
 const BASE_FUNDING = 2_000n * 10n ** 18n;
 const MIN_BASE_BALANCE = 500n * 10n ** 18n;
@@ -32,12 +39,10 @@ const MIN_TICK = 1;
 const MAX_TICK = 100_000;
 
 const rpcUrl = process.env.NEXT_PUBLIC_MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";
-const factoryAddress = getAddress(process.env.NEXT_PUBLIC_MONAD_SPOT_CLOB_FACTORY_ADDRESS ?? DEFAULT_FACTORY);
-const tokenFactoryAddress = getAddress(
-  process.env.NEXT_PUBLIC_MONAD_ERC20_TOKEN_FACTORY_ADDRESS ?? DEFAULT_TOKEN_FACTORY,
-);
-const faucetAddress = getAddress(process.env.NEXT_PUBLIC_MONAD_TOKEN_FAUCET_ADDRESS ?? DEFAULT_FAUCET);
-const quoteAddress = getAddress(process.env.NEXT_PUBLIC_MONAD_FAUCET_USDC_ADDRESS ?? DEFAULT_USDC);
+const factoryAddress = getAddress(DEFAULT_FACTORY);
+const tokenFactoryAddress = getAddress(DEFAULT_TOKEN_FACTORY);
+const faucetAddress = getAddress(DEFAULT_FAUCET);
+const quoteAddress = getAddress(DEFAULT_USDC);
 const appId = process.env.PRIVY_APP_ID ?? process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 const appSecret = process.env.PRIVY_APP_SECRET;
 const rounds = Math.min(100, Math.max(1, Number.parseInt(process.env.STRESS_ROUNDS ?? "5", 10)));

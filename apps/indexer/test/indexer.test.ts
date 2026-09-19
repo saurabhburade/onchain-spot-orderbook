@@ -4,7 +4,7 @@ import { candleEntityId, candleStart } from "../src/candles.js";
 import { bookUpdateEntityId, orderEntityId } from "../src/ids.js";
 import { marketIntervalStatsEntityId } from "../src/market-stats.js";
 
-const FACTORY = "0xae2d3bc901acc1b1f6fc4a7b60e16058bd9e178c" as const;
+const FACTORY = "0x50fcea11c0f01f0eeaa5e980dc4ae9977559330b" as const;
 const BOOK = "0xb521cd32e3e7be89f0055ec7691041862d515f71" as const;
 const TRADER = "0x886540a55cfe78dc462c384a57e43ac275be74fa" as const;
 const OTHER_TRADER = "0x2222222222222222222222222222222222222222" as const;
@@ -32,7 +32,7 @@ describe("CLOB handlers", () => {
               event: "PairCreatedLegacy",
               srcAddress: FACTORY,
               logIndex: 0,
-              block: { number: 63_351_131, timestamp: 1_789_583_718 },
+              block: { number: 63_617_141, timestamp: 1_789_583_718 },
               transaction: { hash: TX_HASH, from: TRADER },
               params: {
                 pairId: POOL_ID,
@@ -55,7 +55,7 @@ describe("CLOB handlers", () => {
       id: POOL_ID,
       book: BOOK,
       tradingFeeBps: 0,
-      createdBlock: 63_351_131,
+      createdBlock: 63_617_141,
     });
   });
 
@@ -73,7 +73,7 @@ describe("CLOB handlers", () => {
               event: "PairCreated",
               srcAddress: FACTORY,
               logIndex: 0,
-              block: { number: 63_351_130, timestamp: 1_800_000_000 },
+              block: { number: 63_617_140, timestamp: 1_800_000_000 },
               transaction: { hash: TX_HASH, from: TRADER },
               params: {
                 pairId: POOL_ID,
@@ -92,7 +92,7 @@ describe("CLOB handlers", () => {
               event: "PairTradingFeeUpdated",
               srcAddress: FACTORY,
               logIndex: 1,
-              block: { number: 63_351_131, timestamp: 1_800_000_001 },
+              block: { number: 63_617_141, timestamp: 1_800_000_001 },
               transaction: { hash: TX_HASH },
               params: {
                 pairId: POOL_ID,
@@ -105,7 +105,7 @@ describe("CLOB handlers", () => {
               event: "OrderPlaced",
               srcAddress: BOOK,
               logIndex: 2,
-              block: { number: 63_351_131, timestamp: 1_800_000_001 },
+              block: { number: 63_617_141, timestamp: 1_800_000_001 },
               transaction: { hash: TX_HASH },
               params: {
                 orderId: ORDER_ID,
@@ -125,7 +125,7 @@ describe("CLOB handlers", () => {
               event: "BookUpdated",
               srcAddress: BOOK,
               logIndex: 3,
-              block: { number: 63_351_131, timestamp: 1_800_000_001 },
+              block: { number: 63_617_141, timestamp: 1_800_000_001 },
               transaction: { hash: TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -139,7 +139,7 @@ describe("CLOB handlers", () => {
               event: "OrderPlaced",
               srcAddress: BOOK,
               logIndex: 4,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 orderId: OTHER_ORDER_ID,
@@ -159,7 +159,7 @@ describe("CLOB handlers", () => {
               event: "TradeExecuted",
               srcAddress: BOOK,
               logIndex: 5,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -177,7 +177,7 @@ describe("CLOB handlers", () => {
               event: "TradingFeeCharged",
               srcAddress: BOOK,
               logIndex: 6,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -192,7 +192,7 @@ describe("CLOB handlers", () => {
               event: "OrderPartiallyFilled",
               srcAddress: BOOK,
               logIndex: 7,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -206,7 +206,7 @@ describe("CLOB handlers", () => {
               event: "OrderFilled",
               srcAddress: BOOK,
               logIndex: 8,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -220,7 +220,7 @@ describe("CLOB handlers", () => {
               event: "BookUpdated",
               srcAddress: BOOK,
               logIndex: 9,
-              block: { number: 63_351_132, timestamp: 1_800_000_002 },
+              block: { number: 63_617_142, timestamp: 1_800_000_002 },
               transaction: { hash: OTHER_TX_HASH },
               params: {
                 poolId: POOL_ID,
@@ -234,7 +234,7 @@ describe("CLOB handlers", () => {
               event: "OrderCancelled",
               srcAddress: BOOK,
               logIndex: 10,
-              block: { number: 63_351_133, timestamp: 1_800_000_003 },
+              block: { number: 63_617_143, timestamp: 1_800_000_003 },
               transaction: { hash: CANCEL_TX_HASH },
               params: {
                 orderId: ORDER_ID,
@@ -248,7 +248,7 @@ describe("CLOB handlers", () => {
               event: "BookUpdated",
               srcAddress: BOOK,
               logIndex: 11,
-              block: { number: 63_351_133, timestamp: 1_800_000_003 },
+              block: { number: 63_617_143, timestamp: 1_800_000_003 },
               transaction: { hash: CANCEL_TX_HASH },
               params: {
                 poolId: POOL_ID,

@@ -4,15 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { type Address, getAddress } from "viem";
 
-import { erc20Abi } from "@/lib/clob/abi";
+import { erc20Abi } from "@/config/abis";
+import { useMarkets } from "@/hooks/use-clob";
 import { useClobChain } from "@/lib/clob/chain-context";
-import { useMarkets } from "@/lib/clob/hooks";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 import type { MarketListing, PoolId, PoolMetadata } from "@/lib/clob/types";
 import { formatPrice, formatQuote } from "@/lib/clob/utils";
-
-import { summarizeIndexedTrades } from "./market-stats";
-import { fetchIndexedMarketDetail, fetchIndexedMarkets, fetchIndexedOrderHistory } from "./queries";
+import { summarizeIndexedTrades } from "@/lib/indexer/market-stats";
+import { fetchIndexedMarketDetail, fetchIndexedMarkets, fetchIndexedOrderHistory } from "@/lib/indexer/queries";
 
 const marketRefreshMs = 15_000;
 const marketDetailRefreshMs = 5_000;

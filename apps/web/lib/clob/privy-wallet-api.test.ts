@@ -5,13 +5,22 @@ import test from "node:test";
 import { type Address, encodeFunctionData } from "viem";
 
 const require = createRequire(import.meta.url);
-const { clobAbi, erc20Abi } = require("./abi.ts") as typeof import("./abi");
+const { clobAbi } = require("../../config/abis/clob.ts") as typeof import("../../config/abis/clob");
+const { erc20Abi } = require("../../config/abis/erc20.ts") as typeof import("../../config/abis/erc20");
+const { clobContractsByChainId } = require("../../config/contracts.ts") as typeof import("../../config/contracts");
 const { validatePrivyOrderBatch, validatePrivySponsoredBatch } =
   require("./privy-call-validation.ts") as typeof import("./privy-call-validation");
 const { buildPrivySendCallsBody, privyWalletRpcUrl, sendPrivySponsoredCalls } =
   require("./privy-wallet-api.ts") as typeof import("./privy-wallet-api");
 
-const token = "0xa3bcafb554fe87109b92b3655c7cf36ba5c46af3" as Address;
+const monadContracts = clobContractsByChainId[10143];
+const token =
+  monadContracts.faucetTokens.find((item) => item.symbol === "USDC")?.address ??
+  (() => {
+    throw new Error("Monad USDC is missing from the contract registry");
+  })();
+const faucet = monadContracts.faucetAddress;
+
 const book = "0xe4a7d4a21fa977e271b3b88e3d786d740d5f530b" as Address;
 const trader = "0x7c2b03f0872c700fc35e68746b4ccf0c81ee2bd7" as Address;
 
@@ -87,7 +96,6 @@ test("accepts a single CLOB cancellation call", () => {
 });
 
 test("allows only an allowlisted faucet claim in the sponsored proxy", () => {
-  const faucet = "0xb8d1b7f2a722a0b5315eaf0840f652a95a758598" as Address;
   const claimData = encodeFunctionData({
     abi: [
       {

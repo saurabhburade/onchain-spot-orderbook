@@ -1,4 +1,4 @@
-import { MONAD_TESTNET_CHAIN_ID } from "./config";
+import { MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
 
 export function headlessTransactionOptions(address: string, chainId: number) {
   return {

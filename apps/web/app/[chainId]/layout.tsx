@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { ChainRouteProviders } from "@/components/chain-route-providers";
-import { isSupportedClobChainId } from "@/lib/clob/config";
+import { isSupportedClobChainId } from "@/config/chains";
 
 export default async function ChainLayout({ children, params }: { children: ReactNode; params: Promise<unknown> }) {
   const resolvedParams = await params;

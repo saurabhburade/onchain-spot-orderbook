@@ -9,7 +9,7 @@ const fundingDialogSource = readFileSync(
 );
 const appHeaderSource = readFileSync(new URL("../../components/app-header.tsx", import.meta.url), "utf8");
 const walletContextSource = readFileSync(new URL("./wallet.tsx", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("./hooks.tsx", import.meta.url), "utf8");
+const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
 
 test("exposes only the canonical trading identity on Monad", () => {
   assert.match(walletButtonSource, /const address = tradingAddress/);

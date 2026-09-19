@@ -1,17 +1,14 @@
-export { clobAbi, clobLensAbi, erc20Abi, poolRegistryAbi } from "./abi";
-export { useClobChain } from "./chain-context";
+export { clobAbi, clobLensAbi, erc20Abi, poolRegistryAbi } from "@/config/abis";
 export {
-  ANVIL_CHAIN_ID,
   anvilChain,
   clobNetworksByChainId,
-  DEFAULT_CLOB_CHAIN_ID,
   getClobNetwork,
   isSupportedClobChainId,
-  MONAD_TESTNET_CHAIN_ID,
   monadTestnetChain,
   supportedClobChainIds,
   supportedClobNetworks,
-} from "./config";
+} from "@/config/chains";
+export { ANVIL_CHAIN_ID, DEFAULT_CLOB_CHAIN_ID, MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
 export {
   useBalances,
   useBestPrices,
@@ -24,7 +21,8 @@ export {
   usePoolMetadata,
   useTradeExecuted,
   useUserOrders,
-} from "./hooks";
+} from "@/hooks/use-clob";
+export { useClobChain } from "./chain-context";
 export {
   addListedMarket,
   type ListedMarket,

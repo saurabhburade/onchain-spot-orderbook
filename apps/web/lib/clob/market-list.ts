@@ -1,6 +1,8 @@
 import type { Address } from "viem";
 
-import { ANVIL_CHAIN_ID, getClobNetwork, MONAD_TESTNET_CHAIN_ID } from "./config";
+import { getClobNetwork } from "@/config/chains";
+import { ANVIL_CHAIN_ID, MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
+import { clobContractsByChainId } from "@/config/contracts";
 import type { PoolId } from "./types";
 
 export type ListedMarket = {
@@ -16,33 +18,45 @@ export type ListedQuoteToken = {
   iconUrl?: string;
 };
 
-const storedMarketsKey = "clob:listed-markets:v1";
+const storedMarketsKeyPrefix = "clob:listed-markets:v2";
 const listedMarketsChangedEvent = "clob:listed-markets-changed";
+
+function storedMarketsKey(chainId: number) {
+  const factoryAddress = getClobNetwork(chainId).factoryAddress?.toLowerCase() ?? "unconfigured";
+  return `${storedMarketsKeyPrefix}:${chainId}:${factoryAddress}`;
+}
 
 const trustWalletAssets =
   "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/monad";
 const monadIconUrl = `${trustWalletAssets}/info/logo.png`;
 const tetherIconUrl =
   "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png";
+const monadTokens = clobContractsByChainId[MONAD_TESTNET_CHAIN_ID].tokens;
+const anvilTokens = clobContractsByChainId[ANVIL_CHAIN_ID].tokens;
+const monadToken = monadTokens.find((token) => token.symbol === "MON");
+const monadUsdc = monadTokens.find((token) => token.symbol === "USDC");
+const monadUsdt = monadTokens.find((token) => token.symbol === "USDT");
+const anvilUsdc = anvilTokens.find((token) => token.symbol === "USDC");
+
+if (!monadToken || !monadUsdc || !monadUsdt || !anvilUsdc) {
+  throw new Error("Known market tokens are missing from the contract registry");
+}
+
 const tokenIconUrlsByChainId: Readonly<Partial<Record<number, Readonly<Record<string, string>>>>> = {
   [MONAD_TESTNET_CHAIN_ID]: {
-    ["0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541".toLowerCase()]: monadIconUrl,
-    ["0xef271f6433E05757A94e28873911Af92f0D0b9f3".toLowerCase()]: tetherIconUrl,
+    [monadToken.address.toLowerCase()]: monadIconUrl,
+    [monadUsdt.address.toLowerCase()]: tetherIconUrl,
   },
 };
 const anvilQuoteTokens: readonly ListedQuoteToken[] = [
   {
-    address: "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
-    symbol: "USDC",
-    decimals: 6,
+    ...anvilUsdc,
     iconUrl: `${trustWalletAssets}/assets/0x754704Bc059F8C67012fEd69BC8A327a5aafb603/logo.png`,
   },
 ];
 const monadQuoteTokens: readonly ListedQuoteToken[] = [
   {
-    address: "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
-    symbol: "USDC",
-    decimals: 6,
+    ...monadUsdc,
     iconUrl: `${trustWalletAssets}/assets/0x754704Bc059F8C67012fEd69BC8A327a5aafb603/logo.png`,
   },
 ];
@@ -90,8 +104,7 @@ export function listedMarkets(chainId: number): readonly ListedMarket[] {
   if (typeof window === "undefined") return configured;
 
   try {
-    const stored = JSON.parse(window.localStorage.getItem(storedMarketsKey) ?? "{}") as Record<string, unknown>;
-    const storedPoolIds = stored[String(chainId)];
+    const storedPoolIds = JSON.parse(window.localStorage.getItem(storedMarketsKey(chainId)) ?? "[]") as unknown;
     const poolIds = Array.isArray(storedPoolIds)
       ? storedPoolIds.filter(
           (value: unknown): value is PoolId => typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value),
@@ -110,18 +123,16 @@ export function listedMarkets(chainId: number): readonly ListedMarket[] {
 /** Persist a user-created market in this browser's chain-scoped market list. */
 export function addListedMarket(chainId: number, market: ListedMarket) {
   if (typeof window === "undefined") return;
-  let stored: Record<string, unknown> = {};
+  let storedPoolIds: unknown = [];
   try {
-    stored = JSON.parse(window.localStorage.getItem(storedMarketsKey) ?? "{}") as Record<string, unknown>;
+    storedPoolIds = JSON.parse(window.localStorage.getItem(storedMarketsKey(chainId)) ?? "[]") as unknown;
   } catch {
-    stored = {};
+    storedPoolIds = [];
   }
-  const storedPoolIds = stored[String(chainId)];
   const current: unknown[] = Array.isArray(storedPoolIds) ? storedPoolIds : [];
   const poolIds = current.filter((value: unknown): value is string => typeof value === "string");
   if (!poolIds.some((poolId) => poolId.toLowerCase() === market.poolId.toLowerCase())) {
-    stored[String(chainId)] = [...poolIds, market.poolId];
-    window.localStorage.setItem(storedMarketsKey, JSON.stringify(stored));
+    window.localStorage.setItem(storedMarketsKey(chainId), JSON.stringify([...poolIds, market.poolId]));
   }
   window.dispatchEvent(new Event(listedMarketsChangedEvent));
 }
@@ -129,7 +140,7 @@ export function addListedMarket(chainId: number, market: ListedMarket) {
 export function subscribeToListedMarkets(listener: () => void) {
   if (typeof window === "undefined") return () => undefined;
   const onStorage = (event: StorageEvent) => {
-    if (event.key === storedMarketsKey) listener();
+    if (event.key?.startsWith(`${storedMarketsKeyPrefix}:`)) listener();
   };
   window.addEventListener(listedMarketsChangedEvent, listener);
   window.addEventListener("storage", onStorage);

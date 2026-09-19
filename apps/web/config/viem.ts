@@ -9,14 +9,19 @@ import {
   http,
   webSocket,
 } from "viem";
-import { type ClobNetworkConfig, getClobNetwork, MONAD_TESTNET_CHAIN_ID } from "./config";
+
+import { type ClobNetworkConfig, getClobNetwork } from "./chains";
+import { MONAD_TESTNET_CHAIN_ID } from "./constants";
 
 const publicClients = new Map<number, ReturnType<typeof createPublicClient>>();
 const eventClients = new Map<number, ReturnType<typeof createPublicClient>>();
+const EVENT_RECONNECT_ATTEMPTS = Number.MAX_SAFE_INTEGER;
+const EVENT_RECONNECT_DELAY_MS = 2_000;
 
 export function getClobPublicClient(chainId: number) {
   const existing = publicClients.get(chainId);
   if (existing) return existing;
+
   const network = getClobNetwork(chainId);
   const transports = network.rpcEndpoints.map((endpoint) =>
     http(endpoint.url, {
@@ -42,11 +47,19 @@ export function getClobPublicClient(chainId: number) {
 export function getClobEventClient(chainId: number) {
   const existing = eventClients.get(chainId);
   if (existing) return existing;
+
   const network = getClobNetwork(chainId);
   if (!network.wsRpcUrl) return undefined;
+
   const client = createPublicClient({
     chain: network.chain,
-    transport: webSocket(network.wsRpcUrl),
+    transport: webSocket(network.wsRpcUrl, {
+      keepAlive: true,
+      reconnect: {
+        attempts: EVENT_RECONNECT_ATTEMPTS,
+        delay: EVENT_RECONNECT_DELAY_MS,
+      },
+    }),
   });
   eventClients.set(chainId, client);
   return client;
@@ -59,6 +72,7 @@ function errorCode(error: unknown) {
 
 export async function switchPrivyWalletToChain(wallet: ConnectedWallet, network: ClobNetworkConfig) {
   if (wallet.chainId === `eip155:${network.chain.id}`) return;
+
   const provider = await wallet.getEthereumProvider();
   const chainId = `0x${network.chain.id.toString(16)}` as const;
   try {

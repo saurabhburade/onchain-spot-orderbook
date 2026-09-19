@@ -1,9 +1,11 @@
 import { createPublicClient, createWalletClient, http, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
+import { clobContractsByChainId } from "../config/contracts.ts";
+
+const CHAIN_ID = 31_337;
 const rpcUrl = process.env.NEXT_PUBLIC_ANVIL_RPC_URL ?? "http://127.0.0.1:8545";
-const factoryAddress =
-  process.env.NEXT_PUBLIC_SPOT_CLOB_FACTORY_ADDRESS ?? "0x9A676e781A523b5d0C0e43731313A708CB607508";
+const factoryAddress = clobContractsByChainId[CHAIN_ID].factoryAddress;
 const poolId =
   process.env.NEXT_PUBLIC_DEFAULT_POOL_ID ?? "0x940fa4f561e904023d97c99693c926e617384e35a8001be8c408a507c2d04645";
 let exchangeAddress;
@@ -22,7 +24,7 @@ const privateKeys = {
 };
 
 const anvil = {
-  id: 31_337,
+  id: CHAIN_ID,
   name: "Anvil",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [rpcUrl] } },

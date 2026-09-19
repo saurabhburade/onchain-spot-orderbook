@@ -13,24 +13,25 @@ import {
   zeroAddress,
 } from "viem";
 
-import { clobAbi, clobLensAbi, erc20Abi, poolRegistryAbi } from "./abi";
-import { createAsyncCache, createRequestCoalescer } from "./async-cache";
-import { type AtomicCall, encodeAtomicBatch } from "./atomic-batch";
-import { useClobChain } from "./chain-context";
-import { createPrivyWalletClient, type getClobPublicClient, waitForTransaction } from "./client";
-import { ANVIL_CHAIN_ID, type ClobNetworkConfig, MONAD_TESTNET_CHAIN_ID } from "./config";
+import { clobAbi, clobLensAbi, erc20Abi, poolRegistryAbi } from "@/config/abis";
+import type { ClobNetworkConfig } from "@/config/chains";
+import { ANVIL_CHAIN_ID, MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
+import { createPrivyWalletClient, type getClobPublicClient, waitForTransaction } from "@/config/viem";
+import { createAsyncCache, createRequestCoalescer } from "@/lib/clob/async-cache";
+import { type AtomicCall, encodeAtomicBatch } from "@/lib/clob/atomic-batch";
+import { useClobChain } from "@/lib/clob/chain-context";
 import {
   AGNOSTIC_CREATE_PAIR_SELECTOR,
   hasFunctionSelector,
   isUnsupportedContractFunctionError,
   LEGACY_CREATE_PAIR_SELECTOR,
   legacyCreatePairArgs,
-} from "./factory-compat";
-import { getLogsInBlockRanges } from "./log-ranges";
-import { addListedMarket, listedMarkets, listedTokenIconUrl, subscribeToListedMarkets } from "./market-list";
-import { decodePoolResultData } from "./pool-metadata";
-import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "./privy-wallet-api";
-import { headlessTransactionOptions } from "./transaction-options";
+} from "@/lib/clob/factory-compat";
+import { getLogsInBlockRanges } from "@/lib/clob/log-ranges";
+import { addListedMarket, listedMarkets, listedTokenIconUrl, subscribeToListedMarkets } from "@/lib/clob/market-list";
+import { decodePoolResultData } from "@/lib/clob/pool-metadata";
+import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
+import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 import type {
   AnvilFaucetInput,
   AsyncState,
@@ -49,7 +50,7 @@ import type {
   TokenBalance,
   TradeExecuted,
   TransactionState,
-} from "./types";
+} from "@/lib/clob/types";
 import {
   formatPrice,
   formatQuantity,
@@ -59,8 +60,8 @@ import {
   quoteAmountRaw,
   quoteAmountWithPoolFee,
   toError,
-} from "./utils";
-import { useClobWallet } from "./wallet";
+} from "@/lib/clob/utils";
+import { useClobWallet } from "@/lib/clob/wallet";
 
 const EMPTY_ASYNC: AsyncState = { loading: false, error: null };
 const RPC_LOG_BLOCK_RANGE = 100n;
@@ -88,9 +89,7 @@ function marketSnapshotCache(publicClient: ClobPublicClient) {
 }
 
 function registryError(config: ClobNetworkConfig) {
-  return config.factoryAddress
-    ? undefined
-    : new Error("CLOB configuration is incomplete: NEXT_PUBLIC_SPOT_CLOB_FACTORY_ADDRESS");
+  return config.factoryAddress ? undefined : new Error(`CLOB factory is not configured for ${config.chain.name}`);
 }
 
 function clobError(contractAddress?: Address) {
@@ -316,7 +315,7 @@ export function useMarkets() {
       abi: poolRegistryAbi,
       eventName: "PairCreated",
       onLogs: () => void refetch(),
-      onError: (error) => setState({ loading: false, error: toError(error) }),
+      onError: () => void refetch(),
     });
     return () => {
       unsubscribeListedMarkets();
@@ -533,7 +532,7 @@ export function useOrderbook(poolId?: PoolId, depth = 20) {
       eventName: "BookUpdated",
       args: { poolId },
       onLogs: () => void refetch(),
-      onError: (error) => setState({ loading: false, error: toError(error) }),
+      onError: () => void refetch(),
     });
   }, [eventClient, pool.data?.clobAddress, poolId, refetch]);
 
@@ -608,7 +607,7 @@ export function useBestPrices(poolId?: PoolId) {
       eventName: "BookUpdated",
       args: { poolId },
       onLogs: () => void refetch(),
-      onError: (error) => setState({ loading: false, error: toError(error) }),
+      onError: () => void refetch(),
     });
   }, [eventClient, pool.data?.clobAddress, poolId, refetch]);
   return { data, error: state.error ?? pool.error, loading: state.loading || pool.loading, refetch };
@@ -741,7 +740,7 @@ export function useTradeExecuted(poolId?: PoolId) {
           setState({ loading: false, error: toError(error) });
         }
       },
-      onError: (error) => setState({ loading: false, error: toError(error) }),
+      onError: () => void refetch(),
     });
   }, [decode, enrichTimestamps, eventClient, pool.data?.clobAddress, poolId, refetch]);
 
@@ -889,7 +888,13 @@ export function useUserOrders(poolId?: PoolId) {
               expiry: bigint;
               clientOrderId: bigint;
             };
-            state: { filledQuantity: bigint; createdAt: bigint; status: number };
+            state: {
+              filledQuantity: bigint;
+              createdAt: bigint;
+              status: number;
+              kind: number;
+              filledQuoteQuantity: bigint;
+            };
           }[],
           PoolId,
         ];
@@ -981,7 +986,7 @@ export function useUserOrders(poolId?: PoolId) {
     void refetch();
     const contractAddress = pool.data?.clobAddress;
     if (!eventClient || !poolId || !contractAddress || !tradingAddress) return;
-    const refreshOnError = (error: Error) => setState({ loading: false, error: toError(error) });
+    const refreshOnError = () => void refetch();
     const subscriptions = [
       eventClient.watchContractEvent({
         address: contractAddress,

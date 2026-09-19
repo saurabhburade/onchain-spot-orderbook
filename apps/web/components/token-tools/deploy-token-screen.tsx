@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { tokenFactoryAbi } from "@/config/abis";
+import { waitForTransaction } from "@/config/viem";
 import { useClobChain, useClobWallet } from "@/lib/clob";
-import { waitForTransaction } from "@/lib/clob/client";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
-import { tokenFactoryAbi } from "@/lib/token-tools/abi";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Token deployment failed";

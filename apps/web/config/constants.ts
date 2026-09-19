@@ -1,0 +1,3 @@
+export const ANVIL_CHAIN_ID = 31_337;
+export const MONAD_TESTNET_CHAIN_ID = 10_143;
+export const DEFAULT_CLOB_CHAIN_ID = MONAD_TESTNET_CHAIN_ID;

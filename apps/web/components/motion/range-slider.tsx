@@ -3,9 +3,8 @@
 
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { useEffect, useLayoutEffect, useState } from "react";
-
+import { type SliderOptions, useSlider } from "@/hooks/use-slider";
 import { SPRING_GLIDE } from "@/lib/ease";
-import { type SliderOptions, useSlider } from "@/lib/hooks/use-slider";
 import { TOUCH_GESTURE_CLASS } from "@/lib/touch";
 import { cn } from "@/lib/utils";
 

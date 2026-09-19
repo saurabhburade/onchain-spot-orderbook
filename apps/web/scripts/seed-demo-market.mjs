@@ -15,20 +15,21 @@ import {
   parseAbiParameters,
 } from "viem";
 
+import { clobContractsByChainId } from "../config/contracts.ts";
+
 const CHAIN_ID = 10_143;
 const CAIP2 = `eip155:${CHAIN_ID}`;
-const FACTORY = getAddress(
-  process.env.NEXT_PUBLIC_MONAD_SPOT_CLOB_FACTORY_ADDRESS ?? "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C",
-);
-const TOKEN_FACTORY = getAddress(
-  process.env.NEXT_PUBLIC_MONAD_ERC20_TOKEN_FACTORY_ADDRESS ?? "0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc",
-);
-const FAUCET = getAddress(
-  process.env.NEXT_PUBLIC_MONAD_TOKEN_FAUCET_ADDRESS ?? "0xB8d1b7f2a722A0b5315eaF0840F652A95a758598",
-);
-const USDC = getAddress(
-  process.env.NEXT_PUBLIC_MONAD_FAUCET_USDC_ADDRESS ?? "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
-);
+const contracts = clobContractsByChainId[CHAIN_ID];
+const usdcAddress = contracts.faucetTokens.find((token) => token.symbol === "USDC")?.address;
+
+if (!contracts.factoryAddress || !contracts.tokenFactoryAddress || !contracts.faucetAddress || !usdcAddress) {
+  throw new Error(`Incomplete contract configuration for chain ${CHAIN_ID}`);
+}
+
+const FACTORY = getAddress(contracts.factoryAddress);
+const TOKEN_FACTORY = getAddress(contracts.tokenFactoryAddress);
+const FAUCET = getAddress(contracts.faucetAddress);
+const USDC = getAddress(usdcAddress);
 const APP_ID = process.env.PRIVY_APP_ID ?? process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 const APP_SECRET = process.env.PRIVY_APP_SECRET;
 const RPC_URL = process.env.NEXT_PUBLIC_MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz";

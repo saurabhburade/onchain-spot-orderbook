@@ -15,17 +15,24 @@ import {
   parseUnits,
 } from "viem";
 
+import { clobContractsByChainId } from "../config/contracts.ts";
+
 const CHAIN_ID = 10_143;
 const CAIP2 = `eip155:${CHAIN_ID}`;
 const ACCOUNT_COUNT = 5;
 const ZERO_BYTES32 = `0x${"00".repeat(32)}`;
 const MAX_UINT256 = (1n << 256n) - 1n;
 
+const contracts = clobContractsByChainId[CHAIN_ID];
 const DEFAULT_POOL_ID = "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c";
-const DEFAULT_FACTORY = "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C";
-const DEFAULT_FAUCET = "0xB8d1b7f2a722A0b5315eaF0840F652A95a758598";
-const DEFAULT_USDC = "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3";
-const DEFAULT_USDT = "0xef271f6433E05757A94e28873911Af92f0D0b9f3";
+const DEFAULT_FACTORY = contracts.factoryAddress;
+const DEFAULT_FAUCET = contracts.faucetAddress;
+const DEFAULT_USDC = contracts.faucetTokens.find((token) => token.symbol === "USDC")?.address;
+const DEFAULT_USDT = contracts.faucetTokens.find((token) => token.symbol === "USDT")?.address;
+
+if (!DEFAULT_FACTORY || !DEFAULT_FAUCET || !DEFAULT_USDC || !DEFAULT_USDT) {
+  throw new Error(`Incomplete contract configuration for chain ${CHAIN_ID}`);
+}
 const DEFAULT_RPC_URLS = [
   "https://testnet-rpc.monad.xyz",
   "https://rpc.ankr.com/monad_testnet",
@@ -797,8 +804,8 @@ export async function main() {
   }
 
   const rpcUrls = resolveRpcUrls(process.env.NEXT_PUBLIC_MONAD_RPC_URLS, process.env.NEXT_PUBLIC_MONAD_RPC_URL);
-  const factory = getAddress(process.env.NEXT_PUBLIC_MONAD_SPOT_CLOB_FACTORY_ADDRESS ?? DEFAULT_FACTORY);
-  const faucet = getAddress(process.env.NEXT_PUBLIC_MONAD_TOKEN_FAUCET_ADDRESS ?? DEFAULT_FAUCET);
+  const factory = getAddress(DEFAULT_FACTORY);
+  const faucet = getAddress(DEFAULT_FAUCET);
   const poolId = process.env.MM_POOL_ID ?? DEFAULT_POOL_ID;
   const dryRun = process.argv.includes("--dry-run");
   const provisionOnly = process.argv.includes("--provision-only");

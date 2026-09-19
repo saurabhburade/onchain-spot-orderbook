@@ -11,9 +11,9 @@ import {
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { type Address, getAddress } from "viem";
 
+import { getClobNetwork } from "@/config/chains";
+import { switchPrivyWalletToChain } from "@/config/viem";
 import { useClobChain } from "./chain-context";
-import { switchPrivyWalletToChain } from "./client";
-import { getClobNetwork } from "./config";
 
 type ClobWalletContextValue = {
   authenticated: boolean;

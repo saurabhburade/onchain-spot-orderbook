@@ -84,7 +84,7 @@ pnpm --filter @clob/web maker:live -- --cleanup
 pnpm --filter @clob/web maker:live -- --trade-only --sell
 ```
 
-The default market is pool `0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c`
+The default USDT / USDC market is pool `0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c`
 at the route `/10143/markets/<pool-id>/trade`. The precision-price stable-pair deployment defaults
 to 20 bids from `0.995` down to `0.900` and 20 asks from `1.005` up to `1.100`, in `0.005` steps.
 Override these with `MM_BID_PRICE`, `MM_ASK_PRICE`, and `MM_PRICE_STEP`. Every bid and ask level gets

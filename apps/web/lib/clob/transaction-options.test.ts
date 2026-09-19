@@ -8,7 +8,7 @@ const deploySource = readFileSync(
   "utf8",
 );
 const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("./hooks.tsx", import.meta.url), "utf8");
+const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
 const createMarketSource =
   hooksSource.split("export function useCreateMarket()")[1]?.split("export function useOrderbook")[0] ?? "";
 const marketsSource =

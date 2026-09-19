@@ -5,10 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { createContext, type ReactNode, useContext, useState } from "react";
 
-import { monadTestnetChain } from "@/lib/clob";
+import { getPrivyConfig, privyAppId, privyClientId } from "@/config/privy";
 
-const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-const privyClientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID;
 const PrivyConfiguredContext = createContext(false);
 
 export function usePrivyConfigured() {
@@ -45,28 +43,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <PrivyProvider
-        appId={privyAppId}
-        clientId={privyClientId}
-        config={{
-          defaultChain: monadTestnetChain,
-          supportedChains: [monadTestnetChain],
-          appearance: {
-            theme: resolvedTheme === "dark" ? "dark" : "light",
-            landingHeader: "Connect to Orderbook",
-            loginMessage: "Connect an Ethereum wallet to create markets and trade.",
-            showWalletLoginFirst: true,
-            walletChainType: "ethereum-only",
-            walletList: ["detected_wallets", "metamask", "coinbase_wallet", "wallet_connect"],
-          },
-          embeddedWallets: {
-            ethereum: {
-              createOnLogin: "all-users",
-            },
-          },
-          loginMethods: ["wallet"],
-        }}
-      >
+      <PrivyProvider appId={privyAppId} clientId={privyClientId} config={getPrivyConfig(resolvedTheme)}>
         <PrivyConfiguredContext.Provider value>{children}</PrivyConfiguredContext.Provider>
       </PrivyProvider>
     </QueryClientProvider>

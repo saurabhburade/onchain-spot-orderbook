@@ -47,8 +47,8 @@ chains:
         ws: ${ENVIO_MONAD_REALTIME_WS_URL:-wss://rpc-testnet.monadinfra.com}
         for: realtime
         polling_interval: 400
-    start_block: 63351130
+    start_block: 63617140
     contracts:
       - name: SpotCLOBFactory
-        address: "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C"
+        address: "0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b"
       - name: SpotCLOB

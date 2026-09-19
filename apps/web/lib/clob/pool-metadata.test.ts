@@ -4,7 +4,8 @@ import { describe, it } from "node:test";
 import { type Abi, decodeFunctionResult, encodeFunctionResult } from "viem";
 
 const require = createRequire(import.meta.url);
-const { poolRegistryAbi } = require("./abi.ts") as typeof import("./abi");
+const { poolRegistryAbi } =
+  require("../../config/abis/pool-registry.ts") as typeof import("../../config/abis/pool-registry");
 const { decodePoolResultData, normalizeRawPool } = require("./pool-metadata.ts") as typeof import("./pool-metadata");
 
 const address = "0x0000000000000000000000000000000000000001";

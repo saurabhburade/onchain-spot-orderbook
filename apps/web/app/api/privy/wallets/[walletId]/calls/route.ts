@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { getClobNetwork, MONAD_TESTNET_CHAIN_ID } from "@/lib/clob/config";
+import { getClobNetwork } from "@/config/chains";
+import { MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
 import { validatePrivySponsoredBatch } from "@/lib/clob/privy-call-validation";
 import { authenticatePrivyRequest } from "@/lib/privy/server";
 

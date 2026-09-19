@@ -2,19 +2,20 @@
   "chainId": 10143,
   "network": "monad-testnet",
   "rpcUrl": "https://testnet-rpc.monad.xyz",
-  "deploymentBlock": 63351130,
+  "deploymentBlock": 63617140,
   "deployer": "0x886540a55CFE78dc462C384a57E43ac275BE74FA",
   "contracts": {
-    "spotClobFactory": "0xAE2D3bC901acc1B1f6fc4A7B60e16058bd9e178C",
-    "spotClob": "0x01Dd715F66dfca944ab65194Aca0873aa9C02Cc2",
-    "spotClobLens": "0xd82FC5946b63cFcDdB4706CFfe7DF248238779AA"
+    "spotClobFactory": "0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b",
+    "spotClobImplementation": "0xA75063CcB5979B9EB82FddD91634C2100622c946",
+    "spotClob": "0x3d4E75bA9f53908345ce12951EE697B17a455E30",
+    "spotClobLens": "0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F"
   },
   "defaultMarket": {
     "poolId": "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
-    "book": "0x01Dd715F66dfca944ab65194Aca0873aa9C02Cc2",
+    "book": "0x3d4E75bA9f53908345ce12951EE697B17a455E30",
     "baseAsset": "0xef271f6433E05757A94e28873911Af92f0D0b9f3",
     "quoteAsset": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
-    "createdBlock": 63351171,
+    "createdBlock": 63872333,
     "agnosticPricing": true
   },
   "quoteTokens": [
@@ -25,10 +26,11 @@
     }
   ],
   "transactions": {
-    "deployFactory": "0x8f3ed024327253710dfe92d47939de0a2b029582a9cc988ac2fbfc1a842e1057",
-    "deployLens": "0xc05b92786785450dd54b22c92facc9b9c2bea62293501ced4fccabd41bae8a3f",
-    "allowlistUsdc": "0x8b02bf0395093ed07f0fac0a2b5700ea70061fb0ca5fcfbbfefaf2809b9c2e55",
-    "createUsdtUsdc": "0x23b6c66049f195a962e83d05223feee8c10ecf0b7d04845bb40e1c5e1774838d"
+    "deployFactory": "0x61990aafcef4c71203a226968567976c02acb3c55aa6713976a368088579f84b",
+    "deployLens": "0xf6c32ea2755727312e2b6ff7eb06508bf3742c6a33ba9bfa176f6b64a2890815",
+    "allowlistUsdc": "0x2bf9e358bb4e9946e56beb315de5329246b089c20563889b87909786f04a92f8",
+    "createDummy1Usdc": "0x65af0900aae759b048830e8f2e33bf38e99c0433f55d9a6369afb3f416f1cf80",
+    "createUsdtUsdc": "0x5fa898df1bba5e12425c3380b831f669c15cff71cd0fa6f5bd10989dcaa7ac33"
   },
   "sourceVerified": false
 }

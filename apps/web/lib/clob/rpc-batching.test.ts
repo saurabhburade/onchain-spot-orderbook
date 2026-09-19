@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const clientSource = readFileSync(new URL("./client.ts", import.meta.url), "utf8");
-const configSource = readFileSync(new URL("./config.ts", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("./hooks.tsx", import.meta.url), "utf8");
-const indexerHooksSource = readFileSync(new URL("../indexer/hooks.ts", import.meta.url), "utf8");
+const clientSource = readFileSync(new URL("../../config/viem.ts", import.meta.url), "utf8");
+const configSource = readFileSync(new URL("../../config/chains.ts", import.meta.url), "utf8");
+const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const indexerHooksSource = readFileSync(new URL("../../hooks/use-indexer.ts", import.meta.url), "utf8");
 const marketsScreenSource = readFileSync(
   new URL("../../components/markets/markets-screen.tsx", import.meta.url),
   "utf8",
@@ -16,8 +16,19 @@ describe("Monad RPC request batching", () => {
   it("keeps contract event watchers off the HTTP read client", () => {
     assert.doesNotMatch(hooksSource, /publicClient\.watchContractEvent\(/);
     assert.match(hooksSource, /eventClient\.watchContractEvent\(/);
-    assert.match(clientSource, /webSocket\(network\.wsRpcUrl\)/);
+    assert.match(clientSource, /webSocket\(network\.wsRpcUrl,\s*\{/);
     assert.match(configSource, /wss:\/\/testnet-rpc\.monad\.xyz/);
+  });
+
+  it("keeps reconnecting event subscriptions and resyncs reads after socket errors", () => {
+    assert.match(clientSource, /attempts:\s*EVENT_RECONNECT_ATTEMPTS/);
+    assert.match(clientSource, /EVENT_RECONNECT_ATTEMPTS\s*=\s*Number\.MAX_SAFE_INTEGER/);
+    assert.match(clientSource, /delay:\s*EVENT_RECONNECT_DELAY_MS/);
+    assert.match(hooksSource, /onError:\s*\(\)\s*=>\s*void refetch\(\)/);
+    assert.doesNotMatch(
+      hooksSource,
+      /onError:\s*\(error\)\s*=>\s*setState\(\{\s*loading:\s*false,\s*error:\s*toError\(error\)\s*\}\)/,
+    );
   });
 
   it("enables viem transport multicall batching", () => {

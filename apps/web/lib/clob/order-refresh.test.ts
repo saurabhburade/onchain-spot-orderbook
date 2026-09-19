@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const hooksSource = readFileSync(new URL("./hooks.tsx", import.meta.url), "utf8");
+const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
 const userOrdersSource =
   hooksSource.split("export function useUserOrders")[1]?.split("export function useOpenOrders")[0] ?? "";
 const orderbookSource =

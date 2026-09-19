@@ -3,7 +3,7 @@
 import { ExternalLink, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { MarketSelector } from "@/components/markets/market-selector";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import type {
   RecentTrade,
   TransactionFeedback,
 } from "./market-data";
+import { missingMarketRecoveryPath } from "./market-route";
 import { deriveMarketSummary, type PriceCandle } from "./market-stats";
 import { OrderBook } from "./order-book";
 import { orderHistoryPrice } from "./order-history";
@@ -200,9 +201,10 @@ function recentTrade(trade: TradeExecuted, symbol: string, side: "buy" | "sell",
 }
 
 function MarketTradingView({ marketId }: { marketId: PoolId }) {
+  const router = useRouter();
   const clob = useClob(marketId, ORDERBOOK_DEPTH);
   const indexed = useIndexerMarketDetail(marketId);
-  const { config } = useClobChain();
+  const { chainId, config } = useClobChain();
   const { authenticated, connect, ready, tradingAddress, wallet } = useClobWallet();
   const indexedOrderHistory = useIndexerOrderHistory(marketId, tradingAddress ?? undefined);
   const pool = clob.pool.data;
@@ -325,6 +327,24 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
     [indexedOrderHistory.data, pool, summary.baseAsset, summary.symbol],
   );
   const marketError = clob.pool.error?.message ?? null;
+  const recoveryPath = missingMarketRecoveryPath({
+    chainId,
+    currentPoolId: marketId,
+    defaultPoolId: config.defaultPoolId,
+    errorMessage: marketError,
+  });
+  useEffect(() => {
+    if (recoveryPath) router.replace(recoveryPath);
+  }, [recoveryPath, router]);
+
+  if (recoveryPath) {
+    return (
+      <main className="grid min-h-[calc(100vh-64px)] place-items-center px-6 text-sm text-muted-foreground">
+        Redirecting to an active market…
+      </main>
+    );
+  }
+
   return (
     <main className="w-full">
       <div className="grid items-stretch gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_280px_300px] lg:grid-rows-[4.25rem_minmax(464px,auto)] lg:gap-0 lg:p-0 xl:grid-cols-[minmax(0,1fr)_340px_320px] 2xl:grid-cols-[minmax(0,1fr)_384px_380px]">

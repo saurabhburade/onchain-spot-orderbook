@@ -1,7 +1,9 @@
 "use client";
 
 import { ArrowLeftRight, BadgeQuestionMark, CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
 import { isAddress } from "viem";
@@ -25,12 +27,13 @@ import {
   formatFraction,
   listedQuoteTokens,
   type MarketToken,
+  type PoolId,
   useClobChain,
   useCreateMarket,
 } from "@/lib/clob";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 
-type PairInfo = { base: MarketToken; quote: MarketToken; legacyFactory: boolean };
+type PairInfo = { base: MarketToken; quote: MarketToken; legacyFactory: boolean; existingPoolId?: PoolId };
 
 type TokenVerification =
   | { status: "idle" }
@@ -287,6 +290,7 @@ function formatScientificPrice(value: string) {
 function MarketSetupCard({
   action,
   base,
+  error,
   quoteIconUrl,
   quoteSymbol,
   tokenPriceRange,
@@ -294,11 +298,14 @@ function MarketSetupCard({
 }: {
   action: ReactNode;
   base: ComponentProps<typeof TokenAddressCard>;
+  error?: ReactNode;
   quoteIconUrl?: string;
   quoteSymbol: string;
   tokenPriceRange: string;
   tokenPriceRangeTitle: string;
 }) {
+  const reduceMotion = useReducedMotion() ?? false;
+
   return (
     <Card className="min-h-full w-full rounded-none bg-background py-0 ring-0">
       <CardHeader className="sr-only">
@@ -328,7 +335,24 @@ function MarketSetupCard({
             </dd>
           </div>
         </dl>
-        <div className="border-t border-border p-5">{action}</div>
+        <div className="border-t border-border p-5">
+          <AnimatePresence>
+            {error ? (
+              <motion.div
+                animate={{ height: "auto", opacity: 1, y: 0 }}
+                aria-live="polite"
+                className="mb-3 overflow-hidden rounded-xl bg-destructive/10 text-xs text-destructive"
+                exit={reduceMotion ? undefined : { height: 0, opacity: 0, y: -8 }}
+                initial={reduceMotion ? false : { height: 0, opacity: 0, y: -8 }}
+                role="alert"
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <div className="px-4 py-3">{error}</div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+          {action}
+        </div>
       </CardContent>
     </Card>
   );
@@ -371,6 +395,21 @@ export function CreateMarketScreen() {
     quoteVerification.status === "valid" ? quoteVerification.token.symbol : (selectedQuote?.symbol ?? "Quote");
   const quoteIconUrl =
     quoteVerification.status === "valid" ? tokenIconUrl(quoteVerification.token) : selectedQuote?.iconUrl;
+  const existingMarket = inspectedPair?.existingPoolId ? inspectedPair : null;
+  const setupError =
+    formError ??
+    creator.transaction.error?.message ??
+    (existingMarket ? (
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <span>{`${existingMarket.base.symbol}/${existingMarket.quote.symbol} already has a market.`}</span>
+        <Link
+          className="shrink-0 border-b-2 border-current pb-0.5 font-medium text-foreground hover:text-foreground/80"
+          href={`/${chainId}/markets/${existingMarket.existingPoolId}/trade`}
+        >
+          Go to market
+        </Link>
+      </div>
+    ) : null);
 
   useEffect(() => {
     if (!pairVerified) {
@@ -446,6 +485,7 @@ export function CreateMarketScreen() {
                   value: baseAddress,
                   verification: baseVerification,
                 }}
+                error={setupError}
                 quoteIconUrl={quoteIconUrl}
                 quoteSymbol={quoteSymbol}
                 tokenPriceRange={tokenPriceRange}
@@ -453,7 +493,13 @@ export function CreateMarketScreen() {
                 action={
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={<Button className="h-11 w-full rounded-full" disabled={inspecting || !pair} size="lg" />}
+                      render={
+                        <Button
+                          className="h-11 w-full rounded-full"
+                          disabled={inspecting || !pair || Boolean(pair.existingPoolId)}
+                          size="lg"
+                        />
+                      }
                     >
                       {inspecting ? (
                         <LoaderCircle
@@ -465,7 +511,7 @@ export function CreateMarketScreen() {
                       {inspecting ? "Checking pair…" : "Continue"}
                     </AlertDialogTrigger>
 
-                    {pair ? (
+                    {pair && !pair.existingPoolId ? (
                       <AlertDialogContent className="gap-5">
                         <AlertDialogTitle className="sr-only">Confirm market</AlertDialogTitle>
 
@@ -561,16 +607,6 @@ export function CreateMarketScreen() {
               />
             </aside>
           </div>
-
-          {formError || creator.transaction.error ? (
-            <div
-              aria-live="polite"
-              className="m-4 rounded-xl bg-destructive/10 px-4 py-3 text-xs text-destructive"
-              role="alert"
-            >
-              {formError ?? creator.transaction.error?.message}
-            </div>
-          ) : null}
         </div>
       </main>
     </div>

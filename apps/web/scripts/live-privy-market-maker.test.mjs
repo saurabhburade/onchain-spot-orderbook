@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   computeQuotePlan,
+  decodeTradeExecutions,
   planRoundWalletRoles,
   randomOrderQuantity,
   requiredWalletBalances,
@@ -10,6 +11,37 @@ import {
   selectTakerWallet,
   withThrottledReads,
 } from "./live-privy-market-maker.mjs";
+
+test("decodes an executed market fill from a sponsored batch receipt", () => {
+  const trades = decodeTradeExecutions(
+    {
+      logs: [
+        {
+          address: "0x3d4e75ba9f53908345ce12951ee697b17a455e30",
+          topics: [
+            "0x905b132bf4071004d0ff2e27598215eae4c5308a1553a3896ae2c25c05800a3f",
+            "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
+            "0x0000000000000000000000000000000000000000000000000000000000008981",
+            "0x000000000000000000000000000000000000000000000000000000000000893e",
+          ],
+          data:
+            "0x000000000000000000000000ef271f6433e05757a94e28873911af92f0d0b9f3" +
+            "000000000000000000000000a3bcafb554fe87109b92b3655c7cf36ba5c46af3" +
+            "0000000000000000000000000000000000000000000000000df27a2cdf448000" +
+            "00000000000000000000000000000000000000000000000000000000000f4240" +
+            "00000000000000000000000000000000000000000000000000000000000f55c8",
+        },
+      ],
+    },
+    "0x3d4E75bA9f53908345ce12951EE697B17a455E30",
+    "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
+  );
+
+  assert.equal(trades.length, 1);
+  assert.equal(trades[0].price, 1_005_000_000_000_000_000n);
+  assert.equal(trades[0].quantity, 1_000_000n);
+  assert.equal(trades[0].quoteQuantity, 1_005_000n);
+});
 
 test("builds a deduplicated Monad RPC failover list", () => {
   assert.deepEqual(resolveRpcUrls(undefined, "https://primary.example"), [
@@ -35,8 +67,8 @@ test("selects exactly one configured wallet for taker trades", () => {
   assert.throws(() => selectTakerWallet(wallets, 6), /MM_TAKER_WALLET/);
 });
 
-test("plans four maker requotes and one market trade in the same round", () => {
-  assert.deepEqual(planRoundWalletRoles(5, 1, 1, 5), ["maker", "maker", "maker", "maker", "taker"]);
+test("plans five maker requotes with one batched market trade in the same round", () => {
+  assert.deepEqual(planRoundWalletRoles(5, 1, 1, 5), ["maker", "maker", "maker", "maker", "maker+taker"]);
   assert.deepEqual(planRoundWalletRoles(5, 2, 0, 5), ["maker", "maker", "maker", "maker", "maker"]);
 });
 

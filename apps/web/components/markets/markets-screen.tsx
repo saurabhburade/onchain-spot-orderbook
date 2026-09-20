@@ -2,11 +2,13 @@
 
 import { ArrowRight, Boxes, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useClobChain } from "@/lib/clob";
+import type { MarketListing } from "@/lib/clob/types";
 import { useRpcFirstMarkets } from "@/lib/indexer";
 
 import { MarketPairIcon } from "./market-pair-icon";
@@ -40,11 +42,26 @@ function MarketSkeleton() {
   );
 }
 
-export function MarketsScreen() {
+export function MarketsScreen({
+  indexedMarkets,
+  indexerError,
+}: {
+  indexedMarkets: MarketListing[];
+  indexerError: string | null;
+}) {
   const { chainId } = useClobChain();
-  const markets = useRpcFirstMarkets();
+  const router = useRouter();
+  const [indexerRefreshing, startIndexerTransition] = useTransition();
+  const refreshIndexer = useCallback(() => {
+    startIndexerTransition(() => router.refresh());
+  }, [router]);
+  const markets = useRpcFirstMarkets(indexedMarkets, indexerError, refreshIndexer, indexerRefreshing);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  useEffect(() => {
+    const interval = window.setInterval(refreshIndexer, 15_000);
+    return () => window.clearInterval(interval);
+  }, [refreshIndexer]);
   const visibleMarkets = useMemo(() => {
     const search = query.trim().toLowerCase();
     return markets.data.filter((market) => {
@@ -84,14 +101,14 @@ export function MarketsScreen() {
             <Button
               aria-label="Refresh markets"
               className="rounded-full"
-              disabled={markets.loading}
+              disabled={markets.loading || indexerRefreshing}
               onClick={() => void markets.refetch()}
               size="icon"
               variant="outline"
             >
               <RefreshCw
                 aria-hidden="true"
-                className={markets.loading ? "animate-spin motion-reduce:animate-none" : ""}
+                className={markets.loading || indexerRefreshing ? "animate-spin motion-reduce:animate-none" : ""}
                 strokeWidth={1.5}
               />
             </Button>

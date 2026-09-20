@@ -12,7 +12,7 @@
     "stress:privy": "node --env-file-if-exists=.env.local scripts/privy-paymaster-stress.mjs",
     "maker:live": "node --env-file-if-exists=.env.local scripts/live-privy-market-maker.mjs",
     "seed:market": "node --env-file-if-exists=.env.local scripts/seed-demo-market.mjs",
-    "test": "node --test lib/clob/*.test.ts lib/indexer/*.test.ts components/markets/*.test.ts components/trading/*.test.ts scripts/*.test.mjs"
+    "test": "node --test lib/clob/*.test.ts lib/forms/*.test.ts lib/indexer/*.test.ts components/markets/*.test.ts components/trading/*.test.ts scripts/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,3 +1,5 @@
+import "server-only";
+
 type GraphqlError = {
   message?: string;
 };

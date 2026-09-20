@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu } from "@base-ui/react/menu";
-import { useSendTransaction } from "@privy-io/react-auth";
+import { useAuthorizationSignature, usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -11,14 +11,17 @@ import {
   LoaderCircle,
   LogOut,
   Network,
+  Wallet,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type Address, encodeFunctionData, formatUnits, getAddress, isAddress, parseUnits } from "viem";
+import { type Address, encodeFunctionData, formatUnits, getAddress, type Hash, isAddress, parseUnits } from "viem";
 
 import { usePrivyConfigured } from "@/components/providers";
 import { type FundingAction, FundingDialog, type WalletAsset } from "@/components/trading/funding-dialog";
 import { Button } from "@/components/ui/button";
-import { erc20Abi, useClobChain, useClobWallet } from "@/lib/clob";
+import { erc20Abi, MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@/lib/clob";
+import { notifyBalanceRefresh, subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
+import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -38,28 +41,42 @@ const assetIconUrls: Readonly<Record<string, string>> = {
   USDC: "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/monad/assets/0x754704Bc059F8C67012fEd69BC8A327a5aafb603/logo.png",
   USDT: "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
 };
+const walletMenuPopupClassName =
+  "w-64 origin-(--transform-origin) transform-gpu rounded-xl border border-border bg-popover p-1.5 text-popover-foreground outline-none transition-[transform,translate,scale,opacity,filter,border-radius] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity,filter] data-ending-style:translate-y-[-2px] data-ending-style:scale-x-96 data-ending-style:scale-y-96 data-ending-style:rounded-2xl data-ending-style:opacity-0 data-ending-style:blur-[1px] data-ending-style:ease-[cubic-bezier(0.4,0,0.2,1)] data-starting-style:translate-y-[-8px] data-starting-style:scale-x-75 data-starting-style:scale-y-75 data-starting-style:rounded-[2rem] data-starting-style:opacity-0 data-starting-style:blur-[3px] motion-reduce:transition-none motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:scale-x-100 motion-reduce:data-ending-style:scale-y-100 motion-reduce:data-ending-style:blur-none motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:scale-x-100 motion-reduce:data-starting-style:scale-y-100 motion-reduce:data-starting-style:blur-none";
+const walletMenuItemClassName =
+  "flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted";
 
 function ConnectedWalletButton() {
   const { config, publicClient } = useClobChain();
   const {
     connect,
     connected,
+    connectedEoaAddress,
+    connectedEoaWallet,
     connectionError,
     connecting,
     disconnect,
+    disconnectEoa,
+    isConnectedEoaCorrectChain,
     isCorrectChain,
     ready,
+    switchConnectedEoaToClobChain,
     switchToClobChain,
     tradingAddress,
     wallet,
+    walletId,
   } = useClobWallet();
+  const { getAccessToken } = usePrivy();
   const { sendTransaction } = useSendTransaction();
-  const [copied, setCopied] = useState(false);
+  const { generateAuthorizationSignature } = useAuthorizationSignature();
+  const [copiedEoa, setCopiedEoa] = useState(false);
+  const [copiedPrivy, setCopiedPrivy] = useState(false);
   const [fundingAction, setFundingAction] = useState<FundingAction | null>(null);
   const [importedAssetsByChain, setImportedAssetsByChain] = useState<Record<number, AssetMetadata[]>>({});
   const [assetBalances, setAssetBalances] = useState<Record<string, bigint | null>>({});
   const [selectedAssetKeys, setSelectedAssetKeys] = useState<Record<number, string>>({});
   const address = tradingAddress;
+  const eoaAddress = connectedEoaAddress;
   const importedAssets = importedAssetsByChain[config.chain.id] ?? emptyAssetMetadata;
   const selectedAssetKey = selectedAssetKeys[config.chain.id] ?? "native";
   const assetMetadata = useMemo<AssetMetadata[]>(() => {
@@ -124,39 +141,9 @@ function ConnectedWalletButton() {
   }, [assetMetadata, publicClient, wallet]);
 
   useEffect(() => {
-    let active = true;
-    if (!wallet || !isAddress(wallet.address)) {
-      setAssetBalances({});
-      return;
-    }
-    const walletAddress = wallet.address as Address;
-    void Promise.all(
-      assetMetadata.map(async (asset) => {
-        try {
-          const balance = asset.address
-            ? await publicClient.readContract({
-                address: asset.address,
-                abi: erc20Abi,
-                functionName: "balanceOf",
-                args: [walletAddress],
-              })
-            : await publicClient.getBalance({ address: walletAddress });
-          return [asset.key, balance] as const;
-        } catch {
-          return [asset.key, null] as const;
-        }
-      }),
-    )
-      .then((nextBalances) => {
-        if (active) setAssetBalances(Object.fromEntries(nextBalances));
-      })
-      .catch(() => {
-        if (active) setAssetBalances({});
-      });
-    return () => {
-      active = false;
-    };
-  }, [assetMetadata, publicClient, wallet]);
+    void refreshBalances();
+    return subscribeToBalanceRefresh(() => void refreshBalances());
+  }, [refreshBalances]);
 
   async function importAsset(tokenAddress: Address): Promise<WalletAsset> {
     if (!wallet || !isAddress(wallet.address)) throw new Error("Connect your wallet first.");
@@ -208,14 +195,17 @@ function ConnectedWalletButton() {
       throw new Error(`Insufficient ${asset.symbol} balance.`);
     }
 
+    const transferData = asset.address
+      ? encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [getAddress(recipient), value],
+        })
+      : undefined;
     const transaction = asset.address
       ? {
           chainId: config.chain.id,
-          data: encodeFunctionData({
-            abi: erc20Abi,
-            functionName: "transfer",
-            args: [getAddress(recipient), value],
-          }),
+          data: transferData,
           to: asset.address,
         }
       : {
@@ -224,22 +214,41 @@ function ConnectedWalletButton() {
           value,
         };
 
-    const { hash } = await sendTransaction(transaction, {
-      address: wallet.address,
-      uiOptions: {
-        buttonText: "Confirm withdrawal",
-        description: `Withdraw ${amount} ${asset.symbol} to ${recipient}`,
-        showWalletUIs: true,
-      },
-    });
+    const canSponsor =
+      config.chain.id === MONAD_TESTNET_CHAIN_ID &&
+      asset.address &&
+      config.faucetTokens.some((token) => token.address.toLowerCase() === asset.address?.toLowerCase());
+    let hash: Hash;
+    if (canSponsor && asset.address) {
+      if (!walletId) throw new Error("The Privy embedded wallet is not ready.");
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error("Your Privy session expired before the withdrawal could be submitted.");
+      const transactionId = await sendPrivySponsoredCalls({
+        accessToken,
+        calls: [{ to: asset.address, data: transferData }],
+        chainId: config.chain.id,
+        generateAuthorizationSignature,
+        walletId,
+      });
+      hash = await waitForPrivyTransaction({ walletId, transactionId, getAccessToken });
+    } else {
+      ({ hash } = await sendTransaction(transaction, {
+        address: wallet.address,
+        uiOptions: {
+          buttonText: "Confirm withdrawal",
+          description: `Withdraw ${amount} ${asset.symbol} to ${recipient}`,
+          showWalletUIs: true,
+        },
+      }));
+    }
     await publicClient.waitForTransactionReceipt({ hash });
-    await refreshBalances();
+    notifyBalanceRefresh();
   }
 
   if (connected && !address) {
     return (
       <Button
-        className="h-8 rounded-full px-4 text-xs disabled:opacity-70"
+        className="order-last h-8 rounded-full px-4 text-xs disabled:opacity-70"
         disabled
         title={connectionError ?? "Resolving wallet address"}
       >
@@ -258,81 +267,199 @@ function ConnectedWalletButton() {
   if (connected && address) {
     return (
       <>
-        <Menu.Root>
-          <Menu.Trigger
-            aria-label={`Wallet ${shortenAddress(address)} on ${config.chain.name}`}
-            className="group inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-transparent bg-secondary px-4 text-xs font-medium text-secondary-foreground outline-none transition-[background-color,border-color,box-shadow] hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-popup-open:bg-muted"
-            disabled={!ready}
-          >
-            <span
-              aria-hidden="true"
-              className={`size-1.5 rounded-full ${isCorrectChain ? "bg-chart-3" : "bg-amber-500"}`}
-            />
-            <span className="font-mono tabular-nums">{shortenAddress(address)}</span>
-            <ChevronDown
-              aria-hidden="true"
-              className="size-3.5 text-secondary-foreground/70 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-popup-open:rotate-180 motion-reduce:transition-none"
-              strokeWidth={1.5}
-            />
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Positioner align="end" className="z-50 outline-none" sideOffset={8}>
-              <Menu.Popup className="w-64 origin-(--transform-origin) transform-gpu rounded-xl border border-border bg-popover p-1.5 text-popover-foreground outline-none transition-[transform,translate,scale,opacity,filter,border-radius] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity,filter] data-ending-style:translate-y-[-2px] data-ending-style:scale-x-96 data-ending-style:scale-y-96 data-ending-style:rounded-2xl data-ending-style:opacity-0 data-ending-style:blur-[1px] data-ending-style:ease-[cubic-bezier(0.4,0,0.2,1)] data-starting-style:translate-y-[-8px] data-starting-style:scale-x-75 data-starting-style:scale-y-75 data-starting-style:rounded-[2rem] data-starting-style:opacity-0 data-starting-style:blur-[3px] motion-reduce:transition-none motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:scale-x-100 motion-reduce:data-ending-style:scale-y-100 motion-reduce:data-ending-style:blur-none motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:scale-x-100 motion-reduce:data-starting-style:scale-y-100 motion-reduce:data-starting-style:blur-none">
-                <p className="truncate px-2.5 py-2 font-mono text-xs tabular-nums">{address}</p>
-                <div className="my-1 h-px bg-border" />
-                <Menu.Item
-                  className="flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted"
-                  onClick={() => setFundingAction("deposit")}
-                >
-                  <ArrowDownToLine aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                  Deposit assets
-                </Menu.Item>
-                <Menu.Item
-                  className="flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted"
-                  onClick={() => setFundingAction("withdraw")}
-                >
-                  <ArrowUpFromLine aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                  Withdraw assets
-                </Menu.Item>
-                <div className="my-1 h-px bg-border" />
-                {!isCorrectChain ? (
-                  <Menu.Item
-                    aria-label={`Switch wallet to ${config.chain.name}`}
-                    className="flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted"
-                    onClick={() => void switchToClobChain()}
-                  >
-                    <Network aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                    Switch network
+        <div className="contents">
+          {eoaAddress && connectedEoaWallet ? (
+            <Menu.Root>
+              <Menu.Trigger
+                aria-label={`Open wallet details for ${shortenAddress(eoaAddress)}`}
+                className="order-last inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent bg-secondary text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow,transform] hover:bg-secondary/70 hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96] data-popup-open:bg-muted data-popup-open:text-foreground motion-reduce:transition-none"
+                disabled={!ready}
+                title="Wallet details"
+              >
+                <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Positioner align="end" className="z-50 outline-none" sideOffset={8}>
+                  <Menu.Popup className={walletMenuPopupClassName}>
+                    <div className="px-2.5 py-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                          <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-semibold">Connected wallet</span>
+                          {!isConnectedEoaCorrectChain ? (
+                            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" />
+                              Wallet on wrong network
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+                        <dt className="text-muted-foreground">Account type</dt>
+                        <dd className="text-right font-medium">EOA</dd>
+                      </dl>
+                      <div className="mt-2.5 rounded-lg bg-muted/70 px-2.5 py-2">
+                        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                          EOA address
+                        </p>
+                        <p className="mt-1 break-all font-mono text-[11px] leading-4 tabular-nums">{eoaAddress}</p>
+                      </div>
+                    </div>
+                    <div className="my-1 h-px bg-border" />
+                    {!isConnectedEoaCorrectChain ? (
+                      <Menu.Item
+                        aria-label={`Switch connected EOA to ${config.chain.name}`}
+                        className={walletMenuItemClassName}
+                        onClick={() => void switchConnectedEoaToClobChain()}
+                      >
+                        <Network aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                        Switch EOA network
+                      </Menu.Item>
+                    ) : null}
+                    <Menu.Item
+                      className={walletMenuItemClassName}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(eoaAddress).then(() => {
+                          setCopiedEoa(true);
+                          window.setTimeout(() => setCopiedEoa(false), 1500);
+                        });
+                      }}
+                    >
+                      {copiedEoa ? (
+                        <Check aria-hidden="true" className="size-4 text-chart-3" strokeWidth={1.5} />
+                      ) : (
+                        <Copy aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                      )}
+                      {copiedEoa ? "Copied EOA" : "Copy EOA address"}
+                    </Menu.Item>
+                    <Menu.Item
+                      className={`${walletMenuItemClassName} text-destructive data-highlighted:bg-destructive/10`}
+                      onClick={disconnectEoa}
+                    >
+                      <LogOut aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                      Disconnect EOA
+                    </Menu.Item>
+                  </Menu.Popup>
+                </Menu.Positioner>
+              </Menu.Portal>
+            </Menu.Root>
+          ) : (
+            <Button
+              aria-label="Connect an external EOA wallet"
+              className="order-last size-8 rounded-full border-border bg-secondary text-muted-foreground active:scale-[0.96]"
+              disabled={!ready || connecting}
+              onClick={connect}
+              size="icon"
+              title="Connect EOA wallet"
+              type="button"
+              variant="outline"
+            >
+              {connecting ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+              )}
+            </Button>
+          )}
+          <Menu.Root>
+            <Menu.Trigger
+              aria-label={`Open trading wallet ${shortenAddress(address)}`}
+              className="group inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-transparent bg-secondary px-4 text-xs font-medium text-secondary-foreground outline-none transition-[background-color,border-color,box-shadow] hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-popup-open:bg-muted"
+              disabled={!ready}
+            >
+              <span
+                aria-hidden="true"
+                className={`size-1.5 rounded-full ${isCorrectChain ? "bg-chart-3" : "bg-amber-500"}`}
+              />
+              <span className="font-mono tabular-nums">{shortenAddress(address)}</span>
+              <ChevronDown
+                aria-hidden="true"
+                className="size-3.5 text-secondary-foreground/70 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-popup-open:rotate-180 motion-reduce:transition-none"
+                strokeWidth={1.5}
+              />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Positioner align="end" className="z-50 outline-none" sideOffset={8}>
+                <Menu.Popup className={walletMenuPopupClassName}>
+                  <div className="px-2.5 py-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                        <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold">Trading wallet</span>
+                        {!isCorrectChain ? (
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" />
+                            Trading wallet on wrong network
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
+                      <dt className="text-muted-foreground">Account type</dt>
+                      <dd className="text-right font-medium">Embedded</dd>
+                    </dl>
+                    <div className="mt-2.5 rounded-lg bg-muted/70 px-2.5 py-2">
+                      <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                        Trading address
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[11px] leading-4 tabular-nums">{address}</p>
+                    </div>
+                  </div>
+                  <div className="my-1 h-px bg-border" />
+                  <Menu.Item className={walletMenuItemClassName} onClick={() => setFundingAction("deposit")}>
+                    <ArrowDownToLine aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                    Deposit assets
                   </Menu.Item>
-                ) : null}
-                <Menu.Item
-                  className="flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(address).then(() => {
-                      setCopied(true);
-                      window.setTimeout(() => setCopied(false), 1500);
-                    });
-                  }}
-                >
-                  {copied ? (
-                    <Check aria-hidden="true" className="size-4 text-chart-3" strokeWidth={1.5} />
-                  ) : (
-                    <Copy aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                  )}
-                  {copied ? "Copied" : "Copy address"}
-                </Menu.Item>
-                <Menu.Item
-                  className="flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs text-destructive outline-none select-none data-highlighted:bg-destructive/10"
-                  onClick={() => void disconnect()}
-                >
-                  <LogOut aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                  Disconnect
-                </Menu.Item>
-                {connectionError ? <p className="px-2.5 py-2 text-[11px] text-destructive">{connectionError}</p> : null}
-              </Menu.Popup>
-            </Menu.Positioner>
-          </Menu.Portal>
-        </Menu.Root>
+                  <Menu.Item className={walletMenuItemClassName} onClick={() => setFundingAction("withdraw")}>
+                    <ArrowUpFromLine aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                    Withdraw assets
+                  </Menu.Item>
+                  <div className="my-1 h-px bg-border" />
+                  {!isCorrectChain ? (
+                    <Menu.Item
+                      aria-label={`Switch trading wallet to ${config.chain.name}`}
+                      className={walletMenuItemClassName}
+                      onClick={() => void switchToClobChain()}
+                    >
+                      <Network aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                      Switch trading network
+                    </Menu.Item>
+                  ) : null}
+                  <Menu.Item
+                    className={walletMenuItemClassName}
+                    onClick={() => {
+                      void navigator.clipboard.writeText(address).then(() => {
+                        setCopiedPrivy(true);
+                        window.setTimeout(() => setCopiedPrivy(false), 1500);
+                      });
+                    }}
+                  >
+                    {copiedPrivy ? (
+                      <Check aria-hidden="true" className="size-4 text-chart-3" strokeWidth={1.5} />
+                    ) : (
+                      <Copy aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                    )}
+                    {copiedPrivy ? "Copied address" : "Copy trading address"}
+                  </Menu.Item>
+                  <Menu.Item
+                    className={`${walletMenuItemClassName} text-destructive data-highlighted:bg-destructive/10`}
+                    onClick={() => void disconnect()}
+                  >
+                    <LogOut aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                    Log out
+                  </Menu.Item>
+                  {connectionError ? (
+                    <p className="px-2.5 py-2 text-[11px] text-destructive">{connectionError}</p>
+                  ) : null}
+                </Menu.Popup>
+              </Menu.Positioner>
+            </Menu.Portal>
+          </Menu.Root>
+        </div>
         <FundingDialog
           action={fundingAction}
           address={address}
@@ -349,7 +476,7 @@ function ConnectedWalletButton() {
   }
 
   return (
-    <Button className="h-8 rounded-full px-4 text-xs" disabled={!ready || connecting} onClick={connect}>
+    <Button className="order-last h-8 rounded-full px-4 text-xs" disabled={!ready || connecting} onClick={connect}>
       {connecting ? (
         <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" data-icon="inline-start" />
       ) : null}
@@ -364,7 +491,7 @@ export function WalletButton() {
   if (!configured) {
     return (
       <Button
-        className="h-8 rounded-full px-4 text-xs disabled:opacity-100"
+        className="order-last h-8 rounded-full px-4 text-xs disabled:opacity-100"
         disabled
         title="Set NEXT_PUBLIC_PRIVY_APP_ID to enable wallet connection"
       >

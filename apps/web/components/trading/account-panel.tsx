@@ -25,9 +25,29 @@ import { formatCurrencyAmount } from "./market-details-formatting";
 
 const accountTabs = ["Open Orders", "Assets", "Order History", "Recent Trades", "Market Details"] as const;
 type AccountTab = (typeof accountTabs)[number];
-const recentTradesPageSize = 10;
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
+const recentTradeSkeletonRows = [
+  "trade-skeleton-1",
+  "trade-skeleton-2",
+  "trade-skeleton-3",
+  "trade-skeleton-4",
+  "trade-skeleton-5",
+  "trade-skeleton-6",
+  "trade-skeleton-7",
+  "trade-skeleton-8",
+  "trade-skeleton-9",
+  "trade-skeleton-10",
+];
+const recentTradeSkeletonColumns = [
+  { id: "time", width: "w-16" },
+  { id: "market", width: "w-20" },
+  { id: "type", width: "w-12" },
+  { id: "price", width: "w-14" },
+  { id: "size", width: "w-16" },
+  { id: "account", width: "w-24" },
+  { id: "transaction", width: "w-28" },
+];
 
 function formatTimeAgo(timestampMs: number, nowMs: number) {
   const seconds = Math.round((timestampMs - nowMs) / 1_000);
@@ -55,10 +75,14 @@ type AccountPanelProps = {
   recentTrades: RecentTrade[];
   recentTradesLoading?: boolean;
   recentTradesError?: string | null;
+  recentTradesPage: number;
+  recentTradesPageSize: number;
+  recentTradesTotal: number;
   market: MarketSummary;
   marketLoading?: boolean;
   pool: PoolMetadata | null;
   onCancel?: (orderId: `0x${string}`) => Promise<void>;
+  onRecentTradesPageChange: (page: number) => void;
 };
 
 function EmptyState({ title, description }: { title: string; description: string }) {
@@ -96,17 +120,20 @@ export function AccountPanel({
   recentTrades,
   recentTradesLoading,
   recentTradesError,
+  recentTradesPage,
+  recentTradesPageSize,
+  recentTradesTotal,
   market,
   marketLoading,
   pool,
   onCancel,
+  onRecentTradesPageChange,
 }: AccountPanelProps) {
   const { config } = useClobChain();
   const [activeTab, setActiveTab] = useState<AccountTab>("Open Orders");
   const [cancellingId, setCancellingId] = useState<`0x${string}` | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OpenOrder | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [recentTradesPage, setRecentTradesPage] = useState(0);
   const [relativeTimeNow, setRelativeTimeNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -372,15 +399,51 @@ export function AccountPanel({
     }
     if (activeTab === "Recent Trades") {
       if (recentTradesError) return <EmptyState title="Recent trades unavailable" description={recentTradesError} />;
-      if (recentTradesLoading)
-        return <EmptyState title="Loading recent trades" description="Reading the latest fills from the indexer." />;
+      if (recentTradesLoading) {
+        return (
+          <div aria-busy="true" role="status">
+            <span className="sr-only">Loading recent trades</span>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Time</TableHead>
+                  <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Market</TableHead>
+                  <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Trade type</TableHead>
+                  <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Price</TableHead>
+                  <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Size</TableHead>
+                  <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Account</TableHead>
+                  <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">
+                    Transaction hash
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="animate-pulse motion-reduce:animate-none">
+                {recentTradeSkeletonRows.slice(0, recentTradesPageSize).map((rowId) => (
+                  <TableRow className="hover:bg-transparent" key={rowId}>
+                    {recentTradeSkeletonColumns.map(({ id, width }, columnIndex) => (
+                      <TableCell className="h-[37px] px-4 py-2.5" key={`${rowId}-${id}`}>
+                        <span className={cn("block h-3 rounded-full bg-muted", width, columnIndex >= 3 && "ml-auto")} />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex min-h-14 items-center justify-end gap-3 border-t border-border px-4">
+              <span className="h-3 w-28 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+              <span className="size-8 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+              <span className="h-3 w-20 animate-pulse rounded-full bg-muted motion-reduce:animate-none" />
+              <span className="size-8 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />
+            </div>
+          </div>
+        );
+      }
       if (!recentTrades.length)
         return <EmptyState title="No recent trades" description="Completed trades for this market will appear here." />;
       const explorerUrl = config.chain.blockExplorers?.default.url;
-      const totalPages = Math.ceil(recentTrades.length / recentTradesPageSize);
-      const currentPage = Math.min(recentTradesPage, totalPages - 1);
+      const totalPages = Math.ceil(recentTradesTotal / recentTradesPageSize);
+      const currentPage = Math.max(0, Math.min(recentTradesPage, totalPages - 1));
       const firstTradeIndex = currentPage * recentTradesPageSize;
-      const visibleTrades = recentTrades.slice(firstTradeIndex, firstTradeIndex + recentTradesPageSize);
       return (
         <>
           <Table>
@@ -398,7 +461,7 @@ export function AccountPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleTrades.map((trade) => (
+              {recentTrades.map((trade) => (
                 <TableRow key={trade.id}>
                   <TableCell className="px-4 py-2.5 font-mono text-xs tabular-nums text-muted-foreground">
                     <time dateTime={new Date(trade.timestampMs).toISOString()} title={trade.time}>
@@ -456,21 +519,20 @@ export function AccountPanel({
               ))}
             </TableBody>
           </Table>
-          <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-t border-border py-2 pr-16 pl-4">
+          <div className="flex min-h-14 flex-wrap items-center justify-end gap-3 border-t border-border px-4 py-2">
             <p className="font-mono text-xs tabular-nums text-muted-foreground">
-              {firstTradeIndex + 1}–{Math.min(firstTradeIndex + recentTradesPageSize, recentTrades.length)} of{" "}
-              {recentTrades.length} trades
+              {firstTradeIndex + 1}–{firstTradeIndex + recentTrades.length} of {recentTradesTotal} trades
             </p>
-            <nav aria-label="Recent trades pagination" className="flex items-center gap-1">
+            <nav aria-label="Recent trades pagination" className="flex items-center gap-2">
               <Button
                 aria-label="Go to previous page"
-                className="size-10 rounded-xl"
+                className="size-8 rounded-xl"
                 disabled={currentPage === 0}
-                onClick={() => setRecentTradesPage(currentPage - 1)}
+                onClick={() => onRecentTradesPageChange(currentPage - 1)}
                 size="icon"
-                variant="ghost"
+                variant="secondary"
               >
-                <ChevronLeft aria-hidden="true" />
+                <ChevronLeft aria-hidden="true" strokeWidth={1.5} />
               </Button>
               <span
                 aria-live="polite"
@@ -480,13 +542,13 @@ export function AccountPanel({
               </span>
               <Button
                 aria-label="Go to next page"
-                className="size-10 rounded-xl"
+                className="size-8 rounded-xl"
                 disabled={currentPage === totalPages - 1}
-                onClick={() => setRecentTradesPage(currentPage + 1)}
+                onClick={() => onRecentTradesPageChange(currentPage + 1)}
                 size="icon"
-                variant="ghost"
+                variant="secondary"
               >
-                <ChevronRight aria-hidden="true" />
+                <ChevronRight aria-hidden="true" strokeWidth={1.5} />
               </Button>
             </nav>
           </div>

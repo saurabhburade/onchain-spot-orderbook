@@ -118,6 +118,21 @@ test("allows only an allowlisted faucet claim in the sponsored proxy", () => {
   );
 });
 
+test("allows withdrawals only for configured ERC-20 assets", () => {
+  const transferData = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "transfer",
+    args: [trader, 1_000_000n],
+  });
+  const body = buildPrivySendCallsBody(10143, [{ to: token, data: transferData }]);
+
+  assert.deepEqual(validatePrivySponsoredBatch(body, 10143, undefined, [token]), body);
+  assert.throws(
+    () => validatePrivySponsoredBatch(body, 10143, undefined, [book]),
+    /only ERC-20 approvals and one order-book call/i,
+  );
+});
+
 test("binds the user authorization signature to the exact sponsored request", async () => {
   const previousAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
   const previousFetch = globalThis.fetch;

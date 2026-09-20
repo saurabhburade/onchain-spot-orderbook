@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { generateP256KeyPair, PrivyClient } from "@privy-io/node";
 import {
   createPublicClient,
+  decodeEventLog,
   decodeFunctionResult,
   encodeFunctionData,
   fallback,
@@ -69,6 +70,7 @@ const currentFactoryAbi = parseAbi([
 ]);
 
 const clobAbi = parseAbi([
+  "event TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)",
   "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 expiry,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
   "function executeMarketOrder((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 quantity,uint128 priceLimit,uint128 minFillQuantity,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId,uint128 filledQuantity,uint256 quoteQuantity)",
   "function cancelOrder(bytes32 orderId)",
@@ -76,6 +78,24 @@ const clobAbi = parseAbi([
   "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint128 bidQuantity,bool askExists,uint128 askPrice,uint128 askQuantity)",
   "function getOrderBook(bytes32 poolId,uint16 depth) view returns ((uint128 price,uint128 quantity)[] bids,(uint128 price,uint128 quantity)[] asks)",
 ]);
+
+export function decodeTradeExecutions(receipt, book, poolId) {
+  const normalizedBook = getAddress(book).toLowerCase();
+  const normalizedPoolId = poolId.toLowerCase();
+  const trades = [];
+  for (const log of receipt.logs ?? []) {
+    if (log.address.toLowerCase() !== normalizedBook) continue;
+    try {
+      const decoded = decodeEventLog({ abi: clobAbi, data: log.data, topics: log.topics, strict: true });
+      if (decoded.eventName === "TradeExecuted" && decoded.args.poolId.toLowerCase() === normalizedPoolId) {
+        trades.push(decoded.args);
+      }
+    } catch {
+      // Other order-book events share the same emitting contract.
+    }
+  }
+  return trades;
+}
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -110,7 +130,7 @@ export function planRoundWalletRoles(walletCount, round, takerEvery, takerWallet
   if (!Number.isInteger(takerWallet) || takerIndex < 0 || takerIndex >= walletCount) {
     throw new Error(`MM_TAKER_WALLET must select one of the ${walletCount} maker wallets`);
   }
-  roles[takerIndex] = "taker";
+  roles[takerIndex] = "maker+taker";
   return roles;
 }
 
@@ -606,6 +626,22 @@ async function ensureApprovals({ publicClient, sendSponsored, wallets, market, r
   );
 }
 
+function printExecutedTrades(receipt, market, side, round, index) {
+  const trades = decodeTradeExecutions(receipt, market.book, market.poolId);
+  if (trades.length === 0) {
+    throw new Error(`round ${round} ${walletLabel(index)} market transaction emitted no TradeExecuted event`);
+  }
+  const sideLabel = side === 0 ? "buy" : "sell";
+  for (const trade of trades) {
+    console.log(
+      `round ${round} ${walletLabel(index)} TradeExecuted · ${sideLabel} ` +
+        `${formatUnits(baseQuantityAtoms(trade.quantity, market), market.baseDecimals)} ${market.baseSymbol} ` +
+        `@ ${humanPrice(trade.price, market)} ${market.quoteSymbol} · ` +
+        `${formatUnits(trade.quoteQuantity, market.quoteDecimals)} ${market.quoteSymbol}`,
+    );
+  }
+}
+
 async function makerRequote({
   publicClient,
   sendSponsored,
@@ -616,8 +652,10 @@ async function makerRequote({
   runtime,
   nextClientOrderId,
   round,
+  includeMarketTrade = false,
 }) {
-  return withRetries(
+  const marketSide = round % 2 === 1 ? 0 : 1;
+  const receipt = await withRetries(
     async () => {
       const openOrderIds = await getOpenOrderIds(publicClient, market, wallet);
       const calls = openOrderIds.map((orderId) => cancelOrderCall(market.book, orderId));
@@ -648,16 +686,26 @@ async function makerRequote({
           ),
         );
       }
-      return sendSponsored(wallet, calls, `round ${round} ${walletLabel(index)} cancel/requote`);
+      let action = "cancel/requote";
+      if (includeMarketTrade) {
+        const sideLabel = marketSide === 0 ? "buy" : "sell";
+        calls.push(
+          marketOrderCall(wallet, market, marketSide, runtime.takerQuantity, runtime.maxBookSteps, nextClientOrderId()),
+        );
+        action += ` + market ${sideLabel}`;
+      }
+      return sendSponsored(wallet, calls, `round ${round} ${walletLabel(index)} ${action}`);
     },
     `round ${round} ${walletLabel(index)}`,
   );
+  if (includeMarketTrade) printExecutedTrades(receipt, market, marketSide, round, index);
+  return receipt;
 }
 
 async function marketTrade({ sendSponsored, wallet, index, market, runtime, nextClientOrderId, round }) {
   const side = round % 2 === 1 ? 0 : 1;
   const sideLabel = side === 0 ? "buy" : "sell";
-  return withRetries(
+  const receipt = await withRetries(
     () =>
       sendSponsored(
         wallet,
@@ -666,6 +714,8 @@ async function marketTrade({ sendSponsored, wallet, index, market, runtime, next
       ),
     `round ${round} ${walletLabel(index)} market ${sideLabel}`,
   );
+  printExecutedTrades(receipt, market, side, round, index);
+  return receipt;
 }
 
 async function takerWave({ sendSponsored, wallets, market, runtime, nextClientOrderId, round }) {
@@ -686,19 +736,18 @@ async function parallelTradingWave({
   await settleParallel(
     `parallel trading wave ${round}`,
     wallets.map((wallet, index) =>
-      roles[index] === "taker"
-        ? marketTrade({ sendSponsored, wallet, index, market, runtime, nextClientOrderId, round })
-        : makerRequote({
-            publicClient,
-            sendSponsored,
-            wallets,
-            wallet,
-            index,
-            market,
-            runtime,
-            nextClientOrderId,
-            round,
-          }),
+      makerRequote({
+        publicClient,
+        sendSponsored,
+        wallets,
+        wallet,
+        index,
+        market,
+        runtime,
+        nextClientOrderId,
+        round,
+        includeMarketTrade: roles[index] === "maker+taker",
+      }),
     ),
   );
 }

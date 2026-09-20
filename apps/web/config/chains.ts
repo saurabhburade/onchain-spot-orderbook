@@ -64,7 +64,6 @@ function optionalBytes32(value: string | undefined): `0x${string}` | undefined {
 
 export type ClobNetworkConfig = {
   chain: Chain;
-  indexerGraphqlUrl: string;
   rpcUrl: string;
   rpcEndpoints: readonly ClobRpcEndpoint[];
   wsRpcUrl?: string;
@@ -81,10 +80,6 @@ export type ClobNetworkConfig = {
 export const clobNetworksByChainId: Readonly<Record<number, ClobNetworkConfig>> = {
   [MONAD_TESTNET_CHAIN_ID]: {
     chain: monadTestnetChain,
-    indexerGraphqlUrl:
-      process.env.NEXT_PUBLIC_MONAD_ENVIO_GRAPHQL_URL ||
-      process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL ||
-      "http://localhost:8080/v1/graphql",
     rpcUrl: monadTestnetRpcUrl,
     rpcEndpoints: monadTestnetRpcEndpoints,
     wsRpcUrl: monadTestnetWsRpcUrl,
@@ -97,10 +92,6 @@ export const clobNetworksByChainId: Readonly<Record<number, ClobNetworkConfig>> 
   },
   [ANVIL_CHAIN_ID]: {
     chain: anvilChain,
-    indexerGraphqlUrl:
-      process.env.NEXT_PUBLIC_ANVIL_ENVIO_GRAPHQL_URL ||
-      process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL ||
-      "http://localhost:8080/v1/graphql",
     rpcUrl: anvilRpcUrl,
     rpcEndpoints: anvilRpcEndpoints,
     ...clobContractsByChainId[ANVIL_CHAIN_ID],

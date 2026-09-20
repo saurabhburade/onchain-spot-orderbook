@@ -53,6 +53,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             tokens: network.faucetTokens.map((token) => token.address),
           }
         : undefined,
+      network.faucetTokens.map((token) => token.address),
     );
     const result = await privy
       .wallets()

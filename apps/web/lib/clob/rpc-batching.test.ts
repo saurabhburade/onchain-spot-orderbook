@@ -10,6 +10,8 @@ const marketsScreenSource = readFileSync(
   new URL("../../components/markets/markets-screen.tsx", import.meta.url),
   "utf8",
 );
+const marketsPageSource = readFileSync(new URL("../../app/[chainId]/markets/page.tsx", import.meta.url), "utf8");
+const indexerServerDataSource = readFileSync(new URL("../indexer/server-data.ts", import.meta.url), "utf8");
 const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
 
 describe("Monad RPC request batching", () => {
@@ -61,18 +63,20 @@ describe("Monad RPC request batching", () => {
     assert.match(hooksSource, /functionName:\s*"allPairsLength"/);
     assert.match(hooksSource, /functionName:\s*"pairAt"/);
     assert.match(indexerHooksSource, /export function useRpcFirstMarkets/);
-    assert.match(indexerHooksSource, /if \(rpc\.data\.length === 0\) return rpc\.error \? indexed\.data : \[\]/);
-    assert.match(marketsScreenSource, /useRpcFirstMarkets\(\)/);
+    assert.match(indexerHooksSource, /if \(rpc\.data\.length === 0\) return indexedMarkets/);
+    assert.match(marketsScreenSource, /useRpcFirstMarkets\(indexedMarkets, indexerError/);
+    assert.match(marketsPageSource, /loadIndexedMarketListings\(chainId\)/);
   });
 
-  it("reuses market snapshots when route navigation remounts the markets screen", () => {
+  it("reuses RPC snapshots and refreshes server-rendered indexer listings", () => {
     const useMarketsSource =
       hooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
 
     assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.get\(snapshotKey\)/);
     assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.set\(snapshotKey, markets\)/);
     assert.match(useMarketsSource, /if \(!marketSnapshotCache\(publicClient\)\.has\(snapshotKey\)\) void refetch\(\)/);
-    assert.match(indexerHooksSource, /refetchOnMount:\s*false/);
+    assert.match(indexerServerDataSource, /fetchIndexedMarketListings\(chainId\)/);
+    assert.match(marketsScreenSource, /router\.refresh\(\)/);
   });
 
   it("uses explicit multicalls for grouped contract reads", () => {

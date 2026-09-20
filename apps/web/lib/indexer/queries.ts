@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { Address, Hash } from "viem";
 
 import type { PoolId } from "@/lib/clob/types";
@@ -85,8 +87,12 @@ export type IndexedCandle = {
 export type IndexedMarketDetail = {
   market: IndexedMarket | null;
   dayTrades: IndexedTrade[];
-  latestTrades: IndexedRecentTrade[];
   candles: IndexedCandle[];
+};
+
+export type IndexedRecentTradesPage = {
+  trades: IndexedRecentTrade[];
+  totalCount: number;
 };
 
 const marketFields = `
@@ -149,13 +155,6 @@ const marketDetailQuery = `
     ) {
       ${tradeFields}
     }
-    latestTrades: Trade(
-      where: { marketId: { _eq: $marketId } }
-      order_by: [{ timestamp: desc }, { logIndex: desc }]
-      limit: 50
-    ) {
-      ${tradeFields}
-    }
     MarketCandle(
       where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: $candleInterval } }
       order_by: { startTimestamp: desc }
@@ -171,6 +170,22 @@ const marketDetailQuery = `
       close
       quoteVolume
       tradeCount
+    }
+  }
+`;
+
+const recentTradesQuery = `
+  query RecentTrades($marketId: String!, $limit: Int!, $offset: Int!) {
+    Market(where: { id: { _eq: $marketId } }, limit: 1) {
+      tradeCount
+    }
+    Trade(
+      where: { marketId: { _eq: $marketId } }
+      order_by: [{ timestamp: desc }, { blockNumber: desc }, { logIndex: desc }]
+      limit: $limit
+      offset: $offset
+    ) {
+      ${tradeFields}
     }
   }
 `;
@@ -235,7 +250,6 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
   const data = await requestIndexer<{
     Market: IndexedMarket[];
     dayTrades: IndexedTrade[];
-    latestTrades: IndexedTrade[];
     MarketCandle: IndexedCandle[];
   }>(
     endpoint,
@@ -250,20 +264,35 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
     signal,
   );
 
-  const takerOrderIds = [...new Set(data.latestTrades.map((trade) => trade.takerOrderId))];
+  return {
+    market: data.Market[0] ?? null,
+    dayTrades: data.dayTrades,
+    candles: data.MarketCandle.toReversed(),
+  } satisfies IndexedMarketDetail;
+}
+
+export async function fetchIndexedRecentTrades(
+  endpoint: string,
+  marketId: PoolId,
+  page: number,
+  pageSize: number,
+  signal?: AbortSignal,
+) {
+  const data = await requestIndexer<{
+    Market: { tradeCount: string }[];
+    Trade: IndexedTrade[];
+  }>(endpoint, recentTradesQuery, { marketId, limit: pageSize, offset: page * pageSize }, signal);
+  const takerOrderIds = [...new Set(data.Trade.map((trade) => trade.takerOrderId))];
   const takerOrders = takerOrderIds.length
     ? await requestIndexer<{
         Order: { id: string; trader: Address; side: "BUY" | "SELL" }[];
       }>(endpoint, takerOrdersQuery, { ids: takerOrderIds }, signal)
     : { Order: [] };
-  const latestTrades = enrichRecentTrades(data.latestTrades, takerOrders.Order) satisfies IndexedRecentTrade[];
 
   return {
-    market: data.Market[0] ?? null,
-    dayTrades: data.dayTrades,
-    latestTrades,
-    candles: data.MarketCandle.toReversed(),
-  } satisfies IndexedMarketDetail;
+    trades: enrichRecentTrades(data.Trade, takerOrders.Order),
+    totalCount: Number(BigInt(data.Market[0]?.tradeCount ?? "0")),
+  } satisfies IndexedRecentTradesPage;
 }
 
 export async function fetchIndexedOrderHistory(

@@ -74,7 +74,7 @@ export function PriceBitmapChart({
   return (
     <Card className="min-h-full flex-1 overflow-hidden rounded-none bg-background py-0 ring-0">
       <CardHeader className="!flex flex-row !items-center gap-3 whitespace-nowrap border-b border-border py-4">
-        <CardTitle className="shrink-0 text-lg">Price range</CardTitle>
+        <CardTitle className="shrink-0 text-lg">Create New Spot market</CardTitle>
         <p className="min-w-0 truncate text-xs text-muted-foreground">Sparse radix coverage</p>
         <span className="ml-auto shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
           128-bit range

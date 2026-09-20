@@ -3,7 +3,7 @@
 import { ExternalLink, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 
 import { MarketSelector } from "@/components/markets/market-selector";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +19,7 @@ import {
   useClobWallet,
 } from "@/lib/clob";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
-import { type IndexedTrade, useIndexerMarketDetail, useIndexerOrderHistory, useRpcFirstMarkets } from "@/lib/indexer";
+import { type IndexedTrade, type TradingIndexerSnapshot, useRpcFirstMarkets } from "@/lib/indexer";
 
 import { AccountPanel } from "./account-panel";
 import type {
@@ -38,6 +38,7 @@ import { PriceChart } from "./price-chart";
 import { TradeTicket } from "./trade-ticket";
 
 const ORDERBOOK_DEPTH = 50;
+const RECENT_TRADES_PAGE_SIZE = 10;
 
 function EmptyHome() {
   const { chainId, config } = useClobChain();
@@ -80,14 +81,15 @@ function MarketHeader({
   summary,
   loading,
   pool,
+  markets,
 }: {
   summary: MarketSummary;
   loading: boolean;
   pool: PoolMetadata | null;
+  markets: ReturnType<typeof useRpcFirstMarkets>;
 }) {
   const router = useRouter();
   const { chainId } = useClobChain();
-  const markets = useRpcFirstMarkets();
   return (
     <div className="flex flex-col gap-4 sm:grid sm:min-h-[4.25rem] sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-stretch sm:gap-0">
       <div className="flex min-w-0 items-stretch border-r-[0.5px] border-border">
@@ -200,22 +202,49 @@ function recentTrade(trade: TradeExecuted, symbol: string, side: "buy" | "sell",
   };
 }
 
-function MarketTradingView({ marketId }: { marketId: PoolId }) {
+function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: TradingIndexerSnapshot }) {
   const router = useRouter();
   const clob = useClob(marketId, ORDERBOOK_DEPTH);
-  const indexed = useIndexerMarketDetail(marketId);
   const { chainId, config } = useClobChain();
-  const { authenticated, connect, ready, tradingAddress, wallet } = useClobWallet();
-  const indexedOrderHistory = useIndexerOrderHistory(marketId, tradingAddress ?? undefined);
+  const { authenticated, connect, ready, wallet } = useClobWallet();
   const pool = clob.pool.data;
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [indexerNavigating, startIndexerNavigation] = useTransition();
   const [selectedOrder, setSelectedOrder] = useState<{ marketId: PoolId; price: string; size: string } | null>(null);
+  const indexed = indexer.marketDetail;
+  const indexedRecentTrades = indexer.recentTrades;
+  const recentTradesPage = indexer.recentTradesPage;
+  const indexedRecentTradesTotal = indexedRecentTrades.data.totalCount;
+  const recentTradesTotal = indexedRecentTradesTotal;
+  const refreshIndexer = useCallback(() => router.refresh(), [router]);
+  const markets = useRpcFirstMarkets(indexer.marketListings.data, indexer.marketListings.error, refreshIndexer, false);
+  const updateIndexerRoute = useCallback(
+    (page: number) => {
+      const search = new URLSearchParams(window.location.search);
+      if (page > 0) search.set("tradesPage", String(page));
+      else search.delete("tradesPage");
+      search.delete("trader");
+      const query = search.toString();
+      startIndexerNavigation(() => {
+        router.replace(`${window.location.pathname}${query ? `?${query}` : ""}`, { scroll: false });
+      });
+    },
+    [router],
+  );
+  useEffect(() => {
+    const interval = window.setInterval(refreshIndexer, 5_000);
+    return () => window.clearInterval(interval);
+  }, [refreshIndexer]);
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(indexedRecentTradesTotal / RECENT_TRADES_PAGE_SIZE) - 1);
+    if (recentTradesPage > lastPage) updateIndexerRoute(lastPage);
+  }, [indexedRecentTradesTotal, recentTradesPage, updateIndexerRoute]);
   const dayTrades = useMemo(
-    () => (pool ? (indexed.data?.dayTrades ?? []).map((trade) => indexedTrade(trade, pool)) : []),
-    [indexed.data?.dayTrades, pool],
+    () => (pool ? indexed.data.dayTrades.map((trade) => indexedTrade(trade, pool)) : []),
+    [indexed.data.dayTrades, pool],
   );
   const summary = useMemo<MarketSummary>(() => {
-    const indexedLastPrice = indexed.data?.market?.lastPrice;
+    const indexedLastPrice = indexed.data.market?.lastPrice;
     const lastPrice =
       pool && indexedLastPrice && BigInt(indexedLastPrice) > 0n
         ? formatPrice(BigInt(indexedLastPrice), pool)
@@ -230,11 +259,11 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
       },
       dayTrades,
     );
-  }, [clob.bestPrices.data, dayTrades, indexed.data?.market?.lastPrice, marketId, pool]);
+  }, [clob.bestPrices.data, dayTrades, indexed.data.market?.lastPrice, marketId, pool]);
   const candles = useMemo<PriceCandle[]>(
     () =>
       pool
-        ? (indexed.data?.candles ?? []).map((candle) => ({
+        ? indexed.data.candles.map((candle) => ({
             timestamp: candle.startTimestamp,
             open: Number(formatPrice(BigInt(candle.open), pool)),
             high: Number(formatPrice(BigInt(candle.high), pool)),
@@ -243,12 +272,12 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
             volume: Number(formatQuote(BigInt(candle.quoteVolume), pool)),
           }))
         : [],
-    [indexed.data?.candles, pool],
+    [indexed.data.candles, pool],
   );
   const latestTrades = useMemo(
     () =>
       pool
-        ? (indexed.data?.latestTrades ?? []).map((trade) =>
+        ? indexedRecentTrades.data.trades.map((trade) =>
             recentTrade(
               indexedTrade(trade, pool),
               `${pool.baseSymbol}/${pool.quoteSymbol}`,
@@ -257,7 +286,7 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
             ),
           )
         : [],
-    [indexed.data?.latestTrades, pool],
+    [indexedRecentTrades.data.trades, pool],
   );
   const quoteBalance: Balance | null = clob.balances.data?.quote
     ? {
@@ -297,7 +326,7 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
       orderId: order.orderId,
       market: summary.symbol,
       side: order.side,
-      type: "Limit",
+      type: order.kind === "market" ? "Market" : "Limit",
       price: order.price,
       amount: `${order.quantity} ${summary.baseAsset}`,
       filled: `${order.filled} ${summary.baseAsset}`,
@@ -307,24 +336,27 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
     }),
     [summary.baseAsset, summary.symbol],
   );
+  const mapHistoryOrder = useCallback(
+    (order: (typeof clob.orderHistory.data)[number]): OpenOrder => ({
+      ...mapOpenOrder(order),
+      price: pool
+        ? orderHistoryPrice(
+            {
+              filledQuantity: order.filledQuantityLots.toString(),
+              kind: order.kind === "market" ? "MARKET" : "LIMIT",
+              quoteQuantity: order.filledQuoteQuantity.toString(),
+            },
+            pool,
+            order.price,
+          )
+        : order.price,
+    }),
+    [mapOpenOrder, pool],
+  );
   const orders = useMemo(() => clob.openOrders.data.map(mapOpenOrder), [clob.openOrders.data, mapOpenOrder]);
   const orderHistory = useMemo<OpenOrder[]>(
-    () =>
-      pool
-        ? (indexedOrderHistory.data ?? []).map((order) => ({
-            orderId: order.orderId,
-            market: summary.symbol,
-            side: order.side === "BUY" ? "buy" : "sell",
-            type: order.kind === "MARKET" ? "Market" : "Limit",
-            price: orderHistoryPrice(order, pool, formatPrice(BigInt(order.price), pool)),
-            amount: `${formatQuantity(BigInt(order.quantity), pool)} ${summary.baseAsset}`,
-            filled: `${formatQuantity(BigInt(order.filledQuantity), pool)} ${summary.baseAsset}`,
-            status: order.status.toLowerCase().replaceAll("_", "-"),
-            time: formatHistoryTime(BigInt(order.createdAt)),
-            transactionHash: order.createdTxHash,
-          }))
-        : [],
-    [indexedOrderHistory.data, pool, summary.baseAsset, summary.symbol],
+    () => clob.orderHistory.data.map(mapHistoryOrder),
+    [clob.orderHistory.data, mapHistoryOrder],
   );
   const marketError = clob.pool.error?.message ?? null;
   const recoveryPath = missingMarketRecoveryPath({
@@ -349,9 +381,9 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
     <main className="w-full">
       <div className="grid items-stretch gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_280px_300px] lg:grid-rows-[4.25rem_minmax(464px,auto)] lg:gap-0 lg:p-0 xl:grid-cols-[minmax(0,1fr)_340px_320px] 2xl:grid-cols-[minmax(0,1fr)_384px_380px]">
         <div className="border-b-[0.5px] border-border lg:col-span-2 lg:col-start-1 lg:row-start-1 lg:border-r-[0.5px] xl:col-span-1">
-          <MarketHeader loading={clob.pool.loading || indexed.isPending} pool={pool} summary={summary} />
+          <MarketHeader loading={clob.pool.loading} markets={markets} pool={pool} summary={summary} />
         </div>
-        <PriceChart candles={candles} error={indexed.error?.message} loading={indexed.isPending} summary={summary} />
+        <PriceChart candles={candles} error={indexed.error ?? undefined} loading={false} summary={summary} />
         <OrderBook
           baseSymbol={summary.baseAsset}
           bestPrices={clob.bestPrices.data}
@@ -392,30 +424,34 @@ function MarketTradingView({ marketId }: { marketId: PoolId }) {
         baseBalance={baseBalance}
         connected={authenticated && Boolean(wallet)}
         market={summary}
-        marketLoading={clob.pool.loading || indexed.isPending}
+        marketLoading={clob.pool.loading}
         onCancel={async (orderId) => {
           await clob.cancel(orderId);
         }}
+        onRecentTradesPageChange={updateIndexerRoute}
         orderHistory={orderHistory}
-        orderHistoryError={indexedOrderHistory.error?.message ?? marketError}
-        orderHistoryLoading={indexedOrderHistory.isPending}
+        orderHistoryError={clob.orderHistory.error?.message ?? marketError}
+        orderHistoryLoading={clob.orderHistory.loading}
         orders={orders}
         ordersError={clob.openOrders.error?.message ?? marketError}
         ordersLoading={clob.openOrders.loading}
         pool={pool}
         quoteBalance={quoteBalance}
         recentTrades={latestTrades}
-        recentTradesError={indexed.error?.message}
-        recentTradesLoading={indexed.isPending}
+        recentTradesError={indexedRecentTrades.error}
+        recentTradesLoading={indexerNavigating}
+        recentTradesPage={recentTradesPage}
+        recentTradesPageSize={RECENT_TRADES_PAGE_SIZE}
+        recentTradesTotal={recentTradesTotal}
       />
     </main>
   );
 }
 
-export function TradingScreen({ marketId }: { marketId?: PoolId }) {
+export function TradingScreen({ marketId, indexer }: { marketId?: PoolId; indexer?: TradingIndexerSnapshot }) {
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
-      {marketId ? <MarketTradingView marketId={marketId} /> : <EmptyHome />}
+      {marketId && indexer ? <MarketTradingView indexer={indexer} key={marketId} marketId={marketId} /> : <EmptyHome />}
     </div>
   );
 }

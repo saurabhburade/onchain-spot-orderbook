@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { validateOrderBalance } from "@/lib/clob/order-validation";
+import { sanitizeDecimalInput } from "@/lib/forms/numeric-input";
 
 import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback } from "./market-data";
 import { formatCurrencyAmount } from "./market-details-formatting";
@@ -339,14 +340,17 @@ export function TradeTicket({
               </FieldLabel>
               <span className="relative">
                 <Input
+                  autoComplete="off"
+                  autoCorrect="off"
                   className="h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
                   id="order-price"
                   inputMode="decimal"
                   onChange={(event) => {
-                    const nextPrice = event.target.value;
+                    const nextPrice = sanitizeDecimalInput(event.target.value);
                     setPrice(nextPrice);
                     setAllocation(allocationForAmount(amount, nextPrice));
                   }}
+                  spellCheck={false}
                   value={price}
                 />
                 <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center font-mono text-[10px] text-muted-foreground">
@@ -362,15 +366,18 @@ export function TradeTicket({
             <span className="relative">
               <Input
                 aria-invalid={Boolean(balanceError)}
+                autoComplete="off"
+                autoCorrect="off"
                 className="h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
                 id="order-amount"
                 inputMode="decimal"
                 onChange={(event) => {
-                  const nextAmount = event.target.value;
+                  const nextAmount = sanitizeDecimalInput(event.target.value);
                   setAmount(nextAmount);
                   setAllocation(allocationForAmount(nextAmount));
                 }}
                 placeholder="0.00"
+                spellCheck={false}
                 value={amount}
               />
               <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center font-mono text-[10px] text-muted-foreground">

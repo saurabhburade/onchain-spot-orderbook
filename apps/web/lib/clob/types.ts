@@ -100,9 +100,11 @@ export type TokenBalance = {
 export type OpenOrder = {
   orderId: PoolId;
   side: OrderSide;
+  kind: "limit" | "market";
   priceRaw: bigint;
   quantityLots: bigint;
   filledQuantityLots: bigint;
+  filledQuoteQuantity: bigint;
   price: string;
   quantity: string;
   filled: string;

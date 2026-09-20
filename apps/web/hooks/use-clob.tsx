@@ -19,6 +19,7 @@ import { ANVIL_CHAIN_ID, MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
 import { createPrivyWalletClient, type getClobPublicClient, waitForTransaction } from "@/config/viem";
 import { createAsyncCache, createRequestCoalescer } from "@/lib/clob/async-cache";
 import { type AtomicCall, encodeAtomicBatch } from "@/lib/clob/atomic-batch";
+import { subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import { useClobChain } from "@/lib/clob/chain-context";
 import {
   AGNOSTIC_CREATE_PAIR_SELECTOR,
@@ -367,14 +368,19 @@ export function useCreateMarket() {
           contracts: [
             { address: factoryAddress, abi: poolRegistryAbi, functionName: "isQuoteToken", args: [quoteAsset] },
             { address: factoryAddress, abi: poolRegistryAbi, functionName: "getPair", args: [baseAsset, quoteAsset] },
+            { address: factoryAddress, abi: poolRegistryAbi, functionName: "pairId", args: [baseAsset, quoteAsset] },
           ],
         }),
       ]);
-      const [quoteAllowed, existingBook] = pairState;
+      const [quoteAllowed, existingBook, poolId] = pairState;
       if (!quoteAllowed) throw new Error(`${quote.symbol} is not approved as a quote token by the factory`);
-      if (existingBook !== zeroAddress) throw new Error(`${base.symbol}/${quote.symbol} already has a market`);
 
-      return { base, quote, legacyFactory: false };
+      return {
+        base,
+        quote,
+        legacyFactory: false,
+        existingPoolId: existingBook !== zeroAddress ? poolId : undefined,
+      };
     },
     [config, publicClient],
   );
@@ -831,6 +837,7 @@ export function useBalances(poolId?: PoolId) {
   }, [authenticated, pool.data, publicClient, tradingAddress]);
   useEffect(() => {
     void refetch();
+    return subscribeToBalanceRefresh(() => void refetch());
   }, [refetch]);
   return { data, error: state.error ?? pool.error, loading: state.loading || pool.loading, refetch };
 }
@@ -958,9 +965,11 @@ export function useUserOrders(poolId?: PoolId) {
         const orders: OpenOrder[] = records.map(({ orderId, order, state: orderState }) => ({
           orderId,
           side: order.side === 0 ? "buy" : "sell",
+          kind: orderState.kind === 1 ? "market" : "limit",
           priceRaw: order.price,
           quantityLots: order.quantity,
           filledQuantityLots: orderState.filledQuantity,
+          filledQuoteQuantity: orderState.filledQuoteQuantity,
           price: formatPrice(order.price, metadata),
           quantity: formatQuantity(order.quantity, metadata),
           filled: formatQuantity(orderState.filledQuantity, metadata),

@@ -34,7 +34,6 @@ function Navigation({ active, mobile = false }: { active: ActiveNavigation; mobi
       href: config.defaultPoolId ? `/${chainId}/markets/${config.defaultPoolId}/trade` : `/${chainId}/trade`,
     },
     { id: "markets", label: "Markets", href: `/${chainId}/markets` },
-    { id: "deploy", label: "Deploy", href: `/${chainId}/deploy` },
     { id: "faucet", label: "Faucet", href: `/${chainId}/faucet` },
   ] as const;
   const pathnameSegments = pathname.split("/");
@@ -95,10 +94,10 @@ export function AppHeader({ active, actions }: { active: ActiveNavigation; actio
         </Link>
         <Navigation active={active} />
         <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle />
           {actions}
           <ChainSwitcher />
           <WalletButton />
+          <ThemeToggle />
         </div>
       </div>
       <div className="mx-auto flex w-full max-w-[1540px] gap-1 overflow-x-auto border-t border-border px-3 py-1.5 sm:px-4 lg:hidden">

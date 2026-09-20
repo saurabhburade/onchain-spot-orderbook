@@ -11,6 +11,7 @@
     "fmt:check": "forge fmt --check",
     "lint": "forge fmt --check",
     "test": "forge test",
-    "test:gas": "forge test --gas-report"
+    "test:gas": "forge test --gas-report",
+    "benchmark:orders": "node scripts/evm-order-benchmark-report.mjs"
   }
 }

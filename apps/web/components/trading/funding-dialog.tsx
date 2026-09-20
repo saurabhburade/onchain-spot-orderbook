@@ -3,11 +3,12 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { Check, ChevronDown, Copy, LoaderCircle, Plus, Search, X } from "lucide-react";
 import Image from "next/image";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { type Address, isAddress } from "viem";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { sanitizeDecimalInput } from "@/lib/forms/numeric-input";
 
 export type FundingAction = "deposit" | "withdraw";
 
@@ -272,12 +273,18 @@ export function FundingDialog({
   const [assetSelectorOpen, setAssetSelectorOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastAction = useRef<FundingAction>("deposit");
+  if (action) lastAction.current = action;
+  const displayedAction = action ?? lastAction.current;
   const nativeAsset = assets.find((asset) => asset.key === "native") ?? assets[0];
   const selectedAsset = assets.find((asset) => asset.key === selectedAssetKey) ?? nativeAsset;
 
   function closeDialog() {
     if (withdrawing) return;
     onActionChange(null);
+  }
+
+  function resetDialogState() {
     setRecipient("");
     setAmount("");
     setAssetSelectorOpen(false);
@@ -312,8 +319,6 @@ export function FundingDialog({
     try {
       await onWithdraw(nextRecipient, nextAmount, selectedAsset);
       onActionChange(null);
-      setRecipient("");
-      setAmount("");
     } catch (nextError) {
       setError(messageFrom(nextError));
     } finally {
@@ -327,33 +332,38 @@ export function FundingDialog({
         onOpenChange={(open) => {
           if (!open) closeDialog();
         }}
+        onOpenChangeComplete={(open) => {
+          if (!open) resetDialogState();
+        }}
         open={action !== null}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] transition-opacity duration-150 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0" />
           <Dialog.Viewport className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
-            <Dialog.Popup className="relative w-full max-w-sm rounded-2xl border border-border bg-popover p-5 text-popover-foreground outline-none transition-[transform,opacity] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+            <Dialog.Popup className="relative w-full max-w-sm rounded-2xl border border-border bg-popover p-5 text-popover-foreground outline-none transition-[scale,opacity] duration-150 ease-out data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:scale-[0.96] data-starting-style:opacity-0">
               <Dialog.Title className="pr-10 text-base font-semibold">
-                {action === "deposit" ? "Deposit asset" : "Withdraw asset"}
+                {displayedAction === "deposit" ? "Deposit asset" : "Withdraw asset"}
               </Dialog.Title>
               <Dialog.Description
                 className={
-                  action === "deposit" ? "sr-only" : "mt-1 text-pretty text-xs leading-relaxed text-muted-foreground"
+                  displayedAction === "deposit"
+                    ? "sr-only"
+                    : "mt-1 text-pretty text-xs leading-relaxed text-muted-foreground"
                 }
               >
-                {action === "deposit"
+                {displayedAction === "deposit"
                   ? `Send ${nativeAsset?.symbol ?? "funds"} on ${network} to your embedded wallet address.`
                   : `Send ${selectedAsset?.symbol ?? "an asset"} from your embedded wallet to another address on ${network}.`}
               </Dialog.Description>
               <Dialog.Close
-                aria-label={`Close ${action ?? "wallet"} dialog`}
+                aria-label={`Close ${displayedAction} dialog`}
                 className="absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-full text-muted-foreground outline-none transition-[color,background-color,transform] hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-50"
                 disabled={withdrawing}
               >
                 <X aria-hidden="true" className="size-4" strokeWidth={2} />
               </Dialog.Close>
 
-              {action === "deposit" ? (
+              {displayedAction === "deposit" ? (
                 <div className="mt-5 space-y-4">
                   <div className="rounded-xl border border-border bg-background p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Wallet address</p>
@@ -413,12 +423,15 @@ export function FundingDialog({
                     </span>
                     <span className="relative block">
                       <Input
+                        autoComplete="off"
+                        autoCorrect="off"
                         className="h-11 rounded-xl bg-background px-3 pr-28 font-mono tabular-nums"
                         disabled={withdrawing}
                         id="withdraw-amount"
                         inputMode="decimal"
-                        onChange={(event) => setAmount(event.target.value)}
+                        onChange={(event) => setAmount(sanitizeDecimalInput(event.target.value))}
                         placeholder="0.00"
+                        spellCheck={false}
                         value={amount}
                       />
                       <button

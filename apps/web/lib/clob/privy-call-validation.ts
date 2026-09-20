@@ -5,6 +5,7 @@ import type { PrivySendCallsBody, PrivyWalletCall } from "./privy-wallet-api";
 const MAX_CALLS = 3;
 const MAX_CALLDATA_HEX_LENGTH = 300_002;
 const APPROVE_SELECTOR = "0x095ea7b3";
+const TRANSFER_SELECTOR = "0xa9059cbb";
 // Derived from the deployed CLOB ABI. Keeping this allowlist narrow prevents
 // the server-side sponsor route from becoming a generic contract-call proxy.
 const ORDER_SELECTORS = new Set(["0x4fd0d46e", "0xee71e6e4", "0x7489ec23"]);
@@ -27,6 +28,18 @@ const claimAbi = [
     stateMutability: "nonpayable",
     inputs: [{ name: "token", type: "address" }],
     outputs: [],
+  },
+] as const;
+const transferAbi = [
+  {
+    type: "function",
+    name: "transfer",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "recipient", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
 
@@ -94,6 +107,7 @@ export function validateOrderCalls(rawCalls: unknown): PrivyWalletCall[] {
 export function validateSponsoredCalls(
   rawCalls: unknown,
   faucet?: { address: Address; tokens: readonly Address[] },
+  withdrawalTokens: readonly Address[] = [],
 ): PrivyWalletCall[] {
   if (faucet && Array.isArray(rawCalls) && rawCalls.length === 1) {
     const [call] = rawCalls.map(normalizeCall);
@@ -111,6 +125,25 @@ export function validateSponsoredCalls(
       }
     }
   }
+
+  if (Array.isArray(rawCalls) && rawCalls.length === 1) {
+    const [call] = rawCalls.map(normalizeCall);
+    if (
+      call?.data &&
+      call.data.slice(0, 10).toLowerCase() === TRANSFER_SELECTOR &&
+      withdrawalTokens.some((token) => token.toLowerCase() === call.to.toLowerCase())
+    ) {
+      try {
+        const decoded = decodeFunctionData({ abi: transferAbi, data: call.data });
+        const [, amount] = decoded.args;
+        if (amount <= 0n) throw new Error("Withdrawal amount must be greater than zero");
+        return [call];
+      } catch (error) {
+        if (error instanceof Error && error.message === "Withdrawal amount must be greater than zero") throw error;
+        throw new Error("Only ERC-20 transfers of configured assets may be sponsored");
+      }
+    }
+  }
   return validateOrderCalls(rawCalls);
 }
 
@@ -118,6 +151,7 @@ export function validatePrivySponsoredBatch(
   value: unknown,
   expectedChainId: number,
   faucet?: { address: Address; tokens: readonly Address[] },
+  withdrawalTokens: readonly Address[] = [],
 ): PrivySendCallsBody {
   if (!value || typeof value !== "object") throw new Error("Missing wallet_sendCalls request");
   const body = value as Partial<PrivySendCallsBody>;
@@ -125,7 +159,7 @@ export function validatePrivySponsoredBatch(
     throw new Error("Only sponsored Ethereum wallet_sendCalls requests are permitted");
   }
   if (body.caip2 !== `eip155:${expectedChainId}`) throw new Error("The wallet batch targets an unsupported chain");
-  const calls = validateSponsoredCalls(body.params?.calls, faucet);
+  const calls = validateSponsoredCalls(body.params?.calls, faucet, withdrawalTokens);
   return {
     method: "wallet_sendCalls",
     caip2: `eip155:${expectedChainId}`,

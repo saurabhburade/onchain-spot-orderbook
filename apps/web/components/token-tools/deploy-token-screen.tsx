@@ -14,6 +14,7 @@ import { tokenFactoryAbi } from "@/config/abis";
 import { waitForTransaction } from "@/config/viem";
 import { useClobChain, useClobWallet } from "@/lib/clob";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
+import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/forms/numeric-input";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Token deployment failed";
@@ -139,23 +140,29 @@ export function DeployTokenScreen() {
                   <Field>
                     <FieldLabel htmlFor="token-decimals">Decimals</FieldLabel>
                     <Input
+                      autoComplete="off"
+                      autoCorrect="off"
                       className="h-11 rounded-xl font-mono tabular-nums"
                       id="token-decimals"
                       inputMode="numeric"
                       max="255"
                       min="0"
-                      onChange={(event) => setDecimals(event.target.value)}
+                      onChange={(event) => setDecimals(sanitizeIntegerInput(event.target.value))}
+                      spellCheck={false}
                       value={decimals}
                     />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="token-supply">Initial supply</FieldLabel>
                     <Input
+                      autoComplete="off"
+                      autoCorrect="off"
                       className="h-11 rounded-xl font-mono tabular-nums"
                       id="token-supply"
                       inputMode="decimal"
                       min="0"
-                      onChange={(event) => setInitialSupply(event.target.value)}
+                      onChange={(event) => setInitialSupply(sanitizeDecimalInput(event.target.value))}
+                      spellCheck={false}
                       value={initialSupply}
                     />
                   </Field>

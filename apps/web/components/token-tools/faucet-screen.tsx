@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuthorizationSignature, usePrivy, useSendTransaction } from "@privy-io/react-auth";
-import { CircleCheck, Droplets, LoaderCircle } from "lucide-react";
+import { CircleCheck, LoaderCircle } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { type Address, type ContractFunctionParameters, encodeFunctionData, formatUnits, type Hash } from "viem";
@@ -181,10 +181,7 @@ export function FaucetScreen() {
               src="/dither-space.png"
             />
             <div aria-hidden="true" className="absolute inset-0 -z-10 bg-background/45" />
-            <div className="relative flex size-10 items-center justify-center rounded-xl bg-muted/90 backdrop-blur-sm">
-              <Droplets aria-hidden="true" className="size-5" strokeWidth={1.5} />
-            </div>
-            <h1 className="relative mt-4 text-balance text-3xl font-semibold tracking-tight">Test token faucet</h1>
+            <h1 className="relative text-balance text-3xl font-semibold tracking-tight">Test token faucet</h1>
             <p className="relative mt-2 max-w-2xl text-pretty text-sm text-muted-foreground">
               Claim test USDC or USDT on {config.chain.name}. Each wallet can claim each token once per cooldown period.
             </p>

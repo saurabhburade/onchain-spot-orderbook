@@ -2,10 +2,10 @@
 
 import { Dialog } from "@base-ui/react/dialog";
 import { Check, ChevronDown, Copy, LoaderCircle, Plus, Search, X } from "lucide-react";
-import Image from "next/image";
 import { type FormEvent, useRef, useState } from "react";
 import { type Address, isAddress } from "viem";
 
+import { TokenIcon } from "@/components/token-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sanitizeDecimalInput } from "@/lib/forms/numeric-input";
@@ -47,24 +47,12 @@ function shortenAddress(address: string) {
 
 function AssetMark({ asset, compact = false }: { asset: WalletAsset; compact?: boolean }) {
   return (
-    <span
-      aria-hidden="true"
-      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-muted font-mono font-semibold text-foreground outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 ${compact ? "size-5 text-[8px]" : "size-10 text-xs"}`}
-    >
-      {asset.symbol.slice(0, 2).toUpperCase()}
-      {asset.iconUrl ? (
-        <Image
-          alt=""
-          className="object-cover"
-          fill
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-          sizes={compact ? "20px" : "40px"}
-          src={asset.iconUrl}
-        />
-      ) : null}
-    </span>
+    <TokenIcon
+      className={`bg-muted ${compact ? "size-5" : "size-10"}`}
+      fallbackClassName={compact ? "size-3" : "size-5"}
+      sizes={compact ? "20px" : "40px"}
+      url={asset.iconUrl}
+    />
   );
 }
 

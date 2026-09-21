@@ -22,11 +22,11 @@ import { cn } from "@/lib/utils";
 import type { Balance, MarketSummary, OpenOrder, RecentTrade } from "./market-data";
 import { MarketDetails } from "./market-details";
 import { formatCurrencyAmount } from "./market-details-formatting";
+import { formatTimeAgo } from "./relative-time";
 
 const accountTabs = ["Open Orders", "Assets", "Order History", "Recent Trades", "Market Details"] as const;
 type AccountTab = (typeof accountTabs)[number];
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
 const recentTradeSkeletonRows = [
   "trade-skeleton-1",
   "trade-skeleton-2",
@@ -48,19 +48,6 @@ const recentTradeSkeletonColumns = [
   { id: "account", width: "w-24" },
   { id: "transaction", width: "w-28" },
 ];
-
-function formatTimeAgo(timestampMs: number, nowMs: number) {
-  const seconds = Math.round((timestampMs - nowMs) / 1_000);
-  const absoluteSeconds = Math.abs(seconds);
-
-  if (absoluteSeconds < 10) return "just now";
-  if (absoluteSeconds < 60) return relativeTimeFormatter.format(seconds, "second");
-  if (absoluteSeconds < 3_600) return relativeTimeFormatter.format(Math.round(seconds / 60), "minute");
-  if (absoluteSeconds < 86_400) return relativeTimeFormatter.format(Math.round(seconds / 3_600), "hour");
-  if (absoluteSeconds < 2_592_000) return relativeTimeFormatter.format(Math.round(seconds / 86_400), "day");
-  if (absoluteSeconds < 31_536_000) return relativeTimeFormatter.format(Math.round(seconds / 2_592_000), "month");
-  return relativeTimeFormatter.format(Math.round(seconds / 31_536_000), "year");
-}
 
 type AccountPanelProps = {
   connected: boolean;
@@ -139,7 +126,7 @@ export function AccountPanel({
   useEffect(() => {
     const updateRelativeTime = () => setRelativeTimeNow(Date.now());
     updateRelativeTime();
-    const interval = window.setInterval(updateRelativeTime, 30_000);
+    const interval = window.setInterval(updateRelativeTime, 1_000);
     return () => window.clearInterval(interval);
   }, []);
 

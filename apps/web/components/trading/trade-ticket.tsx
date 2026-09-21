@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ExternalLink, LoaderCircle } from "lucide-react";
+import { ExternalLink, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RangeSlider } from "@/components/motion/range-slider";
 import { Button } from "@/components/ui/button";
@@ -410,9 +410,7 @@ export function TradeTicket({
             </span>
           </div>
           <div className="flex justify-between gap-3 text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              Fee <ChevronDown aria-hidden="true" className="size-3" />
-            </span>
+            <span>Fee</span>
             <span className="font-mono tabular-nums">
               {tradingFeeBps === null ? "—" : formatTradingFeeRate(tradingFeeBps)}
             </span>

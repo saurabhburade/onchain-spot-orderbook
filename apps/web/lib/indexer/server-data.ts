@@ -56,6 +56,7 @@ async function readTokenMetadata(chainId: number, addresses: Address[]) {
 
 export async function fetchIndexedMarketListings(chainId: number): Promise<MarketListing[]> {
   const indexed = await fetchIndexedMarkets(getIndexerGraphqlUrl(chainId));
+  console.log("indexed", indexed);
   const tokenMetadata = await readTokenMetadata(
     chainId,
     indexed.Market.flatMap((market) => [market.baseAsset, market.quoteAsset]),

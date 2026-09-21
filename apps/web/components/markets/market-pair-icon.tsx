@@ -1,29 +1,6 @@
 "use client";
 
-import Image from "next/image";
-
-function TokenIcon({ url, symbol, className }: { url?: string; symbol: string; className: string }) {
-  const fallback = symbol.trim().slice(0, 1).toUpperCase() || "?";
-  return (
-    <span
-      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-[10px] font-semibold text-muted-foreground outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 ${className}`}
-    >
-      {fallback}
-      {url ? (
-        <Image
-          alt=""
-          className="object-cover"
-          fill
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-          sizes="32px"
-          src={url}
-        />
-      ) : null}
-    </span>
-  );
-}
+import { TokenIcon } from "@/components/token-icon";
 
 export function MarketPairIcon({
   baseIconUrl,
@@ -39,11 +16,24 @@ export function MarketPairIcon({
   compact?: boolean;
 }) {
   const iconSize = compact ? "size-[18px]" : "size-8";
+  const fallbackSize = compact ? "size-3" : "size-4";
   return (
     <span aria-hidden="true" className={`flex shrink-0 items-center ${compact ? "w-6" : "w-11"}`}>
-      <TokenIcon className={iconSize} symbol={baseSymbol} url={baseIconUrl} />
+      <TokenIcon
+        alt={`${baseSymbol} token icon`}
+        className={`bg-muted ${iconSize}`}
+        fallbackClassName={fallbackSize}
+        sizes="32px"
+        url={baseIconUrl}
+      />
       <span className={compact ? "-ml-1.5" : "-ml-2"}>
-        <TokenIcon className={iconSize} symbol={quoteSymbol} url={quoteIconUrl} />
+        <TokenIcon
+          alt={`${quoteSymbol} token icon`}
+          className={`bg-muted ${iconSize}`}
+          fallbackClassName={fallbackSize}
+          sizes="32px"
+          url={quoteIconUrl}
+        />
       </span>
     </span>
   );

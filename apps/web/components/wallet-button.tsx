@@ -19,6 +19,7 @@ import { type Address, encodeFunctionData, formatUnits, getAddress, type Hash, i
 import { usePrivyConfigured } from "@/components/providers";
 import { type FundingAction, FundingDialog, type WalletAsset } from "@/components/trading/funding-dialog";
 import { Button } from "@/components/ui/button";
+import { floatingMenuItemClassName, floatingMenuPopupClassName } from "@/components/ui/floating-menu-styles";
 import { erc20Abi, MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@/lib/clob";
 import { notifyBalanceRefresh, subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
@@ -41,10 +42,20 @@ const assetIconUrls: Readonly<Record<string, string>> = {
   USDC: "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/monad/assets/0x754704Bc059F8C67012fEd69BC8A327a5aafb603/logo.png",
   USDT: "https://raw.githubusercontent.com/trustwallet/assets/e99837ebc451d93fdac2ab29fe33aabb0f75c61c/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
 };
-const walletMenuPopupClassName =
-  "w-64 origin-(--transform-origin) transform-gpu rounded-xl border border-border bg-popover p-1.5 text-popover-foreground outline-none transition-[transform,translate,scale,opacity,filter,border-radius] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity,filter] data-ending-style:translate-y-[-2px] data-ending-style:scale-x-96 data-ending-style:scale-y-96 data-ending-style:rounded-2xl data-ending-style:opacity-0 data-ending-style:blur-[1px] data-ending-style:ease-[cubic-bezier(0.4,0,0.2,1)] data-starting-style:translate-y-[-8px] data-starting-style:scale-x-75 data-starting-style:scale-y-75 data-starting-style:rounded-[2rem] data-starting-style:opacity-0 data-starting-style:blur-[3px] motion-reduce:transition-none motion-reduce:data-ending-style:translate-y-0 motion-reduce:data-ending-style:scale-x-100 motion-reduce:data-ending-style:scale-y-100 motion-reduce:data-ending-style:blur-none motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-starting-style:scale-x-100 motion-reduce:data-starting-style:scale-y-100 motion-reduce:data-starting-style:blur-none";
-const walletMenuItemClassName =
-  "flex min-h-10 cursor-default items-center gap-2 rounded-lg px-2.5 text-xs outline-none select-none data-highlighted:bg-muted";
+const walletMenuPopupClassName = `w-64 ${floatingMenuPopupClassName}`;
+const walletMenuItemClassName = floatingMenuItemClassName;
+
+function PrivyMark({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">
+      <circle cx="12" cy="8.5" fill="currentColor" r="6.25" />
+      <path
+        d="M6.5 18.25c1.18.55 3.02.83 5.5.83s4.32-.28 5.5-.83c.3-.14.64.08.64.4 0 .16-.07.3-.2.4-1.36 1.03-3.1 1.54-5.19 1.54s-3.83-.51-5.19-1.54a.5.5 0 0 1-.2-.4c0-.32.34-.54.64-.4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 function ConnectedWalletButton() {
   const { config, publicClient } = useClobChain();
@@ -248,9 +259,10 @@ function ConnectedWalletButton() {
   if (connected && !address) {
     return (
       <Button
-        className="order-last h-8 rounded-full px-4 text-xs disabled:opacity-70"
+        className="order-last h-8 rounded-full px-4 text-xs text-foreground disabled:opacity-70"
         disabled
         title={connectionError ?? "Resolving wallet address"}
+        variant="outline"
       >
         {!connectionError ? (
           <LoaderCircle
@@ -272,11 +284,11 @@ function ConnectedWalletButton() {
             <Menu.Root>
               <Menu.Trigger
                 aria-label={`Open wallet details for ${shortenAddress(eoaAddress)}`}
-                className="order-last inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent bg-secondary text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow,transform] hover:bg-secondary/70 hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96] data-popup-open:bg-muted data-popup-open:text-foreground motion-reduce:transition-none"
+                className="order-last inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow,transform] hover:bg-secondary/70 hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96] active:bg-secondary data-popup-open:bg-secondary/70 data-popup-open:text-foreground motion-reduce:transition-none dark:bg-secondary dark:hover:bg-secondary/70 dark:active:bg-secondary"
                 disabled={!ready}
                 title="Wallet details"
               >
-                <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                <Wallet aria-hidden="true" className="size-4" strokeWidth={2.25} />
               </Menu.Trigger>
               <Menu.Portal>
                 <Menu.Positioner align="end" className="z-50 outline-none" sideOffset={8}>
@@ -348,19 +360,23 @@ function ConnectedWalletButton() {
           ) : (
             <Button
               aria-label="Connect an external EOA wallet"
-              className="order-last size-8 rounded-full border-border bg-secondary text-muted-foreground active:scale-[0.96]"
+              className="order-last h-8 rounded-full px-4 text-xs active:scale-[0.96]"
               disabled={!ready || connecting}
               onClick={connect}
-              size="icon"
-              title="Connect EOA wallet"
+              title="Connect external EOA wallet"
               type="button"
-              variant="outline"
+              variant="default"
             >
               {connecting ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin motion-reduce:animate-none"
+                  data-icon="inline-start"
+                />
               ) : (
-                <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                <Wallet aria-hidden="true" className="size-4" data-icon="inline-start" strokeWidth={2.25} />
               )}
+              {connecting ? "Connecting…" : "Connect wallet"}
             </Button>
           )}
           <Menu.Root>
@@ -369,10 +385,6 @@ function ConnectedWalletButton() {
               className="group inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-transparent bg-secondary px-4 text-xs font-medium text-secondary-foreground outline-none transition-[background-color,border-color,box-shadow] hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-popup-open:bg-muted"
               disabled={!ready}
             >
-              <span
-                aria-hidden="true"
-                className={`size-1.5 rounded-full ${isCorrectChain ? "bg-chart-3" : "bg-amber-500"}`}
-              />
               <span className="font-mono tabular-nums">{shortenAddress(address)}</span>
               <ChevronDown
                 aria-hidden="true"
@@ -385,11 +397,11 @@ function ConnectedWalletButton() {
                 <Menu.Popup className={walletMenuPopupClassName}>
                   <div className="px-2.5 py-2">
                     <div className="flex items-center gap-2.5">
-                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                        <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-foreground">
+                        <PrivyMark className="size-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-xs font-semibold">Trading wallet</span>
+                        <span className="block text-xs font-semibold">Privy Trading Wallet</span>
                         {!isCorrectChain ? (
                           <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" />
@@ -476,10 +488,24 @@ function ConnectedWalletButton() {
   }
 
   return (
-    <Button className="order-last h-8 rounded-full px-4 text-xs" disabled={!ready || connecting} onClick={connect}>
+    <Button
+      aria-label="Connect an external EOA wallet"
+      className="order-last h-8 rounded-full px-4 text-xs active:scale-[0.96]"
+      disabled={!ready || connecting}
+      onClick={connect}
+      title="Connect external EOA wallet"
+      type="button"
+      variant="default"
+    >
       {connecting ? (
-        <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" data-icon="inline-start" />
-      ) : null}
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-4 animate-spin motion-reduce:animate-none"
+          data-icon="inline-start"
+        />
+      ) : (
+        <Wallet aria-hidden="true" className="size-4" data-icon="inline-start" strokeWidth={2.25} />
+      )}
       {connecting ? "Connecting…" : "Connect wallet"}
     </Button>
   );
@@ -491,9 +517,10 @@ export function WalletButton() {
   if (!configured) {
     return (
       <Button
-        className="order-last h-8 rounded-full px-4 text-xs disabled:opacity-100"
+        className="order-last h-8 rounded-full px-4 text-xs text-foreground disabled:opacity-100"
         disabled
         title="Set NEXT_PUBLIC_PRIVY_APP_ID to enable wallet connection"
+        variant="outline"
       >
         Connect wallet
       </Button>

@@ -175,7 +175,9 @@ export function MarketSelector({
               <legend className="sr-only">Filter by quote token</legend>
               {[
                 { label: "All", value: "all" },
-                ...quoteSymbols.map((symbol) => ({ label: symbol, value: symbol })),
+                ...quoteSymbols
+                  .filter((symbol) => symbol !== "USDC")
+                  .map((symbol) => ({ label: symbol, value: symbol })),
               ].map((filter) => {
                 const selected = activeQuote === filter.value;
                 return (

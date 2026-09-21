@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 
+import { floatingMenuItemClassName, floatingMenuPopupClassName } from "@/components/ui/floating-menu-styles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   clobNetworksByChainId,
@@ -64,10 +65,10 @@ export function ChainSwitcher() {
         {CHAIN_METADATA_BY_ID[chainId]?.icon}
         <SelectValue />
       </SelectTrigger>
-      <SelectContent align="end" className="min-w-0 rounded-xl p-1" sideOffset={6}>
+      <SelectContent align="end" className={`w-(--anchor-width) min-w-0 ${floatingMenuPopupClassName}`} sideOffset={8}>
         {supportedClobNetworks.map((network) => (
           <SelectItem
-            className="min-h-8 rounded-lg py-1 pr-7 pl-2.5 text-xs"
+            className={`${floatingMenuItemClassName} py-0 pr-7 transition-none group-data-ending-style/select-popup:translate-y-0 group-data-ending-style/select-popup:opacity-100 group-data-ending-style/select-popup:blur-none group-data-starting-style/select-popup:translate-y-0 group-data-starting-style/select-popup:opacity-100 group-data-starting-style/select-popup:blur-none`}
             key={network.chain.id}
             value={network.chain.id}
           >

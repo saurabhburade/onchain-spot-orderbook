@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowLeftRight, BadgeQuestionMark, CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
+import { ArrowLeftRight, CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
-import { isAddress } from "viem";
+import { formatUnits, isAddress } from "viem";
 
 import { PriceBitmapChart } from "@/components/markets/price-bitmap-chart";
+import { TokenIcon } from "@/components/token-icon";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ import {
   listedQuoteTokens,
   type MarketToken,
   type PoolId,
+  poolRegistryAbi,
   useClobChain,
   useCreateMarket,
 } from "@/lib/clob";
@@ -45,24 +46,14 @@ const maxUint128 = (1n << 128n) - 1n;
 const priceScale = 10n ** 18n;
 
 function TokenReviewIcon({ compact = false, symbol, url }: { compact?: boolean; symbol: string; url?: string }) {
-  const [failed, setFailed] = useState(false);
-
   return (
-    <span
-      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full bg-background font-semibold text-muted-foreground outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10 ${compact ? "size-10 text-sm" : "size-24 text-3xl"}`}
-    >
-      <BadgeQuestionMark aria-hidden="true" className={compact ? "size-5" : "size-10"} strokeWidth={1.5} />
-      {url && !failed ? (
-        <Image
-          alt={`${symbol} token icon`}
-          className="object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
-          fill
-          onError={() => setFailed(true)}
-          sizes={compact ? "40px" : "96px"}
-          src={url}
-        />
-      ) : null}
-    </span>
+    <TokenIcon
+      alt={`${symbol} token icon`}
+      className={`bg-background ${compact ? "size-10" : "size-24"}`}
+      fallbackClassName={compact ? "size-5" : "size-10"}
+      sizes={compact ? "40px" : "96px"}
+      url={url}
+    />
   );
 }
 
@@ -291,6 +282,7 @@ function MarketSetupCard({
   action,
   base,
   error,
+  marketCreationFee,
   quoteIconUrl,
   quoteSymbol,
   tokenPriceRange,
@@ -299,6 +291,7 @@ function MarketSetupCard({
   action: ReactNode;
   base: ComponentProps<typeof TokenAddressCard>;
   error?: ReactNode;
+  marketCreationFee: string;
   quoteIconUrl?: string;
   quoteSymbol: string;
   tokenPriceRange: string;
@@ -324,6 +317,10 @@ function MarketSetupCard({
           <div className="flex items-center justify-between gap-4 border-t border-border px-5 py-4">
             <dt className="text-sm font-medium text-muted-foreground">Trading fee</dt>
             <dd className="text-right font-mono text-sm font-semibold tabular-nums">0.10% maker + 0.10% taker</dd>
+          </div>
+          <div className="flex items-center justify-between gap-4 border-t border-border px-5 py-4">
+            <dt className="text-sm font-medium text-muted-foreground">Market creation fee</dt>
+            <dd className="text-right font-mono text-sm font-semibold tabular-nums">{marketCreationFee}</dd>
           </div>
           <div className="border-t border-border px-5 py-4">
             <dt className="text-sm font-medium text-muted-foreground">Token price range</dt>
@@ -360,10 +357,11 @@ function MarketSetupCard({
 
 export function CreateMarketScreen() {
   const router = useRouter();
-  const { chainId, config } = useClobChain();
+  const { chainId, config, publicClient } = useClobChain();
   const quoteTokens = listedQuoteTokens(chainId);
   const creator = useCreateMarket();
   const [baseAddress, setBaseAddress] = useState("");
+  const [marketCreationFee, setMarketCreationFee] = useState<bigint | null>(null);
   const quoteAddress = quoteTokens[0]?.address ?? "";
   const [inspectedPair, setInspectedPair] = useState<PairInfo | null>(null);
   const [inspecting, setInspecting] = useState(false);
@@ -391,6 +389,10 @@ export function CreateMarketScreen() {
       : "—";
   const tokenIconUrl = (token: MarketToken) => listedTokenIconUrl(chainId, token.address);
   const selectedQuote = quoteTokens.find((token) => token.address.toLowerCase() === quoteAddress.toLowerCase());
+  const marketCreationFeeDisplay =
+    marketCreationFee === null
+      ? "—"
+      : `${formatUnits(marketCreationFee, config.chain.nativeCurrency.decimals)} ${config.chain.nativeCurrency.symbol}`;
   const quoteSymbol =
     quoteVerification.status === "valid" ? quoteVerification.token.symbol : (selectedQuote?.symbol ?? "Quote");
   const quoteIconUrl =
@@ -410,6 +412,28 @@ export function CreateMarketScreen() {
         </Link>
       </div>
     ) : null);
+
+  useEffect(() => {
+    if (!config.factoryAddress) {
+      setMarketCreationFee(null);
+      return;
+    }
+
+    let active = true;
+    setMarketCreationFee(null);
+    void publicClient
+      .readContract({ address: config.factoryAddress, abi: poolRegistryAbi, functionName: "marketCreationFee" })
+      .then((fee) => {
+        if (active) setMarketCreationFee(fee);
+      })
+      .catch(() => {
+        if (active) setMarketCreationFee(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [config.factoryAddress, publicClient]);
 
   useEffect(() => {
     if (!pairVerified) {
@@ -459,6 +483,7 @@ export function CreateMarketScreen() {
           <div className="grid items-stretch border-b-[0.5px] border-border xl:min-h-[calc(100svh-4rem)] xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
             <section className="flex min-w-0 border-b-[0.5px] border-border xl:border-r-[0.5px] xl:border-b-0">
               <PriceBitmapChart
+                hasVerifiedBaseToken={baseVerifiedForInput}
                 loading={inspecting}
                 maximumPrice={priceRange?.maximum}
                 minimumTrade={pair ? `Dynamic · enough to settle 1 ${pair.quote.symbol} atom` : "—"}
@@ -486,6 +511,7 @@ export function CreateMarketScreen() {
                   verification: baseVerification,
                 }}
                 error={setupError}
+                marketCreationFee={marketCreationFeeDisplay}
                 quoteIconUrl={quoteIconUrl}
                 quoteSymbol={quoteSymbol}
                 tokenPriceRange={tokenPriceRange}

@@ -11,6 +11,19 @@ const marketPairIconSource = readFileSync(
   new URL("../../components/markets/market-pair-icon.tsx", import.meta.url),
   "utf8",
 );
+const tokenIconSource = readFileSync(new URL("../../components/token-icon.tsx", import.meta.url), "utf8");
+const createMarketSource = readFileSync(
+  new URL("../../components/markets/create-market-screen.tsx", import.meta.url),
+  "utf8",
+);
+const fundingDialogSource = readFileSync(
+  new URL("../../components/trading/funding-dialog.tsx", import.meta.url),
+  "utf8",
+);
+const faucetScreenSource = readFileSync(
+  new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url),
+  "utf8",
+);
 const tradingScreenSource = readFileSync(
   new URL("../../components/trading/trading-screen.tsx", import.meta.url),
   "utf8",
@@ -39,9 +52,19 @@ describe("listed token icons", () => {
       /const selectedMarketLabel = currentMarket \? marketLabel\(currentMarket\) : currentSymbol/,
     );
     assert.match(marketSelectorSource, /\{selectedMarketLabel\}/);
-    assert.match(marketPairIconSource, /symbol\.trim\(\)\.slice\(0, 1\)\.toUpperCase\(\) \|\| "\?"/);
-    assert.match(marketPairIconSource, /symbol=\{baseSymbol\}/);
-    assert.match(marketPairIconSource, /symbol=\{quoteSymbol\}/);
+    assert.match(marketPairIconSource, /alt=\{`\$\{baseSymbol\} token icon`\}/);
+    assert.match(marketPairIconSource, /alt=\{`\$\{quoteSymbol\} token icon`\}/);
+  });
+
+  it("uses the question-badge fallback anywhere a token logo can be unavailable", () => {
+    assert.match(tokenIconSource, /BadgeQuestionMark/);
+    assert.match(tokenIconSource, /event\.currentTarget\.style\.display = "none"/);
+    for (const source of [marketPairIconSource, createMarketSource, fundingDialogSource, faucetScreenSource]) {
+      assert.match(source, /TokenIcon/);
+    }
+    assert.doesNotMatch(marketPairIconSource, /symbol\.trim\(\)\.slice/);
+    assert.doesNotMatch(fundingDialogSource, /asset\.symbol\.slice/);
+    assert.doesNotMatch(faucetScreenSource, /token\.symbol\.slice/);
   });
 
   it("scopes browser-listed markets to the active factory deployment", () => {

@@ -12,6 +12,7 @@ const chainsSource = readFileSync(new URL("config/chains.ts", webRoot), "utf8");
 const graphqlClientSource = readFileSync(new URL("lib/indexer/client.ts", webRoot), "utf8");
 const graphqlQueriesSource = readFileSync(new URL("lib/indexer/queries.ts", webRoot), "utf8");
 const serverDataSource = readFileSync(new URL("lib/indexer/server-data.ts", webRoot), "utf8");
+const recentTradesActionSource = readFileSync(new URL("lib/indexer/recent-trades-action.ts", webRoot), "utf8");
 
 test("fetches indexer data directly in server-rendered route pages", () => {
   assert.match(marketsPageSource, /loadIndexedMarketListings\(chainId\)/);
@@ -32,9 +33,14 @@ test("keeps GraphQL and indexer endpoints out of the client module graph", () =>
   assert.equal(existsSync(new URL("app/api/indexer/[chainId]/[resource]/route.ts", webRoot)), false);
 });
 
-test("uses server-component refreshes instead of an indexer proxy", () => {
+test("polls recent trades without refreshing the trading route or exposing an indexer proxy", () => {
   assert.match(marketsScreenSource, /router\.refresh\(\)/);
-  assert.match(tradingScreenSource, /router\.refresh\(\)/);
+  assert.doesNotMatch(tradingScreenSource, /router\.refresh\(\)/);
+  assert.match(tradingScreenSource, /refreshIndexedRecentTrades/);
+  assert.match(tradingScreenSource, /refetchInterval:\s*1_000/);
+  assert.match(recentTradesActionSource, /^"use server";/);
+  assert.match(recentTradesActionSource, /fetchIndexedRecentTrades\(/);
+  assert.match(recentTradesActionSource, /isSupportedClobChainId/);
   assert.match(tradingScreenSource, /router\.replace\(/);
 });
 

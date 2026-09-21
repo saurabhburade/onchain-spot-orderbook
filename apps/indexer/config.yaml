@@ -3,6 +3,9 @@ name: clob-indexer
 description: Monad spot CLOB markets, orders, trades, and book updates
 disable_default_cross_chain: true
 address_format: lowercase
+# Index the current chain tip and retain enough block history to roll back a
+# short-lived fork instead of waiting for confirmed/finalized blocks.
+rollback_on_reorg: true
 
 field_selection:
   transaction_fields:
@@ -45,7 +48,7 @@ chains:
         query_timeout_millis: 20000
       - url: ${ENVIO_MONAD_REALTIME_RPC_URL:-https://rpc-testnet.monadinfra.com}
         ws: ${ENVIO_MONAD_REALTIME_WS_URL:-wss://rpc-testnet.monadinfra.com}
-        for: realtime
+        for: fallback
         polling_interval: 400
     start_block: 63617140
     contracts:

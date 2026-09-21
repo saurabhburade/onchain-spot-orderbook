@@ -33,5 +33,6 @@ export default async function TradePage({
     recentTradesPage: recentTradesPage(query.tradesPage),
     recentTradesPageSize,
   });
+  console.log("indexer", indexer);
   return <TradingScreen indexer={indexer} marketId={marketId as PoolId} />;
 }

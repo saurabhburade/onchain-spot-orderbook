@@ -1,6 +1,7 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +54,7 @@ function BitmapConfigItem({ label, value }: { label: string; value: string }) {
 }
 
 export function PriceBitmapChart({
+  hasVerifiedBaseToken = false,
   loading,
   maximumPrice,
   minimumTrade,
@@ -61,6 +63,7 @@ export function PriceBitmapChart({
   quoteSymbol,
   tickSize,
 }: {
+  hasVerifiedBaseToken?: boolean;
   loading?: boolean;
   maximumPrice?: string;
   minimumTrade: string;
@@ -70,6 +73,8 @@ export function PriceBitmapChart({
   tickSize: string;
 }) {
   const [activeBucket, setActiveBucket] = useState<number | null>(null);
+  const reduceMotion = useReducedMotion() ?? false;
+  const barFillClassName = hasVerifiedBaseToken ? "fill-chart-3/65" : "fill-secondary";
 
   return (
     <Card className="min-h-full flex-1 overflow-hidden rounded-none bg-background py-0 ring-0">
@@ -147,7 +152,7 @@ export function PriceBitmapChart({
                       const { height, x, y } = barGeometry(visualIndex);
                       return (
                         <rect
-                          className={activeBucket === bucket ? "fill-chart-3" : "fill-secondary"}
+                          className={activeBucket === bucket ? "fill-chart-3" : barFillClassName}
                           height={height}
                           key={segment}
                           rx="2"
@@ -160,36 +165,46 @@ export function PriceBitmapChart({
                   </g>
                 ))}
 
-                {activeBucket ? (
-                  <g className="pointer-events-none" id={`bitmap-tooltip-${activeBucket}`}>
-                    <rect
-                      className="fill-popover stroke-border"
-                      height="22"
-                      rx="4"
-                      strokeWidth="0.5"
-                      width="118"
-                      x={Math.min(
-                        528,
-                        Math.max(
-                          34,
-                          barGeometry((activeBucket - 1) * segmentsPerBucket).x + barWidth + barGap / 2 - 59,
-                        ),
-                      )}
-                      y={Math.max(3, barGeometry(activeBucket * segmentsPerBucket - 1).y + 7)}
-                    />
-                    <text
-                      className="fill-popover-foreground font-mono text-[7px] tabular-nums"
-                      textAnchor="middle"
-                      x={Math.min(
-                        587,
-                        Math.max(93, barGeometry((activeBucket - 1) * segmentsPerBucket).x + barWidth + barGap / 2),
-                      )}
-                      y={Math.max(17, barGeometry(activeBucket * segmentsPerBucket - 1).y + 21)}
+                <AnimatePresence initial={false}>
+                  {activeBucket ? (
+                    <motion.g
+                      animate={{ opacity: 1 }}
+                      className="pointer-events-none"
+                      exit={{ opacity: 0 }}
+                      id={`bitmap-tooltip-${activeBucket}`}
+                      initial={reduceMotion ? false : { opacity: 0 }}
+                      key={`bitmap-tooltip-${activeBucket}`}
+                      transition={{ duration: reduceMotion ? 0 : 0.15, ease: "linear" }}
                     >
-                      {`Radix byte ${activeBucket} of 16`}
-                    </text>
-                  </g>
-                ) : null}
+                      <rect
+                        className="fill-popover stroke-border"
+                        height="22"
+                        rx="4"
+                        strokeWidth="0.5"
+                        width="118"
+                        x={Math.min(
+                          528,
+                          Math.max(
+                            34,
+                            barGeometry((activeBucket - 1) * segmentsPerBucket).x + barWidth + barGap / 2 - 59,
+                          ),
+                        )}
+                        y={Math.max(3, barGeometry(activeBucket * segmentsPerBucket - 1).y + 7)}
+                      />
+                      <text
+                        className="fill-popover-foreground font-mono text-[7px] tabular-nums"
+                        textAnchor="middle"
+                        x={Math.min(
+                          587,
+                          Math.max(93, barGeometry((activeBucket - 1) * segmentsPerBucket).x + barWidth + barGap / 2),
+                        )}
+                        y={Math.max(17, barGeometry(activeBucket * segmentsPerBucket - 1).y + 21)}
+                      >
+                        {`Radix byte ${activeBucket} of 16`}
+                      </text>
+                    </motion.g>
+                  ) : null}
+                </AnimatePresence>
 
                 <line className="stroke-foreground/25" x1="34" x2="646" y1="193" y2="193" />
                 {tickStops.map((stop) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/clob";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 import { type IndexedTrade, type TradingIndexerSnapshot, useRpcFirstMarkets } from "@/lib/indexer";
+import { refreshIndexedRecentTrades } from "@/lib/indexer/recent-trades-action";
 
 import { AccountPanel } from "./account-panel";
 import type {
@@ -214,10 +216,17 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
   const indexed = indexer.marketDetail;
   const indexedRecentTrades = indexer.recentTrades;
   const recentTradesPage = indexer.recentTradesPage;
-  const indexedRecentTradesTotal = indexedRecentTrades.data.totalCount;
+  const recentTradesQuery = useQuery({
+    queryKey: ["indexed-recent-trades", chainId, marketId, recentTradesPage],
+    queryFn: () => refreshIndexedRecentTrades({ chainId, marketId, page: recentTradesPage }),
+    initialData: indexedRecentTrades.data,
+    refetchInterval: 1_000,
+    staleTime: 0,
+  });
+  const refreshedRecentTrades = recentTradesQuery.data;
+  const indexedRecentTradesTotal = refreshedRecentTrades.totalCount;
   const recentTradesTotal = indexedRecentTradesTotal;
-  const refreshIndexer = useCallback(() => router.refresh(), [router]);
-  const markets = useRpcFirstMarkets(indexer.marketListings.data, indexer.marketListings.error, refreshIndexer, false);
+  const markets = useRpcFirstMarkets(indexer.marketListings.data, indexer.marketListings.error);
   const updateIndexerRoute = useCallback(
     (page: number) => {
       const search = new URLSearchParams(window.location.search);
@@ -231,10 +240,6 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
     },
     [router],
   );
-  useEffect(() => {
-    const interval = window.setInterval(refreshIndexer, 5_000);
-    return () => window.clearInterval(interval);
-  }, [refreshIndexer]);
   useEffect(() => {
     const lastPage = Math.max(0, Math.ceil(indexedRecentTradesTotal / RECENT_TRADES_PAGE_SIZE) - 1);
     if (recentTradesPage > lastPage) updateIndexerRoute(lastPage);
@@ -277,7 +282,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
   const latestTrades = useMemo(
     () =>
       pool
-        ? indexedRecentTrades.data.trades.map((trade) =>
+        ? refreshedRecentTrades.trades.map((trade) =>
             recentTrade(
               indexedTrade(trade, pool),
               `${pool.baseSymbol}/${pool.quoteSymbol}`,
@@ -286,7 +291,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
             ),
           )
         : [],
-    [indexedRecentTrades.data.trades, pool],
+    [refreshedRecentTrades.trades, pool],
   );
   const quoteBalance: Balance | null = clob.balances.data?.quote
     ? {
@@ -438,7 +443,13 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
         pool={pool}
         quoteBalance={quoteBalance}
         recentTrades={latestTrades}
-        recentTradesError={indexedRecentTrades.error}
+        recentTradesError={
+          recentTradesQuery.error
+            ? "Indexer data is temporarily unavailable"
+            : recentTradesQuery.isFetchedAfterMount
+              ? null
+              : indexedRecentTrades.error
+        }
         recentTradesLoading={indexerNavigating}
         recentTradesPage={recentTradesPage}
         recentTradesPageSize={RECENT_TRADES_PAGE_SIZE}

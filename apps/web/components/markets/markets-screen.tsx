@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Boxes, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
+import { Boxes, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -100,7 +100,7 @@ export function MarketsScreen({
             </div>
             <Button
               aria-label="Refresh markets"
-              className="rounded-full"
+              className="rounded-full bg-secondary hover:bg-secondary/70 active:bg-secondary"
               disabled={markets.loading || indexerRefreshing}
               onClick={() => void markets.refetch()}
               size="icon"
@@ -214,13 +214,8 @@ export function MarketsScreen({
                   ? "—"
                   : `${market.volume24h} ${market.quoteSymbol}`}
               </span>
-              <span className="flex items-center justify-end gap-2 font-mono text-xs text-muted-foreground">
+              <span className="text-right font-mono text-xs text-muted-foreground">
                 {shortAddress(market.clobAddress)}
-                <ArrowRight
-                  aria-hidden="true"
-                  className="size-4 -translate-x-1 opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
-                  strokeWidth={1.5}
-                />
               </span>
             </Link>
           ))}

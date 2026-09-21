@@ -5,7 +5,7 @@ import { CircleCheck, LoaderCircle } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { type Address, type ContractFunctionParameters, encodeFunctionData, formatUnits, type Hash } from "viem";
-
+import { TokenIcon } from "@/components/token-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { erc20Abi, tokenFaucetAbi } from "@/config/abis";
@@ -199,22 +199,12 @@ export function FaucetScreen() {
                     key={token.address}
                   >
                     <CardHeader className="px-4 pt-4 sm:px-6 lg:px-5 xl:px-6">
-                      <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-full bg-foreground text-xs font-semibold text-background outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10">
-                        {token.symbol.slice(0, 1)}
-                        {tokenIconUrls[token.symbol] ? (
-                          <Image
-                            alt=""
-                            aria-hidden="true"
-                            className="object-cover"
-                            fill
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                            }}
-                            sizes="40px"
-                            src={tokenIconUrls[token.symbol]}
-                          />
-                        ) : null}
-                      </div>
+                      <TokenIcon
+                        className="size-10 bg-muted"
+                        fallbackClassName="size-5"
+                        sizes="40px"
+                        url={tokenIconUrls[token.symbol]}
+                      />
                       <CardTitle className="mt-3 text-lg">{token.symbol}</CardTitle>
                       <CardDescription className="break-all font-mono text-[11px]">{token.address}</CardDescription>
                     </CardHeader>

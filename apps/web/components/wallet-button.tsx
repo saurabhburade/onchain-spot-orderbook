@@ -67,7 +67,6 @@ function ConnectedWalletButton() {
     connectionError,
     connecting,
     disconnect,
-    disconnectEoa,
     isConnectedEoaCorrectChain,
     isCorrectChain,
     ready,
@@ -280,84 +279,7 @@ function ConnectedWalletButton() {
     return (
       <>
         <div className="contents">
-          {eoaAddress && connectedEoaWallet ? (
-            <Menu.Root>
-              <Menu.Trigger
-                aria-label={`Open wallet details for ${shortenAddress(eoaAddress)}`}
-                className="order-last inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-muted-foreground outline-none transition-[color,background-color,border-color,box-shadow,transform] hover:bg-secondary/70 hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96] active:bg-secondary data-popup-open:bg-secondary/70 data-popup-open:text-foreground motion-reduce:transition-none dark:bg-secondary dark:hover:bg-secondary/70 dark:active:bg-secondary"
-                disabled={!ready}
-                title="Wallet details"
-              >
-                <Wallet aria-hidden="true" className="size-4" strokeWidth={2.25} />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Positioner align="end" className="z-50 outline-none" sideOffset={8}>
-                  <Menu.Popup className={walletMenuPopupClassName}>
-                    <div className="px-2.5 py-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                          <Wallet aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-semibold">Connected wallet</span>
-                          {!isConnectedEoaCorrectChain ? (
-                            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                              <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" />
-                              Wallet on wrong network
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-                      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
-                        <dt className="text-muted-foreground">Account type</dt>
-                        <dd className="text-right font-medium">EOA</dd>
-                      </dl>
-                      <div className="mt-2.5 rounded-lg bg-muted/70 px-2.5 py-2">
-                        <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                          EOA address
-                        </p>
-                        <p className="mt-1 break-all font-mono text-[11px] leading-4 tabular-nums">{eoaAddress}</p>
-                      </div>
-                    </div>
-                    <div className="my-1 h-px bg-border" />
-                    {!isConnectedEoaCorrectChain ? (
-                      <Menu.Item
-                        aria-label={`Switch connected EOA to ${config.chain.name}`}
-                        className={walletMenuItemClassName}
-                        onClick={() => void switchConnectedEoaToClobChain()}
-                      >
-                        <Network aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                        Switch EOA network
-                      </Menu.Item>
-                    ) : null}
-                    <Menu.Item
-                      className={walletMenuItemClassName}
-                      onClick={() => {
-                        void navigator.clipboard.writeText(eoaAddress).then(() => {
-                          setCopiedEoa(true);
-                          window.setTimeout(() => setCopiedEoa(false), 1500);
-                        });
-                      }}
-                    >
-                      {copiedEoa ? (
-                        <Check aria-hidden="true" className="size-4 text-chart-3" strokeWidth={1.5} />
-                      ) : (
-                        <Copy aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                      )}
-                      {copiedEoa ? "Copied EOA" : "Copy EOA address"}
-                    </Menu.Item>
-                    <Menu.Item
-                      className={`${walletMenuItemClassName} text-destructive data-highlighted:bg-destructive/10`}
-                      onClick={disconnectEoa}
-                    >
-                      <LogOut aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                      Disconnect EOA
-                    </Menu.Item>
-                  </Menu.Popup>
-                </Menu.Positioner>
-              </Menu.Portal>
-            </Menu.Root>
-          ) : (
+          {(!eoaAddress || !connectedEoaWallet) && (
             <Button
               aria-label="Connect an external EOA wallet"
               className="order-last h-8 rounded-full px-4 text-xs active:scale-[0.96]"
@@ -420,6 +342,22 @@ function ConnectedWalletButton() {
                       </p>
                       <p className="mt-1 break-all font-mono text-[11px] leading-4 tabular-nums">{address}</p>
                     </div>
+                    {eoaAddress && connectedEoaWallet ? (
+                      <div className="mt-2 rounded-lg bg-muted/70 px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                            EOA address
+                          </p>
+                          {!isConnectedEoaCorrectChain ? (
+                            <span className="flex shrink-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+                              <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" />
+                              Wrong network
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] leading-4 tabular-nums">{eoaAddress}</p>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="my-1 h-px bg-border" />
                   <Menu.Item className={walletMenuItemClassName} onClick={() => setFundingAction("deposit")}>
@@ -457,6 +395,37 @@ function ConnectedWalletButton() {
                     )}
                     {copiedPrivy ? "Copied address" : "Copy trading address"}
                   </Menu.Item>
+                  {eoaAddress && connectedEoaWallet ? (
+                    <>
+                      <div className="my-1 h-px bg-border" />
+                      {!isConnectedEoaCorrectChain ? (
+                        <Menu.Item
+                          aria-label={`Switch connected EOA to ${config.chain.name}`}
+                          className={walletMenuItemClassName}
+                          onClick={() => void switchConnectedEoaToClobChain()}
+                        >
+                          <Network aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                          Switch EOA network
+                        </Menu.Item>
+                      ) : null}
+                      <Menu.Item
+                        className={walletMenuItemClassName}
+                        onClick={() => {
+                          void navigator.clipboard.writeText(eoaAddress).then(() => {
+                            setCopiedEoa(true);
+                            window.setTimeout(() => setCopiedEoa(false), 1500);
+                          });
+                        }}
+                      >
+                        {copiedEoa ? (
+                          <Check aria-hidden="true" className="size-4 text-chart-3" strokeWidth={1.5} />
+                        ) : (
+                          <Copy aria-hidden="true" className="size-4" strokeWidth={1.5} />
+                        )}
+                        {copiedEoa ? "Copied EOA" : "Copy EOA address"}
+                      </Menu.Item>
+                    </>
+                  ) : null}
                   <Menu.Item
                     className={`${walletMenuItemClassName} text-destructive data-highlighted:bg-destructive/10`}
                     onClick={() => void disconnect()}

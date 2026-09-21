@@ -63,9 +63,9 @@ export function ChainSwitcher() {
         className="h-8 shrink-0 bg-secondary px-3 py-0 text-xs text-secondary-foreground hover:bg-muted"
       >
         {CHAIN_METADATA_BY_ID[chainId]?.icon}
-        <SelectValue />
+        <SelectValue className="hidden sm:flex" />
       </SelectTrigger>
-      <SelectContent align="end" className={`w-(--anchor-width) min-w-0 ${floatingMenuPopupClassName}`} sideOffset={8}>
+      <SelectContent align="end" className={`min-w-40 ${floatingMenuPopupClassName}`} sideOffset={8}>
         {supportedClobNetworks.map((network) => (
           <SelectItem
             className={`${floatingMenuItemClassName} py-0 pr-7 transition-none group-data-ending-style/select-popup:translate-y-0 group-data-ending-style/select-popup:opacity-100 group-data-ending-style/select-popup:blur-none group-data-starting-style/select-popup:translate-y-0 group-data-starting-style/select-popup:opacity-100 group-data-starting-style/select-popup:blur-none`}

@@ -97,6 +97,7 @@ type TradeTicketProps = {
   onMarketOrder: (input: { side: OrderSide; quantity: string }) => Promise<void>;
   onSideChange: (side: OrderSide) => void;
   onConnect?: () => void;
+  mobileCompact?: boolean;
 };
 
 export function TradeTicket({
@@ -115,6 +116,7 @@ export function TradeTicket({
   onMarketOrder,
   onSideChange,
   onConnect,
+  mobileCompact = false,
 }: TradeTicketProps) {
   const [orderType, setOrderType] = useState<OrderType>("market");
   const [price, setPrice] = useState(summary.price ?? "");
@@ -289,17 +291,25 @@ export function TradeTicket({
   }
 
   return (
-    <Card className="gap-0 py-0 ring-[0.5px] ring-border dark:ring-border lg:flex-1 lg:rounded-none lg:border-l-[0.5px] lg:border-border lg:bg-background lg:ring-0">
+    <Card
+      className={`min-w-0 gap-0 py-0 ring-[0.5px] ring-border dark:ring-border lg:flex-1 lg:rounded-none lg:border-l-[0.5px] lg:border-border lg:bg-background lg:ring-0 ${
+        mobileCompact ? "rounded-none bg-background ring-0" : ""
+      }`}
+    >
       <CardHeader className="px-0 pt-0 !pb-0">
         <Tabs className="gap-0" onValueChange={(value) => selectOrderType(value as OrderType)} value={orderType}>
           <TabsList
             aria-label="Order type"
-            className="h-12! w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border bg-transparent p-0"
+            className={`w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border bg-transparent p-0 ${
+              mobileCompact ? "h-10! lg:h-12!" : "h-12!"
+            }`}
             indicatorClassName="rounded-none border-0 bg-transparent after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:content-[''] dark:bg-transparent"
           >
             {(["market", "limit"] as const).map((type) => (
               <TabsTrigger
-                className="h-full flex-none shrink-0 rounded-none px-4 text-xs capitalize data-active:text-foreground"
+                className={`h-full flex-none shrink-0 rounded-none text-xs capitalize data-active:text-foreground ${
+                  mobileCompact ? "px-2 lg:px-4" : "px-4"
+                }`}
                 key={type}
                 value={type}
               >
@@ -309,40 +319,64 @@ export function TradeTicket({
           </TabsList>
         </Tabs>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4 px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-3">
+      <CardContent
+        className={`flex flex-1 flex-col ${
+          mobileCompact
+            ? "gap-2 px-2 pb-2 pt-2 sm:px-2 sm:pb-2 sm:pt-2 lg:gap-4 lg:px-4 lg:pb-4 lg:pt-3"
+            : "gap-4 px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-3"
+        }`}
+      >
         <Tabs className="w-full" onValueChange={(value) => selectSide(value as OrderSide)} value={side}>
           <TabsList
             aria-label="Trade side"
-            className="grid h-auto! w-full grid-cols-2 rounded-full bg-secondary px-1 py-1"
+            className={`grid h-auto! w-full grid-cols-2 rounded-full bg-secondary px-1 py-1 ${mobileCompact ? "lg:px-1 lg:py-1" : ""}`}
             indicatorClassName="rounded-full bg-background dark:bg-background"
           >
             <TabsTrigger className="w-full rounded-full py-1.5 text-xs data-active:text-chart-3" value="buy">
-              Buy {summary.baseAsset}
+              <span className={mobileCompact ? "lg:hidden" : "hidden"}>Buy</span>
+              <span className={mobileCompact ? "hidden lg:inline" : "inline"}>Buy {summary.baseAsset}</span>
             </TabsTrigger>
             <TabsTrigger className="w-full rounded-full py-1.5 text-xs data-active:text-destructive" value="sell">
-              Sell {summary.baseAsset}
+              <span className={mobileCompact ? "lg:hidden" : "hidden"}>Sell</span>
+              <span className={mobileCompact ? "hidden lg:inline" : "inline"}>Sell {summary.baseAsset}</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
-          <p className="text-xs font-medium text-muted-foreground underline decoration-dashed underline-offset-4">
-            Available in wallet
+        <div
+          className={`flex items-center justify-between gap-2 border-b border-border ${mobileCompact ? "pb-1" : "pb-2"}`}
+        >
+          <p
+            className={`${mobileCompact ? "text-[10px] lg:text-xs" : "text-xs"} font-medium text-muted-foreground underline decoration-dashed underline-offset-4`}
+          >
+            <span className={mobileCompact ? "lg:hidden" : "hidden"}>Available</span>
+            <span className={mobileCompact ? "hidden lg:inline" : "inline"}>Available in wallet</span>
           </p>
-          <span className="font-mono text-sm tabular-nums text-foreground">
+          <span
+            className={`${mobileCompact ? "text-xs lg:text-sm" : "text-sm"} truncate font-mono tabular-nums text-foreground`}
+          >
             {balance ? `${formatCurrencyAmount(balance.free)} ${balance.symbol}` : "0.00"}
           </span>
         </div>
-        <FieldGroup className="gap-3">
+        <FieldGroup className={mobileCompact ? "gap-2 lg:gap-3" : "gap-3"}>
           {orderType === "limit" ? (
-            <Field className="gap-1.5">
-              <FieldLabel className="text-xs text-muted-foreground" htmlFor="order-price">
+            <Field className={mobileCompact ? "gap-1 lg:gap-1.5" : "gap-1.5"}>
+              <FieldLabel
+                className={
+                  mobileCompact ? "text-[10px] text-muted-foreground lg:text-xs" : "text-xs text-muted-foreground"
+                }
+                htmlFor="order-price"
+              >
                 Price
               </FieldLabel>
               <span className="relative">
                 <Input
                   autoComplete="off"
                   autoCorrect="off"
-                  className="h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
+                  className={
+                    mobileCompact
+                      ? "h-9 rounded-lg border-input bg-background px-2 pr-10 text-xs font-mono tabular-nums lg:h-11 lg:rounded-xl lg:px-3 lg:pr-16 lg:text-sm"
+                      : "h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
+                  }
                   id="order-price"
                   inputMode="decimal"
                   onChange={(event) => {
@@ -353,14 +387,21 @@ export function TradeTicket({
                   spellCheck={false}
                   value={price}
                 />
-                <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center font-mono text-[10px] text-muted-foreground">
+                <span
+                  className={`pointer-events-none absolute inset-y-0 inline-flex items-center font-mono text-[10px] text-muted-foreground ${mobileCompact ? "right-2 lg:right-3" : "right-3"}`}
+                >
                   {summary.quoteAsset}
                 </span>
               </span>
             </Field>
           ) : null}
-          <Field className="gap-1.5">
-            <FieldLabel className="text-xs text-muted-foreground" htmlFor="order-amount">
+          <Field className={mobileCompact ? "gap-1 lg:gap-1.5" : "gap-1.5"}>
+            <FieldLabel
+              className={
+                mobileCompact ? "text-[10px] text-muted-foreground lg:text-xs" : "text-xs text-muted-foreground"
+              }
+              htmlFor="order-amount"
+            >
               Size
             </FieldLabel>
             <span className="relative">
@@ -368,7 +409,11 @@ export function TradeTicket({
                 aria-invalid={Boolean(balanceError)}
                 autoComplete="off"
                 autoCorrect="off"
-                className="h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
+                className={
+                  mobileCompact
+                    ? "h-9 rounded-lg border-input bg-background px-2 pr-10 text-xs font-mono tabular-nums lg:h-11 lg:rounded-xl lg:px-3 lg:pr-16 lg:text-sm"
+                    : "h-11 rounded-xl border-input bg-background px-3 pr-16 font-mono tabular-nums"
+                }
                 id="order-amount"
                 inputMode="decimal"
                 onChange={(event) => {
@@ -380,13 +425,15 @@ export function TradeTicket({
                 spellCheck={false}
                 value={amount}
               />
-              <span className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center font-mono text-[10px] text-muted-foreground">
+              <span
+                className={`pointer-events-none absolute inset-y-0 inline-flex items-center font-mono text-[10px] text-muted-foreground ${mobileCompact ? "right-2 lg:right-3" : "right-3"}`}
+              >
                 {summary.baseAsset}
               </span>
             </span>
           </Field>
         </FieldGroup>
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center ${mobileCompact ? "gap-2 lg:gap-3" : "gap-3"}`}>
           <RangeSlider
             aria-label="Order size percentage"
             className="min-w-0 flex-1"
@@ -398,11 +445,15 @@ export function TradeTicket({
             step={25}
             value={allocation}
           />
-          <output className="grid h-8 min-w-16 place-items-center rounded-lg border border-input bg-background px-2 font-mono text-xs tabular-nums text-foreground">
+          <output
+            className={`grid h-8 place-items-center rounded-lg border border-input bg-background font-mono text-xs tabular-nums text-foreground ${mobileCompact ? "min-w-11 px-1 lg:min-w-16 lg:px-2" : "min-w-16 px-2"}`}
+          >
             {allocation}%
           </output>
         </div>
-        <div className="flex flex-col gap-2 border-t border-border pt-4 text-xs">
+        <div
+          className={`flex flex-col border-t border-border text-xs ${mobileCompact ? "gap-1 pt-2 text-[10px] lg:gap-2 lg:pt-4 lg:text-xs" : "gap-2 pt-4"}`}
+        >
           <div className="flex justify-between gap-3 text-muted-foreground">
             <span>Estimated total</span>
             <span className="font-mono tabular-nums text-foreground">
@@ -432,7 +483,7 @@ export function TradeTicket({
           </p>
         ) : null}
         <Button
-          className="relative h-auto w-full rounded-full py-2 text-xs font-semibold after:absolute after:inset-x-0 after:top-1/2 after:h-10 after:-translate-y-1/2 active:scale-[0.96]"
+          className={`relative h-auto w-full rounded-full text-xs font-semibold after:absolute after:inset-x-0 after:top-1/2 after:h-10 after:-translate-y-1/2 active:scale-[0.96] ${mobileCompact ? "py-1.5 lg:py-2" : "py-2"}`}
           disabled={!canSubmit}
           onClick={() => {
             if (!connected) onConnect?.();
@@ -450,7 +501,9 @@ export function TradeTicket({
                 ? isBuy
                   ? `Place buy order`
                   : `Place sell order`
-                : "Connect wallet to trade"}
+                : mobileCompact
+                  ? "Connect"
+                  : "Connect wallet to trade"}
           </span>
         </Button>
       </CardContent>

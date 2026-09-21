@@ -18,7 +18,7 @@ export function MarketPairIcon({
   const iconSize = compact ? "size-[18px]" : "size-8";
   const fallbackSize = compact ? "size-3" : "size-4";
   return (
-    <span aria-hidden="true" className={`flex shrink-0 items-center ${compact ? "w-6" : "w-11"}`}>
+    <span aria-hidden="true" className={`flex shrink-0 items-center ${compact ? "w-8" : "w-14"}`}>
       <TokenIcon
         alt={`${baseSymbol} token icon`}
         className={`bg-muted ${iconSize}`}

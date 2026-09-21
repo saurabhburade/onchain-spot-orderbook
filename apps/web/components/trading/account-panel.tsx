@@ -26,6 +26,7 @@ import { formatTimeAgo } from "./relative-time";
 
 const accountTabs = ["Open Orders", "Assets", "Order History", "Recent Trades", "Market Details"] as const;
 type AccountTab = (typeof accountTabs)[number];
+const ORDER_HISTORY_PAGE_SIZE = 10;
 
 const recentTradeSkeletonRows = [
   "trade-skeleton-1",
@@ -121,6 +122,7 @@ export function AccountPanel({
   const [cancellingId, setCancellingId] = useState<`0x${string}` | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OpenOrder | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [orderHistoryPage, setOrderHistoryPage] = useState(0);
   const [relativeTimeNow, setRelativeTimeNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -129,6 +131,11 @@ export function AccountPanel({
     const interval = window.setInterval(updateRelativeTime, 1_000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(orderHistory.length / ORDER_HISTORY_PAGE_SIZE) - 1);
+    setOrderHistoryPage((page) => Math.min(page, lastPage));
+  }, [orderHistory.length]);
 
   async function cancel(orderId: `0x${string}`) {
     if (!onCancel) return;
@@ -342,46 +349,85 @@ export function AccountPanel({
         return <EmptyState title="Loading order history" description="Reading your orders from the exchange." />;
       if (!orderHistory.length)
         return <EmptyState title="No order history" description="Submitted orders will appear here." />;
+      const totalPages = Math.ceil(orderHistory.length / ORDER_HISTORY_PAGE_SIZE);
+      const currentPage = Math.min(orderHistoryPage, totalPages - 1);
+      const firstOrderIndex = currentPage * ORDER_HISTORY_PAGE_SIZE;
+      const visibleOrders = orderHistory.slice(firstOrderIndex, firstOrderIndex + ORDER_HISTORY_PAGE_SIZE);
       return (
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Time</TableHead>
-              <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Market</TableHead>
-              <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Side / type</TableHead>
-              <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Price</TableHead>
-              <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Amount</TableHead>
-              <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Filled</TableHead>
-              <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {orderHistory.map((order) => (
-              <TableRow key={order.orderId}>
-                <TableCell className="px-4 py-2.5 font-mono text-xs tabular-nums text-muted-foreground">
-                  {order.time}
-                </TableCell>
-                <TableCell className="px-4 py-2.5 text-xs font-medium">{order.market}</TableCell>
-                <TableCell className="px-4 py-2.5 text-xs">
-                  <span className={cn("font-medium", order.side === "buy" ? "text-chart-3" : "text-destructive")}>
-                    {order.side === "buy" ? "Buy" : "Sell"}
-                  </span>
-                  <span className="ml-1.5 text-muted-foreground">· {order.type}</span>
-                </TableCell>
-                <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums">{order.price}</TableCell>
-                <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                  {order.amount}
-                </TableCell>
-                <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                  {order.filled}
-                </TableCell>
-                <TableCell className="px-4 py-2.5 text-right text-xs text-muted-foreground">
-                  {formatStatus(order.status)}
-                </TableCell>
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Time</TableHead>
+                <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Market</TableHead>
+                <TableHead className="h-9 px-4 text-[10px] uppercase tracking-wider">Side / type</TableHead>
+                <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Price</TableHead>
+                <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Amount</TableHead>
+                <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Filled</TableHead>
+                <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Status</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {visibleOrders.map((order) => (
+                <TableRow key={order.orderId}>
+                  <TableCell className="px-4 py-2.5 font-mono text-xs tabular-nums text-muted-foreground">
+                    {order.time}
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs font-medium">{order.market}</TableCell>
+                  <TableCell className="px-4 py-2.5 text-xs">
+                    <span className={cn("font-medium", order.side === "buy" ? "text-chart-3" : "text-destructive")}>
+                      {order.side === "buy" ? "Buy" : "Sell"}
+                    </span>
+                    <span className="ml-1.5 text-muted-foreground">· {order.type}</span>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums">{order.price}</TableCell>
+                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                    {order.amount}
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                    {order.filled}
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5 text-right text-xs text-muted-foreground">
+                    {formatStatus(order.status)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex min-h-14 flex-wrap items-center justify-end gap-3 border-t border-border px-4 py-2">
+            <p className="font-mono text-xs tabular-nums text-muted-foreground">
+              {firstOrderIndex + 1}–{firstOrderIndex + visibleOrders.length} of {orderHistory.length} orders
+            </p>
+            <nav aria-label="Order history pagination" className="flex items-center gap-2">
+              <Button
+                aria-label="Go to previous order history page"
+                className="size-10 rounded-full sm:size-8 sm:rounded-xl"
+                disabled={currentPage === 0}
+                onClick={() => setOrderHistoryPage(currentPage - 1)}
+                size="icon"
+                variant="secondary"
+              >
+                <ChevronLeft aria-hidden="true" strokeWidth={1.5} />
+              </Button>
+              <span
+                aria-live="polite"
+                className="min-w-20 text-center font-mono text-xs tabular-nums text-muted-foreground"
+              >
+                Page {currentPage + 1} of {totalPages}
+              </span>
+              <Button
+                aria-label="Go to next order history page"
+                className="size-10 rounded-full sm:size-8 sm:rounded-xl"
+                disabled={currentPage === totalPages - 1}
+                onClick={() => setOrderHistoryPage(currentPage + 1)}
+                size="icon"
+                variant="secondary"
+              >
+                <ChevronRight aria-hidden="true" strokeWidth={1.5} />
+              </Button>
+            </nav>
+          </div>
+        </>
       );
     }
     if (activeTab === "Recent Trades") {

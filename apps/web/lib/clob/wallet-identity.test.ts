@@ -39,27 +39,23 @@ test("isolates the Privy trading wallet from the connected external EOA", () => 
   assert.match(hooksSource, /sendPrivySponsoredCalls/);
 });
 
-test("keeps EOA identity actions separate from Privy funding actions", () => {
-  const connectedMenusSource =
+test("keeps EOA identity actions in the Privy wallet menu", () => {
+  const connectedMenuSource =
     walletButtonSource.split("if (connected && address)")[1]?.split("<FundingDialog")[0] ?? "";
-  const [eoaMenuSource = "", tradingMenuSource = ""] = connectedMenusSource.split("aria-label={`Open trading wallet");
 
   assert.match(walletButtonSource, /<Wallet aria-hidden="true"/);
-  assert.match(eoaMenuSource, /Connected wallet/);
-  assert.doesNotMatch(eoaMenuSource, /connectedEoaWallet\.meta\.name/);
-  assert.match(eoaMenuSource, /EOA address/);
-  assert.match(eoaMenuSource, /Copy EOA address/);
-  assert.match(eoaMenuSource, /Disconnect EOA/);
-  assert.doesNotMatch(eoaMenuSource, /<dt[^>]*>Network<\/dt>/);
-  assert.doesNotMatch(eoaMenuSource, /Connected EOA|EOA on wrong network/);
-  assert.doesNotMatch(eoaMenuSource, /Deposit assets|Withdraw assets/);
-  assert.match(tradingMenuSource, /Privy Trading Wallet/);
-  assert.match(tradingMenuSource, /Trading address/);
-  assert.match(tradingMenuSource, /Deposit assets/);
-  assert.match(tradingMenuSource, /Withdraw assets/);
-  assert.match(tradingMenuSource, /Copy trading address/);
-  assert.doesNotMatch(tradingMenuSource, /<dt[^>]*>Network<\/dt>/);
-  assert.doesNotMatch(tradingMenuSource, /Ready to trade|Privy wallet|Privy address/);
+  assert.match(connectedMenuSource, /aria-label=\{`Open trading wallet/);
+  assert.match(connectedMenuSource, /Privy Trading Wallet/);
+  assert.match(connectedMenuSource, /Trading address/);
+  assert.match(connectedMenuSource, /EOA address/);
+  assert.match(connectedMenuSource, /Deposit assets/);
+  assert.match(connectedMenuSource, /Withdraw assets/);
+  assert.match(connectedMenuSource, /Copy trading address/);
+  assert.match(connectedMenuSource, /Copy EOA address/);
+  assert.doesNotMatch(connectedMenuSource, /Disconnect EOA/);
+  assert.equal(connectedMenuSource.match(/Log out/g)?.length, 1);
+  assert.doesNotMatch(connectedMenuSource, /<dt[^>]*>Network<\/dt>/);
+  assert.doesNotMatch(connectedMenuSource, /Ready to trade|Privy wallet|Privy address/);
   assert.match(walletButtonSource, /<FundingDialog/);
   assert.match(walletButtonSource, /<FundingDialog[\s\S]*address=\{address\}/);
   assert.doesNotMatch(walletButtonSource, />\s*Wallet address\s*</);
@@ -131,16 +127,15 @@ test("reads token balances and orders only for the trading address", () => {
   assert.doesNotMatch(orderSource, /wallet\.address/);
 });
 
-test("uses an icon trigger for the EOA and an address trigger for Privy", () => {
+test("uses one address trigger for the unified wallet menu", () => {
   const triggerClassNames = [...walletButtonSource.matchAll(/<Menu\.Trigger[\s\S]*?className="([^"]+)"/g)].map(
     (match) => match[1],
   );
   const popupClassName = floatingMenuStylesSource.match(/const floatingMenuPopupClassName =\s*"([^"]+)"/)?.[1] ?? "";
-  const [eoaTriggerClassName = "", privyTriggerClassName = ""] = triggerClassNames;
-  const eoaTriggerSource = walletButtonSource.split("<Menu.Trigger")[1]?.split("</Menu.Trigger>")[0] ?? "";
-  const tradingTriggerSource = walletButtonSource.split("<Menu.Trigger")[2]?.split("</Menu.Trigger>")[0] ?? "";
+  const [privyTriggerClassName = ""] = triggerClassNames;
+  const tradingTriggerSource = walletButtonSource.split("<Menu.Trigger")[1]?.split("</Menu.Trigger>")[0] ?? "";
 
-  assert.equal(triggerClassNames.length, 2, "EOA and Privy should have distinct menu triggers");
+  assert.equal(triggerClassNames.length, 1, "EOA and Privy should share one menu trigger");
   assert.ok(popupClassName, "wallet menu popup should expose styling hooks");
 
   // Base UI provides the shared popup transform origin from its positioner.
@@ -171,31 +166,18 @@ test("uses an icon trigger for the EOA and an address trigger for Privy", () => 
   assert.match(popupClassName, /motion-reduce:data-ending-style:scale-x-100/);
   assert.match(popupClassName, /motion-reduce:data-ending-style:scale-y-100/);
 
-  assert.match(eoaTriggerClassName, /size-8/);
-  assert.match(eoaTriggerClassName, /rounded-full/);
-  assert.match(eoaTriggerClassName, /border-border/);
-  assert.match(eoaTriggerClassName, /bg-secondary/);
-  assert.match(eoaTriggerClassName, /dark:bg-secondary/);
-  assert.match(eoaTriggerClassName, /dark:hover:bg-secondary\/70/);
-  assert.match(eoaTriggerClassName, /active:scale-\[0\.96\]/);
-  assert.match(eoaTriggerClassName, /data-popup-open:bg-secondary\/70/);
   assert.match(privyTriggerClassName, /h-8/);
   assert.match(privyTriggerClassName, /px-4/);
   assert.match(privyTriggerClassName, /data-popup-open:bg-muted/);
   assert.doesNotMatch(tradingTriggerSource, /size-1\.5 rounded-full/);
 
-  // The icon button owns external EOA details; the address pill owns Privy funding and wallet management.
-  assert.match(
-    walletButtonSource,
-    /<Menu\.Trigger[\s\S]*aria-label=\{`Open wallet details for \$\{shortenAddress\(eoaAddress\)\}`\}/,
-  );
-  assert.match(walletButtonSource, /<Menu\.Trigger[\s\S]*<Wallet aria-hidden="true"/);
-  assert.match(eoaTriggerSource, /<Wallet aria-hidden="true" className="size-4" strokeWidth=\{2\.25\}/);
+  // The single address pill owns both EOA identity details and Privy wallet actions.
+  assert.doesNotMatch(walletButtonSource, /Open wallet details/);
   assert.match(
     walletButtonSource,
     /<Menu\.Trigger[\s\S]*aria-label=\{`Open trading wallet \$\{shortenAddress\(address\)\}`\}/,
   );
-  assert.match(walletButtonSource, /<ChevronDown[\s\S]*group-data-popup-open:rotate-180/);
+  assert.match(tradingTriggerSource, /<ChevronDown[\s\S]*group-data-popup-open:rotate-180/);
   assert.match(walletButtonSource, /data-popup-open/);
 });
 
@@ -205,21 +187,21 @@ test("shares the wallet dropdown surface and motion with the network selector", 
   assert.match(chainSwitcherSource, /floatingMenuPopupClassName/);
   assert.match(chainSwitcherSource, /floatingMenuItemClassName/);
   assert.match(chainSwitcherSource, /sideOffset=\{8\}/);
-  assert.match(chainSwitcherSource, /w-\(--anchor-width\)/);
+  assert.match(chainSwitcherSource, /min-w-40/);
   assert.match(floatingMenuStylesSource, /rounded-xl border border-border bg-popover p-1\.5/);
   assert.match(floatingMenuStylesSource, /transition-\[transform,translate,scale,opacity,filter,border-radius\]/);
   assert.match(floatingMenuStylesSource, /data-starting-style:scale-x-75/);
   assert.match(floatingMenuStylesSource, /data-ending-style:scale-x-96/);
 });
 
-test("places the connected EOA before the theme control at the end of the header", () => {
+test("places the unified wallet control before the theme control at the end of the header", () => {
   const headerActions = appHeaderSource.split('className="ml-auto flex items-center gap-2"')[1] ?? "";
 
   assert.ok(headerActions.indexOf("<ChainSwitcher") < headerActions.indexOf("<WalletButton"));
   assert.ok(headerActions.indexOf("<WalletButton") < headerActions.indexOf("<ThemeToggle"));
   assert.match(walletButtonSource, /<div className="contents">/);
-  assert.match(walletButtonSource, /Open wallet details[\s\S]*className="order-last/);
   assert.match(walletButtonSource, /aria-label="Connect an external EOA wallet"[\s\S]*className="order-last/);
+  assert.doesNotMatch(walletButtonSource, /Open wallet details/);
   assert.match(themeToggleSource, /className="order-last/);
 });
 

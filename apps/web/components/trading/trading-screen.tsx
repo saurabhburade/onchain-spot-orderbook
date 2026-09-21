@@ -92,8 +92,14 @@ function MarketHeader({
 }) {
   const router = useRouter();
   const { chainId } = useClobChain();
+  const statistics = [
+    ["Market type", "Spot"],
+    ["Last price", summary.price ?? "Not available"],
+    ["24h change", summary.change ?? "Not available"],
+    ["24h volume", summary.volume ?? "Not available"],
+  ] as const;
   return (
-    <div className="flex flex-col gap-4 sm:grid sm:min-h-[4.25rem] sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-stretch sm:gap-0">
+    <div className="grid min-h-[4.25rem] grid-cols-2 items-stretch border-b-[0.5px] border-border sm:grid-cols-[13rem_minmax(0,1fr)] sm:border-b-0">
       <div className="flex min-w-0 items-stretch border-r-[0.5px] border-border">
         <MarketSelector
           currentBaseIconUrl={pool ? listedTokenIconUrl(chainId, pool.baseAsset) : undefined}
@@ -107,13 +113,24 @@ function MarketHeader({
           }}
         />
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 text-xs sm:grid-cols-4 sm:gap-y-0 sm:px-5">
-        {[
-          ["Market type", "Spot"],
-          ["Last price", summary.price ?? "Not available"],
-          ["24h change", summary.change ?? "Not available"],
-          ["24h volume", summary.volume ?? "Not available"],
-        ].map(([label, value]) => (
+      <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-3 sm:hidden">
+        <p className="min-w-0 truncate font-mono text-lg font-medium tabular-nums text-foreground">
+          {loading ? "—" : (summary.price ?? "—")}
+        </p>
+        <p
+          className={`shrink-0 font-mono text-xs tabular-nums ${
+            summary.change?.startsWith("+")
+              ? "text-chart-3"
+              : summary.change?.startsWith("-")
+                ? "text-destructive"
+                : "text-muted-foreground"
+          }`}
+        >
+          {loading ? "Loading…" : (summary.change ?? "No 24h change")}
+        </p>
+      </div>
+      <div className="hidden grid-cols-2 gap-x-4 gap-y-3 py-4 text-xs sm:grid sm:grid-cols-4 sm:gap-y-0 sm:px-5">
+        {statistics.map(([label, value]) => (
           <div className="min-w-0" key={label}>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
             {loading && label !== "Market type" ? (
@@ -384,11 +401,13 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
 
   return (
     <main className="w-full">
-      <div className="grid items-stretch gap-4 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_280px_300px] lg:grid-rows-[4.25rem_minmax(464px,auto)] lg:gap-0 lg:p-0 xl:grid-cols-[minmax(0,1fr)_340px_320px] 2xl:grid-cols-[minmax(0,1fr)_384px_380px]">
-        <div className="border-b-[0.5px] border-border lg:col-span-2 lg:col-start-1 lg:row-start-1 lg:border-r-[0.5px] xl:col-span-1">
+      <div className="grid grid-cols-2 items-stretch gap-0 lg:grid-cols-[minmax(0,1fr)_280px_300px] lg:grid-rows-[4.25rem_minmax(464px,auto)] xl:grid-cols-[minmax(0,1fr)_340px_320px] 2xl:grid-cols-[minmax(0,1fr)_384px_380px]">
+        <div className="col-span-2 border-b-[0.5px] border-border lg:col-span-2 lg:col-start-1 lg:row-start-1 lg:border-r-[0.5px] xl:col-span-1">
           <MarketHeader loading={clob.pool.loading} markets={markets} pool={pool} summary={summary} />
         </div>
-        <PriceChart candles={candles} error={indexed.error ?? undefined} loading={false} summary={summary} />
+        <div className="hidden min-w-0 lg:contents">
+          <PriceChart candles={candles} error={indexed.error ?? undefined} loading={false} summary={summary} />
+        </div>
         <OrderBook
           baseSymbol={summary.baseAsset}
           bestPrices={clob.bestPrices.data}
@@ -402,8 +421,10 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
               : null
           }
           quoteSymbol={summary.quoteAsset}
+          className="col-start-2 row-start-2"
+          mobileCompact
         />
-        <aside className="space-y-4 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:space-y-0">
+        <aside className="col-start-1 row-start-2 min-w-0 border-r-[0.5px] border-border lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:flex lg:h-full lg:flex-col lg:border-r-0 lg:space-y-0">
           <TradeTicket
             baseBalance={baseBalance}
             connected={authenticated && Boolean(wallet)}
@@ -422,6 +443,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
             marketPrice={
               side === "buy" ? (clob.bestPrices.data?.ask?.price ?? null) : (clob.bestPrices.data?.bid?.price ?? null)
             }
+            mobileCompact
           />
         </aside>
       </div>

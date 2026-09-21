@@ -329,7 +329,7 @@ export function TradeTicket({
             Available in wallet
           </p>
           <span className="font-mono text-sm tabular-nums text-foreground">
-            {balance ? `${formatCurrencyAmount(balance.free)} ${balance.symbol}` : "Unavailable"}
+            {balance ? `${formatCurrencyAmount(balance.free)} ${balance.symbol}` : "0.00"}
           </span>
         </div>
         <FieldGroup className="gap-3">

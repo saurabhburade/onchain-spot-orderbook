@@ -1,32 +1,87 @@
-# CLOB
+# Onchain Spot Orderbook
 
-Turborepo workspace for a fully on-chain spot central limit order book on Monad.
+A fully on-chain spot central limit order book on Monad. Orders, price-time matching, settlement,
+and custody are enforced by smart contracts. The web app provides Privy wallet access, sponsored
+transactions, live market data, and trading tools.
 
-## Workspace
+## Features
 
-- `apps/web` — Next.js trading interface using shadcn, Tailwind CSS, Motion, and Privy.
-- `contracts` — Foundry package containing the initial exchange contract boundaries.
-- `apps/indexer` — Envio HyperIndex service for markets, orders, trades, and candles.
+- Limit and market orders with price-time priority
+- Per-order escrow with atomic settlement and cancellation
+- Sponsored ERC-4337 UserOperations for Monad Testnet transactions
+- Browser-local Kernel session keys authorized when the user signs in
+- Live order books, trades, candles, and market statistics through Envio
+- Permissionless token and market creation
+- Local Anvil support for contract and UI development
 
-The matching engine is on-chain. A bundler or paymaster may submit and sponsor user operations, but it
-does not choose matches or maintain authoritative order-book state.
+## Architecture
 
-## Architecture decisions
+| Package | Purpose |
+| --- | --- |
+| `apps/web` | Next.js trading interface, Privy wallet integration, and UserOperation relay |
+| `contracts` | Foundry project containing the order book, factory, lens, faucet, and token factory |
+| `apps/indexer` | Envio HyperIndex service for markets, orders, trades, candles, and statistics |
 
-- Order placement, cancellation, price-time matching, and settlement belong in Monad contracts.
-- Privy handles Ethereum wallet authentication and connection. The local deployment asks the
-  connected wallet to use the Anvil chain before submitting a transaction.
-- The trading data is currently typed mock data. `contracts` contains implementation
-  boundaries and security invariants; it does not yet contain the deployable matching engine.
+The contracts are the source of truth. The indexer serves query-friendly market data but does not
+participate in matching or settlement.
+
+### Transaction flow
+
+On Monad Testnet, the user's Privy EIP-7702 wallet authorizes an in-memory Kernel session key during
+the login lifecycle. Transactions are then prepared and signed locally in the browser. The relay
+validates the requested calls, simulates the UserOperation, and submits `EntryPoint.handleOps` from
+the server sponsor wallet. The API returns the transaction hash without waiting for confirmation.
+
+The session key remains in browser memory and is renewed in the background. The server never holds
+the user's wallet or session private key.
+
+## Monad Testnet deployment
+
+| Contract | Address |
+| --- | --- |
+| SpotCLOBFactory | [`0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b`](https://testnet.monadscan.com/address/0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b) |
+| SpotCLOBLens | [`0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F`](https://testnet.monadscan.com/address/0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F) |
+| ERC20TokenFactory | [`0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc`](https://testnet.monadscan.com/address/0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc) |
+| TokenFaucet | [`0xB8d1b7f2a722A0b5315eaF0840F652A95a758598`](https://testnet.monadscan.com/address/0xB8d1b7f2a722A0b5315eaF0840F652A95a758598) |
+
+Chain ID: `10143`
 
 ## Development
 
+### Requirements
+
+- Node.js 22+
+- pnpm 10+
+- Foundry for contract development
+- Docker for the local Envio indexer
+
+### Setup
+
 ```sh
 pnpm install
-pnpm dev:web
+cp apps/web/.env.example apps/web/.env.local
+pnpm dev
 ```
 
-Run all workspace checks with:
+Use `pnpm dev:web` to run only the web app. Configure wallet login and the local origin in the Privy
+dashboard before signing in.
+
+The main web configuration is:
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy application ID |
+| `PRIVY_APP_SECRET` | Server-side Privy authentication |
+| `PRIVY_JWT_VERIFICATION_KEY` | Optional local verification of Privy access tokens |
+| `SPONSER_PK` | Server sponsor wallet used to submit `EntryPoint.handleOps` |
+| `ENVIO_GRAPHQL_URL` | Envio GraphQL endpoint |
+| `NEXT_PUBLIC_MONAD_RPC_URLS` | Optional ordered Monad RPC overrides |
+| `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID` | Optional GA4 measurement ID |
+
+Keep `PRIVY_APP_SECRET` and `SPONSER_PK` server-side. See
+[`apps/web/.env.example`](apps/web/.env.example) for the complete configuration.
+
+## Verification
 
 ```sh
 pnpm check
@@ -34,88 +89,14 @@ pnpm test
 pnpm build
 ```
 
-Copy `apps/web/.env.example` to `apps/web/.env.local` and add `NEXT_PUBLIC_PRIVY_APP_ID` from the Privy
-dashboard. `NEXT_PUBLIC_PRIVY_CLIENT_ID` is optional and is only needed when using a Privy app client.
-Enable wallet login and add the local development origin (for example `http://localhost:3001`) in the
-Privy dashboard.
-
-## Privy paymaster stress test
-
-The web package includes a Monad Testnet-only stress harness that creates or reuses five
-Privy-owned server wallets, provisions two disposable base tokens and two USDC markets, and submits
-maker and taker batches from all five wallets in parallel. Every wallet request sets
-`sponsor: true`; the run fails if Privy does not report every submission as sponsored or if a trader
-pays native gas.
-
-Configure `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and the Monad paymaster in
-`apps/web/.env.local`, then run:
+Contract checks can also be run directly:
 
 ```sh
-pnpm --filter @clob/web stress:privy -- --dry-run
-STRESS_ROUNDS=10 pnpm --filter @clob/web stress:privy
+cd contracts
+forge fmt --check
+forge build
+forge test
 ```
 
-Use `--provision-only` to create and fund the reusable test setup without placing orders. Wallet
-authorization keys and the latest JSON report are written with mode `0600` to ignored
-`.env.privy-stress-*.json` files in `apps/web`.
-
-## Live USDT/USDC market maker
-
-The web package also includes a continuous Monad Testnet market maker for the deployed USDT/USDC
-pool. It creates or reuses five Privy embedded/server wallets, claims both USDT and USDC from the
-faucet, approves the pair-specific book, and submits each maker or taker wave from all five wallets
-in parallel. Calls within one wallet are batched into one sponsored transaction so that its old
-quotes are cancelled and replaced atomically.
-
-```sh
-# Validate the deployment and configuration without creating wallets or sending transactions.
-pnpm --filter @clob/web maker:live -- --dry-run
-
-# Create/fund/approve the five persistent Privy wallets, but do not quote yet.
-pnpm --filter @clob/web maker:live -- --provision-only
-
-# Run until Ctrl-C. Existing quotes remain on the book when the process exits.
-pnpm --filter @clob/web maker:live
-
-# Cancel all open orders owned by the five market-maker wallets.
-pnpm --filter @clob/web maker:live -- --cleanup
-
-# Execute one sponsored 1 USDT market sell from one Privy wallet without changing quotes.
-pnpm --filter @clob/web maker:live -- --trade-only --sell
-```
-
-The default USDT / USDC market is pool `0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c`
-at the route `/10143/markets/<pool-id>/trade`. The precision-price stable-pair deployment defaults
-to 20 bids from `0.995` down to `0.900` and 20 asks from `1.005` up to `1.100`, in `0.005` steps.
-Override these with `MM_BID_PRICE`, `MM_ASK_PRICE`, and `MM_PRICE_STEP`. Every bid and ask level gets
-an independently randomized size from `MM_MIN_ORDER_SIZE` (default `8` USDT) through
-`MM_MAX_ORDER_SIZE` (default `40` USDT) on every refresh. `MM_ORDER_SIZE` remains available when a
-fixed size is desired. Other useful controls are `MM_TAKER_SIZE` (default `1` USDT),
-`MM_INTERVAL_MS` (default `5000`), `MM_TAKER_EVERY` (default every round),
-`MM_TAKER_WALLET` (default wallet `5`; exactly one market trade per taker wave), `MM_LEVELS_PER_SIDE`
-(20–50), and `MM_MAX_ROUNDS` (`0` means unlimited). Set `MM_CANCEL_ON_EXIT=true` to withdraw all
-resting quotes on shutdown. The state and rolling report are private ignored files in
-`apps/web/.env.privy-market-maker-*.json`.
-
-## Direct UserOperation sponsorship
-
-On Monad Testnet, every write initiated by the web UI uses the direct UserOperation relay: order
-placement and cancellation, faucet claims, native and ERC-20 withdrawals, token deployment, and
-market creation. The user's Privy EIP-7702 wallet signs each operation in the browser; the server
-validates the exact intent and pays gas with `SPONSER_PK`. The submit endpoint returns the transaction
-hash immediately without waiting for confirmation, and the UI reports browser-signing, relay, and
-total sign-to-hash latency. Token and market creation continue watching that hash afterward because
-their screens need the emitted token or book address.
-
-The web package includes a Monad Testnet smoke test for bypassing Privy's sponsorship path. It asks
-an existing Privy EIP-7702/Kernel wallet to sign a zero-fee ERC-4337 UserOperation, then submits
-`EntryPoint.handleOps` from the server sponsor wallet. The user never receives or spends MON, and no
-paymaster contract is involved. The operation calls the read-only `getBestPrices` function so it does
-not change CLOB state.
-
-Set `SPONSER_PK` in `apps/web/.env.local`, then simulate the complete flow before broadcasting:
-
-```sh
-pnpm --filter @clob/web userop:direct
-pnpm --filter @clob/web userop:direct -- --send
-```
+See [`contracts/README.md`](contracts/README.md) for contract design and deployment details, and
+[`apps/indexer/README.md`](apps/indexer/README.md) for indexer configuration and GraphQL examples.

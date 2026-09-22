@@ -46,6 +46,24 @@ the user's wallet or session private key.
 
 Chain ID: `10143`
 
+## Monad gas benchmark
+
+- Gas price: `102 Gwei` (`0.000000102 MON/gas`)
+- USD reference: `0.003016344 MON = $0.000076`
+
+Fixture seeding is excluded from measured gas.
+
+| Action | Book before | Levels before | Matches | Total gas | Gas/match | Fee (MON) | Fee (USD) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Create limit, new price level | 0 | 0 | 0 | 732,562 | — | 0.074721324 | $0.001883 |
+| Create limit, existing price level | 1 | 1 | 0 | 212,944 | — | 0.021720288 | $0.000547 |
+| Cancel one resting order | 1 | 1 | 0 | 49,487 | — | 0.005047674 | $0.000127 |
+| Fill one resting order, limit | 1 | 1 | 1 | 491,659 | 491,659 | 0.050149218 | $0.001264 |
+| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,112,030 | 91,120 | 0.929427060 | $0.023418 |
+| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 4,981,412 | 99,628 | 0.508104024 | $0.012802 |
+| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 9,651,622 | 96,516 | 0.984465444 | $0.024805 |
+| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 19,004,010 | 95,020 | 1.938409020 | $0.048840 |
+
 ## Development
 
 ### Requirements

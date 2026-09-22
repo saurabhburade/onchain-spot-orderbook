@@ -82,7 +82,6 @@ export function DeployTokenScreen() {
           chainId,
           calls: [{ to: config.tokenFactoryAddress, data }],
           sender: wallet.address as Address,
-          provider: await wallet.getEthereumProvider(),
           onAccountNotDelegated: async () =>
             (await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId))).hash,
         });

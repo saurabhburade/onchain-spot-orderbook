@@ -60,6 +60,7 @@ const defaultValue: ClobWalletContextValue = {
 };
 const ClobWalletContext = createContext<ClobWalletContextValue>(defaultValue);
 const EOA_LOGOUT_GRACE_MS = 1_000;
+const SESSION_RENEWAL_LEAD_MS = 5 * 60 * 1_000;
 // Privy's remote JWKS cache lasts 60 minutes. Refresh well before that so the
 // next trade never has to pay the cold verification-key lookup.
 const AUTH_WARM_INTERVAL_MS = 10 * 60 * 1_000;
@@ -161,31 +162,39 @@ export function ClobWalletProvider({ children }: { children: ReactNode }) {
     const authWarmTimer = window.setInterval(warmAuthentication, AUTH_WARM_INTERVAL_MS);
     window.addEventListener("focus", warmAuthentication);
     document.addEventListener("visibilitychange", warmAuthenticationWhenVisible);
+    let sessionProvider: Awaited<ReturnType<typeof wallet.getEthereumProvider>> | null = null;
+    const authorizeSession = async () => {
+      if (cancelled || !sessionProvider) return;
+      if (renewalTimer !== undefined) window.clearTimeout(renewalTimer);
+      try {
+        const session = await prepareKernelSessionKey({
+          chainId: config.chain.id,
+          owner: tradingAddress,
+          provider: sessionProvider,
+          publicClient: publicClient as never,
+        });
+        if (cancelled) return;
+        const renewInMs = Math.max(1_000, session.validUntil * 1_000 - Date.now() - SESSION_RENEWAL_LEAD_MS);
+        renewalTimer = window.setTimeout(() => {
+          clearKernelSessionKey(config.chain.id, tradingAddress);
+          void authorizeSession();
+        }, renewInMs);
+      } catch (error) {
+        console.warn("Could not pre-authorize the Kernel session key", error);
+        if (!cancelled) renewalTimer = window.setTimeout(() => void authorizeSession(), 30_000);
+      }
+    };
+    const authorizeSessionWhenVisible = () => {
+      if (document.visibilityState === "visible") void authorizeSession();
+    };
+    const authorizeSessionOnFocus = () => void authorizeSession();
     void wallet
       .getEthereumProvider()
       .then((provider) => {
-        const authorizeSession = async () => {
-          if (cancelled) return;
-          try {
-            const session = await prepareKernelSessionKey({
-              chainId: config.chain.id,
-              owner: tradingAddress,
-              provider,
-              publicClient: publicClient as never,
-            });
-            if (cancelled) return;
-            const renewInMs = Math.max(1_000, session.validUntil * 1_000 - Date.now() + 1_000);
-            renewalTimer = window.setTimeout(() => {
-              clearKernelSessionKey(config.chain.id, tradingAddress);
-              void authorizeSession();
-            }, renewInMs);
-          } catch (error) {
-            // Transaction submission retains the lazy setup path, so a
-            // transient login-time failure cannot make the wallet unusable.
-            console.warn("Could not pre-authorize the Kernel session key", error);
-          }
-        };
+        sessionProvider = provider;
         void authorizeSession();
+        window.addEventListener("focus", authorizeSessionOnFocus);
+        document.addEventListener("visibilitychange", authorizeSessionWhenVisible);
       })
       .catch((error) => console.warn("Could not get the Privy provider for Kernel session setup", error));
     return () => {
@@ -193,6 +202,8 @@ export function ClobWalletProvider({ children }: { children: ReactNode }) {
       window.clearInterval(authWarmTimer);
       window.removeEventListener("focus", warmAuthentication);
       document.removeEventListener("visibilitychange", warmAuthenticationWhenVisible);
+      window.removeEventListener("focus", authorizeSessionOnFocus);
+      document.removeEventListener("visibilitychange", authorizeSessionWhenVisible);
       if (renewalTimer !== undefined) window.clearTimeout(renewalTimer);
     };
   }, [authenticated, config.chain.id, getAccessToken, isCorrectChain, publicClient, ready, tradingAddress, wallet]);

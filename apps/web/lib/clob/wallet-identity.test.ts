@@ -89,9 +89,14 @@ test("pre-authorizes the local Kernel session when login completes", () => {
   assert.match(walletContextSource, /prepareKernelSessionKey/);
   assert.match(walletContextSource, /wallet\s*\.getEthereumProvider\(\)/);
   assert.match(walletContextSource, /config\.chain\.id !== 10_143/);
-  assert.match(walletContextSource, /session\.validUntil \* 1_000 - Date\.now\(\) \+ 1_000/);
+  assert.match(walletContextSource, /const SESSION_RENEWAL_LEAD_MS = 5 \* 60 \* 1_000/);
+  assert.match(walletContextSource, /session\.validUntil \* 1_000 - Date\.now\(\) - SESSION_RENEWAL_LEAD_MS/);
   assert.match(walletContextSource, /clearKernelSessionKey\(config\.chain\.id, tradingAddress\)/);
   assert.match(walletContextSource, /Could not pre-authorize the Kernel session key/);
+  assert.match(walletContextSource, /window\.addEventListener\("focus", authorizeSessionOnFocus\)/);
+  assert.match(walletContextSource, /document\.addEventListener\("visibilitychange", authorizeSessionWhenVisible\)/);
+  assert.match(walletContextSource, /window\.removeEventListener\("focus", authorizeSessionOnFocus\)/);
+  assert.match(walletContextSource, /document\.removeEventListener\("visibilitychange", authorizeSessionWhenVisible\)/);
   assert.match(walletContextSource, /getAccessToken\(\)/);
   assert.match(walletContextSource, /warmDirectUserOperationAuth/);
   assert.match(walletContextSource, /Could not warm the sponsored UserOperation authentication/);
@@ -100,6 +105,16 @@ test("pre-authorizes the local Kernel session when login completes", () => {
   assert.match(walletContextSource, /window\.addEventListener\("focus", warmAuthentication\)/);
   assert.match(walletContextSource, /document\.addEventListener\("visibilitychange", warmAuthenticationWhenVisible\)/);
   assert.match(walletContextSource, /window\.clearInterval\(authWarmTimer\)/);
+});
+
+test("keeps Privy root signing out of every transaction path", () => {
+  const submitSource =
+    hooksSource.split("const submitDirectCalls = useCallback")[1]?.split("const placeOrder = useCallback")[0] ?? "";
+  const withdrawSource =
+    walletButtonSource.split("async function withdraw")[1]?.split("if (connected && !address)")[0] ?? "";
+
+  assert.doesNotMatch(submitSource, /getEthereumProvider/);
+  assert.doesNotMatch(withdrawSource, /getEthereumProvider/);
 });
 
 test("keeps the fully disconnected wallet action primary and icon-labeled", () => {

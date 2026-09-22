@@ -237,7 +237,6 @@ function ConnectedWalletButton() {
         accessToken,
         calls,
         chainId: config.chain.id,
-        provider: await wallet.getEthereumProvider(),
         sender: wallet.address as Address,
         onAccountNotDelegated: async () =>
           (

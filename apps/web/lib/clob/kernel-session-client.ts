@@ -148,6 +148,24 @@ async function getOrCreateSession(input: {
   }
 }
 
+async function getPreparedSession(chainId: number, owner: Address) {
+  const key = sessionId(chainId, owner);
+  const now = Math.floor(Date.now() / 1_000);
+  const existing = sessions.get(key);
+  if (existing && now < existing.validUntil) return existing;
+  sessions.delete(key);
+
+  // A trade may arrive while login-time authorization is still finishing. It
+  // may await that existing work, but it must never initiate a Privy root
+  // signature itself.
+  const pending = pendingSessions.get(key);
+  if (pending) {
+    const session = await pending;
+    if (Math.floor(Date.now() / 1_000) < session.validUntil) return session;
+  }
+  throw new Error("Your local signing session is not ready. Please wait for login setup and try again");
+}
+
 export function clearKernelSessionKey(chainId?: number, owner?: Address) {
   if (chainId !== undefined && owner) {
     sessions.delete(sessionId(chainId, owner));
@@ -178,27 +196,19 @@ export async function prepareKernelSessionKey(input: {
 
 /**
  * One Privy root signature creates an in-memory, 24-hour Kernel permission.
- * Every following UserOperation is signed locally with the session private key.
+ * Session creation belongs to the login/background lifecycle. Transaction
+ * submission only reads the prepared session and signs locally with its key.
  */
 export async function submitDirectUserOperationWithSessionKey<T = never>(input: {
   accessToken: string;
   chainId: number;
   calls: readonly AtomicCall[];
   sender: Address;
-  provider: EthereumProvider;
   onAccountNotDelegated?: () => Promise<T>;
   fetchFn?: typeof fetch;
-  publicClient?: SessionPublicClient;
 }): Promise<DirectUserOperationResult | T> {
   const totalStartedAt = performance.now();
-  const setupStartedAt = performance.now();
-  const { session, created } = await getOrCreateSession({
-    chainId: input.chainId,
-    owner: input.sender,
-    provider: input.provider,
-    publicClient: input.publicClient,
-  });
-  const setupMs = created ? Math.round(performance.now() - setupStartedAt) : 0;
+  const session = await getPreparedSession(input.chainId, input.sender);
   const mode = session.enabled ? KERNEL_PERMISSION_MODE_DEFAULT : KERNEL_PERMISSION_MODE_ENABLE;
   const nonceKey = encodeKernelV33PermissionNonceKey(session.permissionId, 0n, mode);
   const nonceSequence = mode === KERNEL_PERMISSION_MODE_DEFAULT ? session.nonceSequence : 0n;
@@ -254,7 +264,7 @@ export async function submitDirectUserOperationWithSessionKey<T = never>(input: 
   if (mode === KERNEL_PERMISSION_MODE_DEFAULT) session.nonceSequence += 1n;
   session.enabled = true;
   const metrics = {
-    setupMs,
+    setupMs: 0,
     prepareMs,
     prepareBreakdown: prepared.timing,
     signMs,

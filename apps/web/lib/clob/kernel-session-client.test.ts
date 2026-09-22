@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { Hex } from "viem";
@@ -11,6 +12,7 @@ import {
 
 const sender = "0x1111111111111111111111111111111111111111" as const;
 const call = { to: sender, data: "0xabcdef" as Hex };
+const kernelSessionClientSource = readFileSync(new URL("./kernel-session-client.ts", import.meta.url), "utf8");
 const submitServerTiming = {
   authMs: 3,
   serverMs: 211,
@@ -30,7 +32,7 @@ const submitServerTiming = {
   rpcSubmissionMs: 59,
 };
 
-test("prewarms at login, signs locally, and automatically renews an expired session", async () => {
+test("creates and renews sessions outside the trade path, then signs trades locally", async () => {
   clearKernelSessionKey();
   const originalNow = Date.now;
   let nowMs = originalNow();
@@ -56,6 +58,17 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
   const publicClient = { readContract: async () => 1 } as never;
 
   try {
+    await assert.rejects(
+      () =>
+        submitDirectUserOperationWithSessionKey({
+          accessToken: "privy-token",
+          chainId: 10_143,
+          calls: [call],
+          sender,
+          fetchFn,
+        }),
+      /local signing session is not ready/,
+    );
     const loginSetup = await prepareKernelSessionKey({
       chainId: 10_143,
       owner: sender,
@@ -67,8 +80,6 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
       chainId: 10_143,
       calls: [call],
       sender,
-      provider,
-      publicClient,
       fetchFn,
     });
     const second = await submitDirectUserOperationWithSessionKey({
@@ -76,8 +87,6 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
       chainId: 10_143,
       calls: [call],
       sender,
-      provider,
-      publicClient,
       fetchFn,
     });
     const third = await submitDirectUserOperationWithSessionKey({
@@ -85,22 +94,36 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
       chainId: 10_143,
       calls: [call],
       sender,
-      provider,
-      publicClient,
       fetchFn,
     });
     nowMs += 25 * 60 * 60 * 1_000;
+    await assert.rejects(
+      () =>
+        submitDirectUserOperationWithSessionKey({
+          accessToken: "privy-token",
+          chainId: 10_143,
+          calls: [call],
+          sender,
+          fetchFn,
+        }),
+      /local signing session is not ready/,
+    );
+    const backgroundRenewal = await prepareKernelSessionKey({
+      chainId: 10_143,
+      owner: sender,
+      provider,
+      publicClient,
+    });
     const renewed = await submitDirectUserOperationWithSessionKey({
       accessToken: "privy-token",
       chainId: 10_143,
       calls: [call],
       sender,
-      provider,
-      publicClient,
       fetchFn,
     });
 
     assert.equal(loginSetup.created, true);
+    assert.equal(backgroundRenewal.created, true);
     assert.equal(rootSignCalls, 2);
     assert.equal(first.hash, `0x${"34".repeat(32)}`);
     assert.equal(second.hash, first.hash);
@@ -108,7 +131,7 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
     assert.equal(renewed.hash, first.hash);
     assert.equal(first.metrics.setupMs, 0);
     assert.equal(second.metrics.setupMs, 0);
-    assert.ok((renewed.metrics.setupMs ?? -1) >= 0);
+    assert.equal(renewed.metrics.setupMs, 0);
     assert.ok(first.metrics.signMs >= 0);
     assert.deepEqual(first.metrics.submitBreakdown, {
       ...submitServerTiming,
@@ -149,4 +172,12 @@ test("prewarms at login, signs locally, and automatically renews an expired sess
     Date.now = originalNow;
     clearKernelSessionKey();
   }
+});
+
+test("never initiates Privy session authorization from transaction submission", () => {
+  const submitSource =
+    kernelSessionClientSource.split("export async function submitDirectUserOperationWithSessionKey")[1] ?? "";
+
+  assert.match(submitSource, /getPreparedSession/);
+  assert.doesNotMatch(submitSource, /getOrCreateSession|createSession|rootSignHash|input\.provider/);
 });

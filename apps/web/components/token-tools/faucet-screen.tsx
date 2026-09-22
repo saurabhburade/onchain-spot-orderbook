@@ -148,7 +148,6 @@ export function FaucetScreen() {
           accessToken,
           calls: [{ to: faucet, data }],
           chainId,
-          provider: await wallet.getEthereumProvider(),
           sender: tradingAddress,
           onAccountNotDelegated: async () => {
             const transactionId = await sendPrivySponsoredCalls({

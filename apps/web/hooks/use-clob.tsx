@@ -437,7 +437,6 @@ export function useCreateMarket() {
             chainId,
             calls: [{ to: factoryAddress, data, value: creationFee }],
             sender,
-            provider: await wallet.getEthereumProvider(),
             onAccountNotDelegated: async () =>
               (await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId))).hash,
           });
@@ -1220,13 +1219,11 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
       const accessToken = await getAccessToken();
       if (!accessToken) throw new Error("Your Privy session expired before the order could be submitted");
 
-      const provider = await activeWallet.getEthereumProvider();
       return submitDirectUserOperationWithSessionKey({
         accessToken,
         chainId,
         calls,
         sender: activeTrader,
-        provider,
         onAccountNotDelegated: () => sendPrivyOrder(calls),
       });
     },

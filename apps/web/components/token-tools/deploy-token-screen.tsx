@@ -1,6 +1,6 @@
 "use client";
 
-import { useSendTransaction } from "@privy-io/react-auth";
+import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import { Check, Coins, Copy, LoaderCircle } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
@@ -12,7 +12,9 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { tokenFactoryAbi } from "@/config/abis";
 import { waitForTransaction } from "@/config/viem";
-import { useClobChain, useClobWallet } from "@/lib/clob";
+import { MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@/lib/clob";
+import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
+import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/forms/numeric-input";
 
@@ -23,6 +25,7 @@ function errorMessage(error: unknown) {
 export function DeployTokenScreen() {
   const { chainId, config } = useClobChain();
   const { authenticated, connect, ready, wallet } = useClobWallet();
+  const { getAccessToken } = usePrivy();
   const { sendTransaction } = useSendTransaction();
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -30,7 +33,11 @@ export function DeployTokenScreen() {
   const [initialSupply, setInitialSupply] = useState("1000000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deployed, setDeployed] = useState<{ address: Address; hash: Hash } | null>(null);
+  const [deployed, setDeployed] = useState<{
+    address: Address;
+    hash: Hash;
+    metrics?: DirectUserOperationResult["metrics"];
+  } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const deploy = async () => {
@@ -64,10 +71,29 @@ export function DeployTokenScreen() {
         functionName: "createToken",
         args: [name.trim(), symbol.trim(), parsedDecimals, rawSupply],
       });
-      const { hash } = await sendTransaction(
-        { chainId, data, to: config.tokenFactoryAddress },
-        headlessTransactionOptions(wallet.address, chainId),
-      );
+      const transactionRequest = { chainId, data, to: config.tokenFactoryAddress } as const;
+      let hash: Hash;
+      let metrics: DirectUserOperationResult["metrics"] | undefined;
+      if (chainId === MONAD_TESTNET_CHAIN_ID) {
+        const accessToken = await getAccessToken();
+        if (!accessToken) throw new Error("Your Privy session expired before the token could be deployed");
+        const result = await submitDirectUserOperationWithSessionKey<Hash>({
+          accessToken,
+          chainId,
+          calls: [{ to: config.tokenFactoryAddress, data }],
+          sender: wallet.address as Address,
+          provider: await wallet.getEthereumProvider(),
+          onAccountNotDelegated: async () =>
+            (await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId))).hash,
+        });
+        if (typeof result === "string") hash = result;
+        else {
+          hash = result.hash;
+          metrics = result.metrics;
+        }
+      } else {
+        ({ hash } = await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId)));
+      }
       const receipt = await waitForTransaction(chainId, hash);
       const events = parseEventLogs({
         abi: tokenFactoryAbi,
@@ -76,7 +102,7 @@ export function DeployTokenScreen() {
       });
       const token = events[0]?.args.token;
       if (!token) throw new Error("Token deployed, but its address was not found in the receipt");
-      setDeployed({ address: token, hash });
+      setDeployed({ address: token, hash, metrics });
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -204,6 +230,22 @@ export function DeployTokenScreen() {
                     <div className="flex items-center gap-2 text-sm font-medium text-chart-3">
                       <Check aria-hidden="true" className="size-4" strokeWidth={2} /> Token deployed
                     </div>
+                    {deployed.metrics ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Submitted in {deployed.metrics.totalMs} ms (
+                        {deployed.metrics.setupMs ? `one-time setup ${deployed.metrics.setupMs} ms, ` : ""}
+                        {deployed.metrics.prepareMs !== undefined
+                          ? deployed.metrics.prepareBreakdown
+                            ? `prepare API ${deployed.metrics.prepareMs} ms [browser↔API/Next ${deployed.metrics.prepareBreakdown.networkMs} ms, auth ${deployed.metrics.prepareBreakdown.authMs} ms, RPC wall ${deployed.metrics.prepareBreakdown.rpcWallMs} ms (nonce ${deployed.metrics.prepareBreakdown.nonceMs}, delegation ${deployed.metrics.prepareBreakdown.delegationMs}, order book ${deployed.metrics.prepareBreakdown.orderBookMs}, chain ${deployed.metrics.prepareBreakdown.chainIdMs}), local validate/hash ${deployed.metrics.prepareBreakdown.localMs} ms, response ${deployed.metrics.prepareBreakdown.responseMs} ms], `
+                            : `local prepare ${deployed.metrics.prepareMs} ms, `
+                          : ""}
+                        local sign {deployed.metrics.signMs} ms,{" "}
+                        {deployed.metrics.submitBreakdown
+                          ? `submit API ${deployed.metrics.submitMs} ms [browser↔API/Next ${deployed.metrics.submitBreakdown.networkMs} ms, auth ${deployed.metrics.submitBreakdown.authMs} ms, RPC batch wall ${deployed.metrics.submitBreakdown.validationWallMs} ms (chain ${deployed.metrics.submitBreakdown.chainIdMs}, delegation ${deployed.metrics.submitBreakdown.delegationMs}, order book ${deployed.metrics.submitBreakdown.orderBookMs}, policy ${deployed.metrics.submitBreakdown.policyRpcMs}, UserOp nonce ${deployed.metrics.submitBreakdown.nonceMs}, hash ${deployed.metrics.submitBreakdown.hashMs}, simulation ${deployed.metrics.submitBreakdown.simulationMs}, sponsor fields ${deployed.metrics.submitBreakdown.broadcastPrepareMs} [nonce ${deployed.metrics.submitBreakdown.sponsorNonceMs}, gas price ${deployed.metrics.submitBreakdown.gasPriceMs}]), broadcast ${deployed.metrics.submitBreakdown.broadcastMs} ms (sponsor sign ${deployed.metrics.submitBreakdown.sponsorSignMs}, eth_sendRawTransaction ${deployed.metrics.submitBreakdown.rpcSubmissionMs}), response ${deployed.metrics.submitBreakdown.responseMs} ms]`
+                          : `submit API ${deployed.metrics.submitMs} ms`}
+                        )
+                      </p>
+                    ) : null}
                     <div className="mt-3 flex items-center gap-2 rounded-lg bg-background/70 px-3 py-2">
                       <code className="min-w-0 flex-1 truncate text-xs tabular-nums">{deployed.address}</code>
                       <Button

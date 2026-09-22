@@ -9,6 +9,11 @@ const deploySource = readFileSync(
 );
 const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
 const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const tradingScreenSource = readFileSync(
+  new URL("../../components/trading/trading-screen.tsx", import.meta.url),
+  "utf8",
+);
+const directClientSource = readFileSync(new URL("./direct-userop-client.ts", import.meta.url), "utf8");
 const createMarketSource =
   hooksSource.split("export function useCreateMarket()")[1]?.split("export function useOrderbook")[0] ?? "";
 const marketsSource =
@@ -17,7 +22,8 @@ const atomicOrderSource = hooksSource.split("const sendAtomicOrder")[1]?.split("
 const limitOrderSource = hooksSource.split("const placeLimit")[1]?.split("const executeMarket")[0] ?? "";
 const marketOrderSource = hooksSource.split("const executeMarket")[1]?.split("const cancel")[0] ?? "";
 const actionRunnerSource = hooksSource.split("const run = useCallback")[1]?.split("const sendAtomicOrder")[0] ?? "";
-const privyOrderSource = hooksSource.split("const sendPrivyOrder")[1]?.split("const sendAtomicOrder")[0] ?? "";
+const privyOrderSource = hooksSource.split("const sendPrivyOrder")[1]?.split("const sendDirectOrder")[0] ?? "";
+const directOrderSource = hooksSource.split("const sendDirectOrder")[1]?.split("const sendAtomicOrder")[0] ?? "";
 
 describe("headless sponsored token deployment", () => {
   it("hides the wallet UI and limits sponsorship to Monad Testnet", () => {
@@ -28,12 +34,17 @@ describe("headless sponsored token deployment", () => {
   it("uses the headless transaction options when deploying a token", () => {
     assert.match(deploySource, /sendTransaction\s*\(/);
     assert.match(deploySource, /headlessTransactionOptions\(wallet\.address,\s*chainId\)/);
+    assert.match(deploySource, /submitDirectUserOperationWithSessionKey/);
+    assert.match(deploySource, /onAccountNotDelegated/);
     assert.doesNotMatch(deploySource, /createPrivyWalletClient/);
   });
 
   it("uses the headless transaction options when claiming faucet tokens", () => {
     assert.match(faucetSource, /sendTransaction\s*\(/);
     assert.match(faucetSource, /headlessTransactionOptions\(wallet\.address,\s*chainId\)/);
+    assert.match(faucetSource, /submitDirectUserOperationWithSessionKey/);
+    assert.match(faucetSource, /onAccountNotDelegated/);
+    assert.match(faucetSource, /if\s*\(!submittedWithSponsorship\)\s*await waitForTransaction\(chainId,\s*hash\)/);
     assert.doesNotMatch(faucetSource, /createPrivyWalletClient/);
   });
 
@@ -45,6 +56,8 @@ describe("headless sponsored token deployment", () => {
     assert.match(createMarketSource, /isUnsupportedContractFunctionError\(error\)/);
     assert.match(createMarketSource, /legacyCreatePairArgs\(input\.baseAsset,\s*input\.quoteAsset\)/);
     assert.match(createMarketSource, /value:\s*creationFee/);
+    assert.match(createMarketSource, /submitDirectUserOperationWithSessionKey/);
+    assert.match(createMarketSource, /calls:\s*\[\{ to: factoryAddress, data, value: creationFee \}\]/);
   });
 
   it("resolves market icons from decoded asset addresses after explicit listing overrides", () => {
@@ -73,10 +86,41 @@ describe("headless sponsored token deployment", () => {
     assert.match(marketOrderSource, /sendAtomicOrder\(orderAsset,\s*contractAddress,\s*escrowAmount,\s*data\)/);
   });
 
-  it("sends every Monad order through the one-address Privy sponsored path", () => {
+  it("prepares every Monad order for direct UserOperation signing", () => {
     assert.match(atomicOrderSource, /if\s*\(allowance\s*<\s*amount\)/);
-    assert.match(atomicOrderSource, /if\s*\(chainId\s*===\s*MONAD_TESTNET_CHAIN_ID\)\s*return sendPrivyOrder\(calls\)/);
+    assert.match(
+      atomicOrderSource,
+      /if\s*\(chainId\s*===\s*MONAD_TESTNET_CHAIN_ID\)\s*return sendDirectOrder\(calls\)/,
+    );
     assert.match(atomicOrderSource, /args:\s*\[activeTrader,\s*spender\]/);
+    assert.match(directOrderSource, /submitDirectUserOperationWithSessionKey\(/);
+    assert.match(directOrderSource, /onAccountNotDelegated: \(\) => sendPrivyOrder\(calls\)/);
+    assert.doesNotMatch(directOrderSource, /waitForTransaction\(/);
+    assert.match(directClientSource, /const signStartedAt = performance\.now\(\)/);
+    assert.match(directClientSource, /const signMs = Math\.round\(performance\.now\(\) - signStartedAt\)/);
+    assert.match(directClientSource, /const submitStartedAt = performance\.now\(\)/);
+    assert.match(directClientSource, /const submitMs = Math\.round\(performance\.now\(\) - submitStartedAt\)/);
+    assert.match(directClientSource, /console\.info\("Direct UserOperation latency"/);
+  });
+
+  it("shows direct submission latency in the trading feedback", () => {
+    assert.match(tradingScreenSource, /clob\.transaction\.metrics/);
+    assert.match(tradingScreenSource, /Submitted in \$\{clob\.transaction\.metrics\.totalMs\} ms/);
+    assert.match(tradingScreenSource, /sign \$\{clob\.transaction\.metrics\.signMs\} ms/);
+    assert.match(tradingScreenSource, /API \$\{clob\.transaction\.metrics\.submitMs\} ms/);
+    assert.match(tradingScreenSource, /RPC wall/);
+    assert.match(tradingScreenSource, /nonce/);
+    assert.match(tradingScreenSource, /delegation/);
+    assert.match(tradingScreenSource, /order book/);
+    assert.match(tradingScreenSource, /chain/);
+    assert.match(tradingScreenSource, /auth/);
+    assert.match(tradingScreenSource, /RPC batch wall/);
+    assert.match(tradingScreenSource, /simulation/);
+    assert.match(tradingScreenSource, /sponsor fields/);
+    assert.match(tradingScreenSource, /gas price/);
+    assert.match(tradingScreenSource, /broadcast/);
+    assert.match(tradingScreenSource, /eth_sendRawTransaction/);
+    assert.match(tradingScreenSource, /response/);
   });
 
   it("reuses an in-flight action instead of sending duplicate wallet RPC requests", () => {

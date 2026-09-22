@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu } from "@base-ui/react/menu";
-import { useAuthorizationSignature, usePrivy, useSendTransaction } from "@privy-io/react-auth";
+import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -20,9 +20,11 @@ import { usePrivyConfigured } from "@/components/providers";
 import { type FundingAction, FundingDialog, type WalletAsset } from "@/components/trading/funding-dialog";
 import { Button } from "@/components/ui/button";
 import { floatingMenuItemClassName, floatingMenuPopupClassName } from "@/components/ui/floating-menu-styles";
+import { toast } from "@/components/ui/toast";
 import { erc20Abi, MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@/lib/clob";
 import { notifyBalanceRefresh, subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
-import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
+import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
+import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -74,11 +76,9 @@ function ConnectedWalletButton() {
     switchToClobChain,
     tradingAddress,
     wallet,
-    walletId,
   } = useClobWallet();
   const { getAccessToken } = usePrivy();
   const { sendTransaction } = useSendTransaction();
-  const { generateAuthorizationSignature } = useAuthorizationSignature();
   const [copiedEoa, setCopiedEoa] = useState(false);
   const [copiedPrivy, setCopiedPrivy] = useState(false);
   const [fundingAction, setFundingAction] = useState<FundingAction | null>(null);
@@ -224,23 +224,38 @@ function ConnectedWalletButton() {
           value,
         };
 
-    const canSponsor =
-      config.chain.id === MONAD_TESTNET_CHAIN_ID &&
-      asset.address &&
-      config.faucetTokens.some((token) => token.address.toLowerCase() === asset.address?.toLowerCase());
+    const canSponsor = config.chain.id === MONAD_TESTNET_CHAIN_ID;
     let hash: Hash;
-    if (canSponsor && asset.address) {
-      if (!walletId) throw new Error("The Privy embedded wallet is not ready.");
+    let directMetrics: DirectUserOperationResult["metrics"] | null = null;
+    if (canSponsor) {
       const accessToken = await getAccessToken();
       if (!accessToken) throw new Error("Your Privy session expired before the withdrawal could be submitted.");
-      const transactionId = await sendPrivySponsoredCalls({
+      const calls = asset.address
+        ? [{ to: asset.address, data: transferData }]
+        : [{ to: getAddress(recipient), value }];
+      const directResult = await submitDirectUserOperationWithSessionKey<Hash>({
         accessToken,
-        calls: [{ to: asset.address, data: transferData }],
+        calls,
         chainId: config.chain.id,
-        generateAuthorizationSignature,
-        walletId,
+        provider: await wallet.getEthereumProvider(),
+        sender: wallet.address as Address,
+        onAccountNotDelegated: async () =>
+          (
+            await sendTransaction(transaction, {
+              address: wallet.address,
+              uiOptions: {
+                buttonText: "Confirm withdrawal",
+                description: `Withdraw ${amount} ${asset.symbol} to ${recipient}`,
+                showWalletUIs: true,
+              },
+            })
+          ).hash,
       });
-      hash = await waitForPrivyTransaction({ walletId, transactionId, getAccessToken });
+      if (typeof directResult === "string") hash = directResult;
+      else {
+        hash = directResult.hash;
+        directMetrics = directResult.metrics;
+      }
     } else {
       ({ hash } = await sendTransaction(transaction, {
         address: wallet.address,
@@ -251,7 +266,18 @@ function ConnectedWalletButton() {
         },
       }));
     }
-    await publicClient.waitForTransactionReceipt({ hash });
+    if (!canSponsor) await publicClient.waitForTransactionReceipt({ hash });
+    if (canSponsor) {
+      toast.add({
+        title: `${asset.symbol} withdrawal submitted`,
+        description: `Hash ${shortenAddress(hash)}${
+          directMetrics
+            ? ` · ${directMetrics.totalMs} ms total (sign ${directMetrics.signMs} ms, API ${directMetrics.submitMs} ms)`
+            : ""
+        }`,
+        type: "success",
+      });
+    }
     notifyBalanceRefresh();
   }
 
@@ -279,28 +305,6 @@ function ConnectedWalletButton() {
     return (
       <>
         <div className="contents">
-          {(!eoaAddress || !connectedEoaWallet) && (
-            <Button
-              aria-label="Connect an external EOA wallet"
-              className="order-last h-8 rounded-full px-4 text-xs active:scale-[0.96]"
-              disabled={!ready || connecting}
-              onClick={connect}
-              title="Connect external EOA wallet"
-              type="button"
-              variant="default"
-            >
-              {connecting ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  className="size-4 animate-spin motion-reduce:animate-none"
-                  data-icon="inline-start"
-                />
-              ) : (
-                <Wallet aria-hidden="true" className="size-4" data-icon="inline-start" strokeWidth={2.25} />
-              )}
-              {connecting ? "Connecting…" : "Connect wallet"}
-            </Button>
-          )}
           <Menu.Root>
             <Menu.Trigger
               aria-label={`Open trading wallet ${shortenAddress(address)}`}

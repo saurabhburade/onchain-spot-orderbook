@@ -8,12 +8,14 @@ import {
   usePrivy,
   useWallets,
 } from "@privy-io/react-auth";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { type Address, getAddress } from "viem";
 
 import { getClobNetwork } from "@/config/chains";
 import { switchPrivyWalletToChain } from "@/config/viem";
 import { useClobChain } from "./chain-context";
+import { warmDirectUserOperationAuth } from "./direct-userop-client";
+import { clearKernelSessionKey, prepareKernelSessionKey } from "./kernel-session-client";
 
 type ClobWalletContextValue = {
   authenticated: boolean;
@@ -57,6 +59,10 @@ const defaultValue: ClobWalletContextValue = {
   tradingAddress: null,
 };
 const ClobWalletContext = createContext<ClobWalletContextValue>(defaultValue);
+const EOA_LOGOUT_GRACE_MS = 1_000;
+// Privy's remote JWKS cache lasts 60 minutes. Refresh well before that so the
+// next trade never has to pay the cold verification-key lookup.
+const AUTH_WARM_INTERVAL_MS = 10 * 60 * 1_000;
 
 function messageFrom(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -69,8 +75,8 @@ export function useClobWallet() {
 }
 
 export function ClobWalletProvider({ children }: { children: ReactNode }) {
-  const { config } = useClobChain();
-  const { authenticated, isModalOpen, ready: authReady, user } = usePrivy();
+  const { config, publicClient } = useClobChain();
+  const { authenticated, getAccessToken, isModalOpen, ready: authReady, user } = usePrivy();
   const { ready: walletsReady, wallets } = useWallets();
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const { login } = useLogin({
@@ -125,8 +131,82 @@ export function ClobWalletProvider({ children }: { children: ReactNode }) {
   }, [authenticated, connectWallet, login]);
   const disconnect = useCallback(async () => {
     setConnectionError(null);
+    clearKernelSessionKey();
     await logout();
   }, [logout]);
+
+  useEffect(() => {
+    if (!ready || !authenticated || !wallet || !tradingAddress || !isCorrectChain || config.chain.id !== 10_143) {
+      return;
+    }
+    let cancelled = false;
+    let renewalTimer: number | undefined;
+    let authWarmPromise: Promise<void> | null = null;
+    const warmAuthentication = () => {
+      if (cancelled || authWarmPromise) return;
+      authWarmPromise = getAccessToken()
+        .then(async (accessToken) => {
+          if (!accessToken || cancelled) return;
+          await warmDirectUserOperationAuth({ chainId: config.chain.id, accessToken });
+        })
+        .catch((error) => console.warn("Could not warm the sponsored UserOperation authentication", error))
+        .finally(() => {
+          authWarmPromise = null;
+        });
+    };
+    const warmAuthenticationWhenVisible = () => {
+      if (document.visibilityState === "visible") warmAuthentication();
+    };
+    warmAuthentication();
+    const authWarmTimer = window.setInterval(warmAuthentication, AUTH_WARM_INTERVAL_MS);
+    window.addEventListener("focus", warmAuthentication);
+    document.addEventListener("visibilitychange", warmAuthenticationWhenVisible);
+    void wallet
+      .getEthereumProvider()
+      .then((provider) => {
+        const authorizeSession = async () => {
+          if (cancelled) return;
+          try {
+            const session = await prepareKernelSessionKey({
+              chainId: config.chain.id,
+              owner: tradingAddress,
+              provider,
+              publicClient: publicClient as never,
+            });
+            if (cancelled) return;
+            const renewInMs = Math.max(1_000, session.validUntil * 1_000 - Date.now() + 1_000);
+            renewalTimer = window.setTimeout(() => {
+              clearKernelSessionKey(config.chain.id, tradingAddress);
+              void authorizeSession();
+            }, renewInMs);
+          } catch (error) {
+            // Transaction submission retains the lazy setup path, so a
+            // transient login-time failure cannot make the wallet unusable.
+            console.warn("Could not pre-authorize the Kernel session key", error);
+          }
+        };
+        void authorizeSession();
+      })
+      .catch((error) => console.warn("Could not get the Privy provider for Kernel session setup", error));
+    return () => {
+      cancelled = true;
+      window.clearInterval(authWarmTimer);
+      window.removeEventListener("focus", warmAuthentication);
+      document.removeEventListener("visibilitychange", warmAuthenticationWhenVisible);
+      if (renewalTimer !== undefined) window.clearTimeout(renewalTimer);
+    };
+  }, [authenticated, config.chain.id, getAccessToken, isCorrectChain, publicClient, ready, tradingAddress, wallet]);
+
+  useEffect(() => {
+    if (!ready || !authenticated || isModalOpen || !tradingAddress || connectedEoaAddress) return;
+
+    const timeout = window.setTimeout(() => {
+      clearKernelSessionKey();
+      void logout().catch((error) => setConnectionError(messageFrom(error)));
+    }, EOA_LOGOUT_GRACE_MS);
+    return () => window.clearTimeout(timeout);
+  }, [authenticated, connectedEoaAddress, isModalOpen, logout, ready, tradingAddress]);
+
   const disconnectEoa = useCallback(() => {
     setConnectionError(null);
     connectedEoaWallet?.disconnect();

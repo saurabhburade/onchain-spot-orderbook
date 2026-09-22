@@ -96,3 +96,26 @@ fixed size is desired. Other useful controls are `MM_TAKER_SIZE` (default `1` US
 (20–50), and `MM_MAX_ROUNDS` (`0` means unlimited). Set `MM_CANCEL_ON_EXIT=true` to withdraw all
 resting quotes on shutdown. The state and rolling report are private ignored files in
 `apps/web/.env.privy-market-maker-*.json`.
+
+## Direct UserOperation sponsorship
+
+On Monad Testnet, every write initiated by the web UI uses the direct UserOperation relay: order
+placement and cancellation, faucet claims, native and ERC-20 withdrawals, token deployment, and
+market creation. The user's Privy EIP-7702 wallet signs each operation in the browser; the server
+validates the exact intent and pays gas with `SPONSER_PK`. The submit endpoint returns the transaction
+hash immediately without waiting for confirmation, and the UI reports browser-signing, relay, and
+total sign-to-hash latency. Token and market creation continue watching that hash afterward because
+their screens need the emitted token or book address.
+
+The web package includes a Monad Testnet smoke test for bypassing Privy's sponsorship path. It asks
+an existing Privy EIP-7702/Kernel wallet to sign a zero-fee ERC-4337 UserOperation, then submits
+`EntryPoint.handleOps` from the server sponsor wallet. The user never receives or spends MON, and no
+paymaster contract is involved. The operation calls the read-only `getBestPrices` function so it does
+not change CLOB state.
+
+Set `SPONSER_PK` in `apps/web/.env.local`, then simulate the complete flow before broadcasting:
+
+```sh
+pnpm --filter @clob/web userop:direct
+pnpm --filter @clob/web userop:direct -- --send
+```

@@ -13,6 +13,8 @@ import { MONAD_TESTNET_CHAIN_ID } from "@/config/constants";
 import type { FaucetTokenConfig } from "@/config/contracts";
 import { waitForTransaction } from "@/config/viem";
 import { useClobChain, useClobWallet } from "@/lib/clob";
+import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
+import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
 import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 
@@ -136,27 +138,52 @@ export function FaucetScreen() {
         args: [token.address],
       });
       let hash: Hash;
+      let directMetrics: DirectUserOperationResult["metrics"] | null = null;
+      const submittedWithSponsorship = chainId === MONAD_TESTNET_CHAIN_ID;
       if (chainId === MONAD_TESTNET_CHAIN_ID) {
         if (!walletId) throw new Error("The Privy embedded wallet is not ready");
         const accessToken = await getAccessToken();
         if (!accessToken) throw new Error("Your Privy session expired before the faucet claim could be submitted");
-        const transactionId = await sendPrivySponsoredCalls({
+        const directResult = await submitDirectUserOperationWithSessionKey<Hash>({
           accessToken,
           calls: [{ to: faucet, data }],
           chainId,
-          generateAuthorizationSignature,
-          walletId,
+          provider: await wallet.getEthereumProvider(),
+          sender: tradingAddress,
+          onAccountNotDelegated: async () => {
+            const transactionId = await sendPrivySponsoredCalls({
+              accessToken,
+              calls: [{ to: faucet, data }],
+              chainId,
+              generateAuthorizationSignature,
+              walletId,
+            });
+            return waitForPrivyTransaction({ walletId, transactionId, getAccessToken });
+          },
         });
-        hash = await waitForPrivyTransaction({ walletId, transactionId, getAccessToken });
+        if (typeof directResult === "string") hash = directResult;
+        else {
+          hash = directResult.hash;
+          directMetrics = directResult.metrics;
+        }
       } else {
         ({ hash } = await sendTransaction(
           { chainId, data, to: faucet },
           headlessTransactionOptions(wallet.address, chainId),
         ));
       }
-      await waitForTransaction(chainId, hash);
-      setSuccess(`${token.symbol} claimed successfully`);
-      await refresh();
+      if (!submittedWithSponsorship) await waitForTransaction(chainId, hash);
+      setSuccess(
+        submittedWithSponsorship
+          ? `${token.symbol} claim submitted — hash ${hash.slice(0, 10)}…${hash.slice(-8)}${
+              directMetrics
+                ? ` · ${directMetrics.totalMs} ms total (sign ${directMetrics.signMs} ms, API ${directMetrics.submitMs} ms)`
+                : ""
+            }`
+          : `${token.symbol} claimed successfully`,
+      );
+      if (submittedWithSponsorship) void refresh();
+      else await refresh();
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {

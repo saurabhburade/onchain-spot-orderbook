@@ -121,9 +121,59 @@ export type AsyncState = {
   error: Error | null;
 };
 
+export type TransactionMetrics = {
+  /** One-time Privy root authorization for a fresh browser session key. */
+  setupMs?: number;
+  /** UserOperation preparation, local for session keys and API-backed for root signing. */
+  prepareMs?: number;
+  /** Measured server and transport components inside the prepare request. */
+  prepareBreakdown?: {
+    /** Browser/API transport plus framework overhead before response headers. */
+    networkMs: number;
+    /** Reading and decoding the response body after headers arrive. */
+    responseMs: number;
+    authMs: number;
+    serverMs: number;
+    /** Wall time for parallel chain reads; individual reads overlap. */
+    rpcWallMs: number;
+    chainIdMs: number;
+    delegationMs: number;
+    orderBookMs: number;
+    policyRpcMs: number;
+    nonceMs: number;
+    /** Local call validation, encoding, and UserOperation hashing. */
+    localMs: number;
+  };
+  signMs: number;
+  submitMs: number;
+  submitBreakdown?: {
+    networkMs: number;
+    responseMs: number;
+    authMs: number;
+    serverMs: number;
+    /** Wall time for validation reads and simulation, which run concurrently. */
+    validationWallMs: number;
+    chainIdMs: number;
+    delegationMs: number;
+    orderBookMs: number;
+    policyRpcMs: number;
+    nonceMs: number;
+    hashMs: number;
+    simulationMs: number;
+    broadcastMs: number;
+    broadcastPrepareMs: number;
+    sponsorNonceMs: number;
+    gasPriceMs: number;
+    sponsorSignMs: number;
+    rpcSubmissionMs: number;
+  };
+  totalMs: number;
+};
+
 export type TransactionState = AsyncState & {
   status: "idle" | "pending" | "submitted" | "success" | "error";
   hash?: Hash;
+  metrics?: TransactionMetrics;
   transactionId?: string;
 };
 

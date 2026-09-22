@@ -21,6 +21,7 @@ import { createAsyncCache, createRequestCoalescer } from "@/lib/clob/async-cache
 import { type AtomicCall, encodeAtomicBatch } from "@/lib/clob/atomic-batch";
 import { subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import { useClobChain } from "@/lib/clob/chain-context";
+import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
 import {
   AGNOSTIC_CREATE_PAIR_SELECTOR,
   hasFunctionSelector,
@@ -28,6 +29,7 @@ import {
   LEGACY_CREATE_PAIR_SELECTOR,
   legacyCreatePairArgs,
 } from "@/lib/clob/factory-compat";
+import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
 import { getLogsInBlockRanges } from "@/lib/clob/log-ranges";
 import { addListedMarket, listedMarkets, listedTokenIconUrl, subscribeToListedMarkets } from "@/lib/clob/market-list";
 import { decodePoolResultData } from "@/lib/clob/pool-metadata";
@@ -330,6 +332,7 @@ export function useMarkets() {
 export function useCreateMarket() {
   const { chainId, config, publicClient } = useClobChain();
   const { authenticated, connect, ready, wallet } = useClobWallet();
+  const { getAccessToken } = usePrivy();
   const { sendTransaction } = useSendTransaction();
   const [transaction, setTransaction] = useState<TransactionState>({ status: "idle", loading: false, error: null });
 
@@ -422,10 +425,31 @@ export function useCreateMarket() {
             : (() => {
                 throw new Error("The configured CLOB factory does not expose a supported createPair function");
               })();
-        const { hash } = await sendTransaction(
-          { chainId, data, to: factoryAddress, value: creationFee },
-          headlessTransactionOptions(wallet.address, chainId),
-        );
+        const transactionRequest = { chainId, data, to: factoryAddress, value: creationFee } as const;
+        let hash: Hash;
+        let metrics: DirectUserOperationResult["metrics"] | undefined;
+        if (chainId === MONAD_TESTNET_CHAIN_ID) {
+          const accessToken = await getAccessToken();
+          if (!accessToken) throw new Error("Your Privy session expired before the market could be created");
+          const sender = getAddress(wallet.address);
+          const result = await submitDirectUserOperationWithSessionKey<Hash>({
+            accessToken,
+            chainId,
+            calls: [{ to: factoryAddress, data, value: creationFee }],
+            sender,
+            provider: await wallet.getEthereumProvider(),
+            onAccountNotDelegated: async () =>
+              (await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId))).hash,
+          });
+          if (typeof result === "string") hash = result;
+          else {
+            hash = result.hash;
+            metrics = result.metrics;
+          }
+          setTransaction({ status: "submitted", loading: true, error: null, hash, metrics });
+        } else {
+          ({ hash } = await sendTransaction(transactionRequest, headlessTransactionOptions(wallet.address, chainId)));
+        }
         await waitForTransaction(chainId, hash);
         const [poolId, book] = await publicClient.multicall({
           allowFailure: false,
@@ -445,7 +469,7 @@ export function useCreateMarket() {
           ],
         });
         addListedMarket(chainId, { poolId });
-        setTransaction({ status: "success", loading: false, error: null, hash });
+        setTransaction({ status: "success", loading: false, error: null, hash, metrics });
         return { poolId, book, hash };
       } catch (error) {
         const normalized = transactionError(error);
@@ -453,7 +477,7 @@ export function useCreateMarket() {
         throw normalized;
       }
     },
-    [authenticated, chainId, config, publicClient, ready, sendTransaction, wallet],
+    [authenticated, chainId, config, getAccessToken, publicClient, ready, sendTransaction, wallet],
   );
 
   const resetTransaction = useCallback(() => setTransaction({ status: "idle", loading: false, error: null }), []);
@@ -1069,10 +1093,11 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
     [],
   );
 
+  type ImmediateTransaction = DirectUserOperationResult;
   type SubmittedTransaction = { transactionId?: string; hash?: Hash; completion: Promise<Hash> };
 
   const run = useCallback(
-    (operation: () => Promise<Hash | SubmittedTransaction>) => {
+    (operation: () => Promise<Hash | ImmediateTransaction | SubmittedTransaction>) => {
       if (pendingTransactionRef.current) return pendingTransactionRef.current;
       if (!authenticated || !ready || !wallet) {
         const error = new Error("Connect an Ethereum wallet before submitting a transaction");
@@ -1091,6 +1116,20 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
               setTransaction({ status: "success", loading: false, error: null, hash: result });
             }
             return result;
+          }
+
+          if ("metrics" in result) {
+            if (onConfirmed) void onConfirmed().catch(() => undefined);
+            if (transactionSequenceRef.current === sequence) {
+              setTransaction({
+                status: "success",
+                loading: false,
+                error: null,
+                hash: result.hash,
+                metrics: result.metrics,
+              });
+            }
+            return result.hash;
           }
 
           setTransaction({
@@ -1171,6 +1210,29 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
     [chainId, generateAuthorizationSignature, getAccessToken, tradingAddress, wallet, walletId],
   );
 
+  const sendDirectOrder = useCallback(
+    async (calls: readonly AtomicCall[]): Promise<Hash | ImmediateTransaction | SubmittedTransaction> => {
+      const activeWallet = wallet;
+      const activeTrader = tradingAddress;
+      if (!activeWallet || !activeTrader) throw new Error("The Privy embedded wallet is not ready");
+      if (chainId !== MONAD_TESTNET_CHAIN_ID)
+        throw new Error("Direct UserOperations are only supported on Monad testnet");
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error("Your Privy session expired before the order could be submitted");
+
+      const provider = await activeWallet.getEthereumProvider();
+      return submitDirectUserOperationWithSessionKey({
+        accessToken,
+        chainId,
+        calls,
+        sender: activeTrader,
+        provider,
+        onAccountNotDelegated: () => sendPrivyOrder(calls),
+      });
+    },
+    [chainId, getAccessToken, sendPrivyOrder, tradingAddress, wallet],
+  );
+
   const sendAtomicOrder = useCallback(
     async (asset: Address, spender: Address, amount: bigint, orderData: Hex) => {
       const activeWallet = wallet;
@@ -1193,7 +1255,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
       }
       calls.push({ to: spender, data: orderData });
 
-      if (chainId === MONAD_TESTNET_CHAIN_ID) return sendPrivyOrder(calls);
+      if (chainId === MONAD_TESTNET_CHAIN_ID) return sendDirectOrder(calls);
 
       const data = encodeAtomicBatch(calls);
       const { hash } = await sendTransaction(
@@ -1203,7 +1265,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
       await waitForTransaction(chainId, hash);
       return hash;
     },
-    [chainId, publicClient, sendPrivyOrder, sendTransaction, tradingAddress, wallet],
+    [chainId, publicClient, sendDirectOrder, sendTransaction, tradingAddress, wallet],
   );
 
   const placeLimit = useCallback(
@@ -1293,7 +1355,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
         if (!contractAddress || !activeWallet || !tradingAddress)
           throw clobError(contractAddress) ?? new Error("Connect an Ethereum wallet before cancelling an order");
         const data = encodeFunctionData({ abi: clobAbi, functionName: "cancelOrder", args: [orderId] });
-        if (chainId === MONAD_TESTNET_CHAIN_ID) return sendPrivyOrder([{ to: contractAddress, data }]);
+        if (chainId === MONAD_TESTNET_CHAIN_ID) return sendDirectOrder([{ to: contractAddress, data }]);
         const { hash } = await sendTransaction(
           { chainId, data, to: contractAddress },
           headlessTransactionOptions(activeWallet.address, chainId),
@@ -1301,7 +1363,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
         await waitForTransaction(chainId, hash);
         return hash;
       }),
-    [chainId, pool?.clobAddress, run, sendPrivyOrder, sendTransaction, tradingAddress, wallet],
+    [chainId, pool?.clobAddress, run, sendDirectOrder, sendTransaction, tradingAddress, wallet],
   );
 
   const anvilFaucet = useCallback(

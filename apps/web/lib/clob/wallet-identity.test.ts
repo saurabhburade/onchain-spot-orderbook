@@ -62,18 +62,44 @@ test("keeps EOA identity actions in the Privy wallet menu", () => {
   assert.doesNotMatch(walletButtonSource, /isCorrectChain \? config\.chain\.name/);
 });
 
-test("uses a primary external-wallet action when no EOA is connected", () => {
-  const disconnectedEoaStart = walletButtonSource.indexOf('aria-label="Connect an external EOA wallet"');
-  const disconnectedEoaEnd = walletButtonSource.indexOf("<Menu.Root>", disconnectedEoaStart);
-  const disconnectedEoaSource = walletButtonSource.slice(disconnectedEoaStart, disconnectedEoaEnd);
+test("does not offer an embedded-only EOA connection state", () => {
+  const connectedMenuSource =
+    walletButtonSource.split("if (connected && address)")[1]?.split("<FundingDialog")[0] ?? "";
 
-  assert.ok(disconnectedEoaStart >= 0);
-  assert.ok(disconnectedEoaEnd > disconnectedEoaStart);
-  assert.match(disconnectedEoaSource, /aria-label="Connect an external EOA wallet"/);
-  assert.match(disconnectedEoaSource, /<Wallet[^>]*data-icon="inline-start"[^>]*strokeWidth=\{2\.25\}/);
-  assert.match(disconnectedEoaSource, /connecting \? "Connecting…" : "Connect wallet"/);
-  assert.match(disconnectedEoaSource, /variant="default"/);
-  assert.doesNotMatch(disconnectedEoaSource, /size="icon"/);
+  assert.doesNotMatch(connectedMenuSource, /Connect EOA/);
+  assert.doesNotMatch(connectedMenuSource, /aria-label="Connect an external EOA wallet"/);
+  assert.doesNotMatch(connectedMenuSource, /className="order-last/);
+  assert.doesNotMatch(connectedMenuSource, /variant="default"/);
+});
+
+test("logs out the Privy session when no external EOA remains connected", () => {
+  assert.match(walletContextSource, /const EOA_LOGOUT_GRACE_MS = 1_000/);
+  assert.match(
+    walletContextSource,
+    /if \(!ready \|\| !authenticated \|\| isModalOpen \|\| !tradingAddress \|\| connectedEoaAddress\) return/,
+  );
+  assert.match(
+    walletContextSource,
+    /window\.setTimeout\(\(\) => \{\s*clearKernelSessionKey\(\);\s*void logout\(\)\.catch/,
+  );
+  assert.match(walletContextSource, /return \(\) => window\.clearTimeout\(timeout\)/);
+});
+
+test("pre-authorizes the local Kernel session when login completes", () => {
+  assert.match(walletContextSource, /prepareKernelSessionKey/);
+  assert.match(walletContextSource, /wallet\s*\.getEthereumProvider\(\)/);
+  assert.match(walletContextSource, /config\.chain\.id !== 10_143/);
+  assert.match(walletContextSource, /session\.validUntil \* 1_000 - Date\.now\(\) \+ 1_000/);
+  assert.match(walletContextSource, /clearKernelSessionKey\(config\.chain\.id, tradingAddress\)/);
+  assert.match(walletContextSource, /Could not pre-authorize the Kernel session key/);
+  assert.match(walletContextSource, /getAccessToken\(\)/);
+  assert.match(walletContextSource, /warmDirectUserOperationAuth/);
+  assert.match(walletContextSource, /Could not warm the sponsored UserOperation authentication/);
+  assert.match(walletContextSource, /const AUTH_WARM_INTERVAL_MS = 10 \* 60 \* 1_000/);
+  assert.match(walletContextSource, /window\.setInterval\(warmAuthentication, AUTH_WARM_INTERVAL_MS\)/);
+  assert.match(walletContextSource, /window\.addEventListener\("focus", warmAuthentication\)/);
+  assert.match(walletContextSource, /document\.addEventListener\("visibilitychange", warmAuthenticationWhenVisible\)/);
+  assert.match(walletContextSource, /window\.clearInterval\(authWarmTimer\)/);
 });
 
 test("keeps the fully disconnected wallet action primary and icon-labeled", () => {
@@ -108,13 +134,14 @@ test("withdraws selectable native and imported ERC-20 assets", () => {
   assert.match(walletButtonSource, /functionName: "balanceOf"/);
 });
 
-test("sponsors configured Monad ERC-20 withdrawals", () => {
+test("sponsors every Monad native and ERC-20 withdrawal", () => {
   const withdrawSource =
     walletButtonSource.split("async function withdraw")[1]?.split("if (connected && !address)")[0] ?? "";
   assert.match(withdrawSource, /config\.chain\.id === MONAD_TESTNET_CHAIN_ID/);
-  assert.match(withdrawSource, /config\.faucetTokens\.some/);
-  assert.match(withdrawSource, /sendPrivySponsoredCalls/);
-  assert.match(withdrawSource, /waitForPrivyTransaction/);
+  assert.match(withdrawSource, /submitDirectUserOperationWithSessionKey/);
+  assert.match(withdrawSource, /onAccountNotDelegated/);
+  assert.match(withdrawSource, /\[\{ to: getAddress\(recipient\), value \}\]/);
+  assert.match(withdrawSource, /if\s*\(!canSponsor\)\s*await publicClient\.waitForTransactionReceipt/);
 });
 
 test("reads token balances and orders only for the trading address", () => {
@@ -200,7 +227,7 @@ test("places the unified wallet control before the theme control at the end of t
   assert.ok(headerActions.indexOf("<ChainSwitcher") < headerActions.indexOf("<WalletButton"));
   assert.ok(headerActions.indexOf("<WalletButton") < headerActions.indexOf("<ThemeToggle"));
   assert.match(walletButtonSource, /<div className="contents">/);
-  assert.match(walletButtonSource, /aria-label="Connect an external EOA wallet"[\s\S]*className="order-last/);
+  assert.match(walletButtonSource, /aria-label="Connect an external EOA wallet"/);
   assert.doesNotMatch(walletButtonSource, /Open wallet details/);
   assert.match(themeToggleSource, /className="order-last/);
 });

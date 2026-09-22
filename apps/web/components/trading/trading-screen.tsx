@@ -39,6 +39,8 @@ import { orderHistoryPrice } from "./order-history";
 import { PriceChart } from "./price-chart";
 import { TradeTicket } from "./trade-ticket";
 
+const showTransactionLatency = process.env.NODE_ENV !== "production";
+
 const ORDERBOOK_DEPTH = 50;
 const RECENT_TRADES_PAGE_SIZE = 10;
 
@@ -326,27 +328,28 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
         wallet: clob.balances.data.base.wallet,
       }
     : null;
-  const latencyDetails = clob.transaction.metrics
-    ? [
-        clob.transaction.metrics.setupMs ? `one-time setup ${clob.transaction.metrics.setupMs} ms` : null,
-        clob.transaction.metrics.prepareMs !== undefined
-          ? clob.transaction.metrics.prepareBreakdown
-            ? `prepare API ${clob.transaction.metrics.prepareMs} ms [browser↔API/Next ${clob.transaction.metrics.prepareBreakdown.networkMs} ms, auth ${clob.transaction.metrics.prepareBreakdown.authMs} ms, RPC wall ${clob.transaction.metrics.prepareBreakdown.rpcWallMs} ms (nonce ${clob.transaction.metrics.prepareBreakdown.nonceMs}, delegation ${clob.transaction.metrics.prepareBreakdown.delegationMs}, order book ${clob.transaction.metrics.prepareBreakdown.orderBookMs}, chain ${clob.transaction.metrics.prepareBreakdown.chainIdMs}), local validate/hash ${clob.transaction.metrics.prepareBreakdown.localMs} ms, response ${clob.transaction.metrics.prepareBreakdown.responseMs} ms]`
-            : `local prepare ${clob.transaction.metrics.prepareMs} ms`
-          : null,
-        `local sign ${clob.transaction.metrics.signMs} ms`,
-        clob.transaction.metrics.submitBreakdown
-          ? `submit API ${clob.transaction.metrics.submitMs} ms [browser↔API/Next ${clob.transaction.metrics.submitBreakdown.networkMs} ms, auth ${clob.transaction.metrics.submitBreakdown.authMs} ms, RPC batch wall ${clob.transaction.metrics.submitBreakdown.validationWallMs} ms (chain ${clob.transaction.metrics.submitBreakdown.chainIdMs}, delegation ${clob.transaction.metrics.submitBreakdown.delegationMs}, order book ${clob.transaction.metrics.submitBreakdown.orderBookMs}, policy ${clob.transaction.metrics.submitBreakdown.policyRpcMs}, UserOp nonce ${clob.transaction.metrics.submitBreakdown.nonceMs}, hash ${clob.transaction.metrics.submitBreakdown.hashMs}, simulation ${clob.transaction.metrics.submitBreakdown.simulationMs}, sponsor fields ${clob.transaction.metrics.submitBreakdown.broadcastPrepareMs} [nonce ${clob.transaction.metrics.submitBreakdown.sponsorNonceMs}, gas price ${clob.transaction.metrics.submitBreakdown.gasPriceMs}]), broadcast ${clob.transaction.metrics.submitBreakdown.broadcastMs} ms (sponsor sign ${clob.transaction.metrics.submitBreakdown.sponsorSignMs}, eth_sendRawTransaction ${clob.transaction.metrics.submitBreakdown.rpcSubmissionMs}), response ${clob.transaction.metrics.submitBreakdown.responseMs} ms]`
-          : `submit API ${clob.transaction.metrics.submitMs} ms`,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : null;
+  const latencyDetails =
+    showTransactionLatency && clob.transaction.metrics
+      ? [
+          clob.transaction.metrics.setupMs ? `one-time setup ${clob.transaction.metrics.setupMs} ms` : null,
+          clob.transaction.metrics.prepareMs !== undefined
+            ? clob.transaction.metrics.prepareBreakdown
+              ? `prepare API ${clob.transaction.metrics.prepareMs} ms [browser↔API/Next ${clob.transaction.metrics.prepareBreakdown.networkMs} ms, auth ${clob.transaction.metrics.prepareBreakdown.authMs} ms, RPC wall ${clob.transaction.metrics.prepareBreakdown.rpcWallMs} ms (nonce ${clob.transaction.metrics.prepareBreakdown.nonceMs}, delegation ${clob.transaction.metrics.prepareBreakdown.delegationMs}, order book ${clob.transaction.metrics.prepareBreakdown.orderBookMs}, chain ${clob.transaction.metrics.prepareBreakdown.chainIdMs}), local validate/hash ${clob.transaction.metrics.prepareBreakdown.localMs} ms, response ${clob.transaction.metrics.prepareBreakdown.responseMs} ms]`
+              : `local prepare ${clob.transaction.metrics.prepareMs} ms`
+            : null,
+          `local sign ${clob.transaction.metrics.signMs} ms`,
+          clob.transaction.metrics.submitBreakdown
+            ? `submit API ${clob.transaction.metrics.submitMs} ms [browser↔API/Next ${clob.transaction.metrics.submitBreakdown.networkMs} ms, auth ${clob.transaction.metrics.submitBreakdown.authMs} ms, RPC batch wall ${clob.transaction.metrics.submitBreakdown.validationWallMs} ms (chain ${clob.transaction.metrics.submitBreakdown.chainIdMs}, delegation ${clob.transaction.metrics.submitBreakdown.delegationMs}, order book ${clob.transaction.metrics.submitBreakdown.orderBookMs}, policy ${clob.transaction.metrics.submitBreakdown.policyRpcMs}, UserOp nonce ${clob.transaction.metrics.submitBreakdown.nonceMs}, hash ${clob.transaction.metrics.submitBreakdown.hashMs}, simulation ${clob.transaction.metrics.submitBreakdown.simulationMs}, sponsor fields ${clob.transaction.metrics.submitBreakdown.broadcastPrepareMs} [nonce ${clob.transaction.metrics.submitBreakdown.sponsorNonceMs}, gas price ${clob.transaction.metrics.submitBreakdown.gasPriceMs}]), broadcast ${clob.transaction.metrics.submitBreakdown.broadcastMs} ms (sponsor sign ${clob.transaction.metrics.submitBreakdown.sponsorSignMs}, eth_sendRawTransaction ${clob.transaction.metrics.submitBreakdown.rpcSubmissionMs}), response ${clob.transaction.metrics.submitBreakdown.responseMs} ms]`
+            : `submit API ${clob.transaction.metrics.submitMs} ms`,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : null;
   const transaction: TransactionFeedback = {
     status: clob.transaction.status,
     message:
       clob.transaction.error?.message ??
-      (clob.transaction.metrics
+      (showTransactionLatency && clob.transaction.metrics
         ? `Submitted in ${clob.transaction.metrics.totalMs} ms (${latencyDetails}).`
         : clob.transaction.status === "submitted"
           ? "Transaction submitted."

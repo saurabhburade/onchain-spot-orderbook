@@ -5,6 +5,7 @@ import { authenticatePrivyRequest } from "../../../../lib/privy/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const logTransactionLatency = process.env.NODE_ENV !== "production";
 
 function errorResponse(error: unknown) {
   if (error instanceof DirectUserOperationError) {
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     });
     const serverMs = Math.max(0, Math.round(performance.now() - serverStartedAt));
     const timing = { ...result.timing, authMs, serverMs };
-    console.info("UserOperation submit latency", timing);
+    if (logTransactionLatency) console.info("UserOperation submit latency", timing);
     return Response.json({ ...result, timing }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return errorResponse(error);

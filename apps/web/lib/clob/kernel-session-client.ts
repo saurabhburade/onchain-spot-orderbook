@@ -21,6 +21,8 @@ import {
   MONAD_TESTNET_CHAIN_ID,
 } from "./kernel-session-key.ts";
 
+const logTransactionLatency = process.env.NODE_ENV !== "production";
+
 type EthereumProvider = { request: (...args: never[]) => Promise<unknown> };
 type SessionPublicClient = {
   readContract: (input: never) => Promise<unknown>;
@@ -190,7 +192,7 @@ export async function prepareKernelSessionKey(input: {
   const startedAt = performance.now();
   const { created, session } = await getOrCreateSession(input);
   const setupMs = created ? Math.round(performance.now() - startedAt) : 0;
-  console.info("Kernel session login setup latency", { created, setupMs });
+  if (logTransactionLatency) console.info("Kernel session login setup latency", { created, setupMs });
   return { created, setupMs, validUntil: session.validUntil };
 }
 
@@ -272,6 +274,6 @@ export async function submitDirectUserOperationWithSessionKey<T = never>(input: 
     submitBreakdown: submitted.timing,
     totalMs: Math.round(performance.now() - totalStartedAt),
   };
-  console.info("Kernel session UserOperation latency", { ...metrics, hash });
+  if (logTransactionLatency) console.info("Kernel session UserOperation latency", { ...metrics, hash });
   return { hash, metrics };
 }

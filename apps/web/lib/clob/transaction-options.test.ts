@@ -14,6 +14,9 @@ const tradingScreenSource = readFileSync(
   "utf8",
 );
 const directClientSource = readFileSync(new URL("./direct-userop-client.ts", import.meta.url), "utf8");
+const kernelSessionClientSource = readFileSync(new URL("./kernel-session-client.ts", import.meta.url), "utf8");
+const userOpAuthRouteSource = readFileSync(new URL("../../app/api/userops/auth/route.ts", import.meta.url), "utf8");
+const userOpSubmitRouteSource = readFileSync(new URL("../../app/api/userops/submit/route.ts", import.meta.url), "utf8");
 const createMarketSource =
   hooksSource.split("export function useCreateMarket()")[1]?.split("export function useOrderbook")[0] ?? "";
 const marketsSource =
@@ -121,6 +124,21 @@ describe("headless sponsored token deployment", () => {
     assert.match(tradingScreenSource, /broadcast/);
     assert.match(tradingScreenSource, /eth_sendRawTransaction/);
     assert.match(tradingScreenSource, /response/);
+  });
+
+  it("keeps transaction latency UI and console logs out of production", () => {
+    assert.match(tradingScreenSource, /showTransactionLatency\s*=\s*process\.env\.NODE_ENV\s*!==\s*"production"/);
+    assert.match(tradingScreenSource, /showTransactionLatency\s*&&\s*clob\.transaction\.metrics/);
+    assert.match(deploySource, /showTransactionLatency\s*&&\s*deployed\.metrics/);
+    for (const source of [
+      directClientSource,
+      kernelSessionClientSource,
+      userOpAuthRouteSource,
+      userOpSubmitRouteSource,
+    ]) {
+      assert.match(source, /logTransactionLatency\s*=\s*process\.env\.NODE_ENV\s*!==\s*"production"/);
+      assert.match(source, /if\s*\(logTransactionLatency\)\s*console\.info/);
+    }
   });
 
   it("reuses an in-flight action instead of sending duplicate wallet RPC requests", () => {

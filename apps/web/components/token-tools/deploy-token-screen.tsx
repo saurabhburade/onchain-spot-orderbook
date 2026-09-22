@@ -18,6 +18,8 @@ import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-sessi
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/forms/numeric-input";
 
+const showTransactionLatency = process.env.NODE_ENV !== "production";
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Token deployment failed";
 }
@@ -229,7 +231,7 @@ export function DeployTokenScreen() {
                     <div className="flex items-center gap-2 text-sm font-medium text-chart-3">
                       <Check aria-hidden="true" className="size-4" strokeWidth={2} /> Token deployed
                     </div>
-                    {deployed.metrics ? (
+                    {showTransactionLatency && deployed.metrics ? (
                       <p className="mt-2 text-xs text-muted-foreground">
                         Submitted in {deployed.metrics.totalMs} ms (
                         {deployed.metrics.setupMs ? `one-time setup ${deployed.metrics.setupMs} ms, ` : ""}

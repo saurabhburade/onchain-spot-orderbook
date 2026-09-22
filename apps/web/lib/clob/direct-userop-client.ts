@@ -26,6 +26,7 @@ const MAX_CALLDATA_BYTES = 4_096;
 const MAX_UINT64 = (1n << 64n) - 1n;
 const MAX_UINT128 = (1n << 128n) - 1n;
 const MAX_ENTRY_POINT_NONCE_KEY = 1n << 192n;
+const logTransactionLatency = process.env.NODE_ENV !== "production";
 const kernelAbi = [
   {
     type: "function",
@@ -340,7 +341,7 @@ export async function warmDirectUserOperationAuth(input: {
       ? Math.round(payload.authMs)
       : undefined;
   const totalMs = Math.max(0, Math.round(performance.now() - startedAt));
-  console.info("Sponsored UserOperation auth warm latency", { totalMs, serverAuthMs });
+  if (logTransactionLatency) console.info("Sponsored UserOperation auth warm latency", { totalMs, serverAuthMs });
   return { totalMs, serverAuthMs };
 }
 
@@ -504,6 +505,6 @@ export async function submitDirectUserOperationWithWallet<T = never>(input: {
     submitBreakdown: submitted.timing,
     totalMs: Math.round(performance.now() - totalStartedAt),
   };
-  console.info("Direct UserOperation latency", { ...metrics, hash });
+  if (logTransactionLatency) console.info("Direct UserOperation latency", { ...metrics, hash });
   return { hash, metrics };
 }

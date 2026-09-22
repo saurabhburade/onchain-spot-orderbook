@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
-import { formatUnits, isAddress } from "viem";
+import { formatUnits, getAddress, isAddress } from "viem";
 
 import { PriceBitmapChart } from "@/components/markets/price-bitmap-chart";
 import { TokenIcon } from "@/components/token-icon";
@@ -278,6 +278,13 @@ function formatScientificPrice(value: string) {
   return value;
 }
 
+function formatNativeBalance(value: bigint, decimals: number) {
+  const [integer, fraction = ""] = formatUnits(value, decimals).split(".");
+  const groupedInteger = BigInt(integer).toLocaleString("en-US");
+  const trimmedFraction = fraction.slice(0, 6).replace(/0+$/, "");
+  return trimmedFraction ? `${groupedInteger}.${trimmedFraction}` : groupedInteger;
+}
+
 function MarketSetupCard({
   action,
   base,
@@ -362,6 +369,7 @@ export function CreateMarketScreen() {
   const creator = useCreateMarket();
   const [baseAddress, setBaseAddress] = useState("");
   const [marketCreationFee, setMarketCreationFee] = useState<bigint | null>(null);
+  const [embeddedWalletBalance, setEmbeddedWalletBalance] = useState<bigint | null>(null);
   const quoteAddress = quoteTokens[0]?.address ?? "";
   const [inspectedPair, setInspectedPair] = useState<PairInfo | null>(null);
   const [inspecting, setInspecting] = useState(false);
@@ -393,6 +401,11 @@ export function CreateMarketScreen() {
     marketCreationFee === null
       ? "—"
       : `${formatUnits(marketCreationFee, config.chain.nativeCurrency.decimals)} ${config.chain.nativeCurrency.symbol}`;
+  const embeddedWalletBalanceDisplay =
+    embeddedWalletBalance === null
+      ? "—"
+      : formatNativeBalance(embeddedWalletBalance, config.chain.nativeCurrency.decimals);
+  const marketCreationFeeWithBalance = `${marketCreationFeeDisplay} | Bal ${embeddedWalletBalanceDisplay} ${config.chain.nativeCurrency.symbol}`;
   const quoteSymbol =
     quoteVerification.status === "valid" ? quoteVerification.token.symbol : (selectedQuote?.symbol ?? "Quote");
   const quoteIconUrl =
@@ -434,6 +447,29 @@ export function CreateMarketScreen() {
       active = false;
     };
   }, [config.factoryAddress, publicClient]);
+
+  useEffect(() => {
+    const walletAddress = creator.wallet?.address;
+    if (!walletAddress || !isAddress(walletAddress)) {
+      setEmbeddedWalletBalance(null);
+      return;
+    }
+
+    let active = true;
+    setEmbeddedWalletBalance(null);
+    void publicClient
+      .getBalance({ address: getAddress(walletAddress) })
+      .then((balance) => {
+        if (active) setEmbeddedWalletBalance(balance);
+      })
+      .catch(() => {
+        if (active) setEmbeddedWalletBalance(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [creator.wallet?.address, publicClient]);
 
   useEffect(() => {
     if (!pairVerified) {
@@ -511,7 +547,7 @@ export function CreateMarketScreen() {
                   verification: baseVerification,
                 }}
                 error={setupError}
-                marketCreationFee={marketCreationFeeDisplay}
+                marketCreationFee={marketCreationFeeWithBalance}
                 quoteIconUrl={quoteIconUrl}
                 quoteSymbol={quoteSymbol}
                 tokenPriceRange={tokenPriceRange}

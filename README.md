@@ -4,6 +4,29 @@ A fully on-chain spot central limit order book on Monad. Orders, price-time matc
 and custody are enforced by smart contracts. The web app provides Privy wallet access, sponsored
 transactions, live market data, and trading tools.
 
+## Problem
+
+Most on-chain spot markets use AMMs or off-chain matching. This project provides a permissionless,
+non-custodial spot CLOB on Monad with transparent price-time matching, escrow, and settlement
+entirely on-chain.
+
+## Intended users
+
+- Traders seeking transparent, non-custodial limit and market orders
+- Token creators launching permissionless spot markets
+- Builders exploring on-chain matching and sponsored transactions on Monad
+
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| Blockchain | Monad Testnet, Solidity, Foundry |
+| Smart accounts | ERC-4337 UserOperations, EIP-7702 delegation, Kernel session keys |
+| Web application | Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, Motion |
+| Wallet and transactions | Privy, Viem |
+| Indexing and data | Envio HyperIndex, GraphQL |
+| Tooling and tests | pnpm, Turborepo, Biome, Node.js test runner, Vitest, Forge |
+
 ## Features
 
 - Limit and market orders with price-time priority
@@ -13,6 +36,14 @@ transactions, live market data, and trading tools.
 - Live order books, trades, candles, and market statistics through Envio
 - Permissionless token and market creation
 - Local Anvil support for contract and UI development
+
+## Demo
+
+[Watch the public proof-of-concept video on X](https://x.com/saurabh_evm/status/2102428560334151828)
+or [open the live Monad Testnet app](https://clob.bsaurabh.xyz/10143/markets).
+
+The demo shows the fully on-chain order book, permissionless market creation, and real-time price
+matching running on Monad.
 
 ## Architecture
 
@@ -34,10 +65,6 @@ the server sponsor wallet. The API returns the transaction hash without waiting 
 
 The session key remains in browser memory and is renewed in the background. The server never holds
 the user's wallet or session private key.
-
-## License
-
-This project is open source under the [MIT License](LICENSE).
 
 ## Monad Testnet deployment
 
@@ -122,3 +149,9 @@ forge test
 
 See [`contracts/README.md`](contracts/README.md) for contract design and deployment details, and
 [`apps/indexer/README.md`](apps/indexer/README.md) for indexer configuration and GraphQL examples.
+
+## License
+
+This project is open source under the [MIT License](LICENSE).
+
+*AI assistance: This project was developed with assistance from OpenAI Codex using GPT-5.6 Sol.*

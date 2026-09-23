@@ -117,7 +117,7 @@ export function AccountPanel({
   onRecentTradesPageChange,
 }: AccountPanelProps) {
   const { config } = useClobChain();
-  const [activeTab, setActiveTab] = useState<AccountTab>("Open Orders");
+  const [activeTab, setActiveTab] = useState<AccountTab>("Recent Trades");
   const [cancellingId, setCancellingId] = useState<`0x${string}` | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OpenOrder | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);

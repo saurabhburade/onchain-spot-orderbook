@@ -35,6 +35,10 @@ the server sponsor wallet. The API returns the transaction hash without waiting 
 The session key remains in browser memory and is renewed in the background. The server never holds
 the user's wallet or session private key.
 
+## License
+
+This project is open source under the [MIT License](LICENSE).
+
 ## Monad Testnet deployment
 
 | Contract | Address |

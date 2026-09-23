@@ -3,11 +3,10 @@ import type { ReactNode } from "react";
 
 import { formatPrice, formatQuantity, formatQuote, type PoolMetadata } from "@/lib/clob";
 import { quoteAmountRaw } from "@/lib/clob/utils";
+import type { MarketSummary } from "@/lib/trading/market-data";
+import { formatLastPrice } from "@/lib/trading/market-details-formatting";
+import { formatTradingFeeRate } from "@/lib/trading/trade-ticket-fee";
 import { cn } from "@/lib/utils";
-
-import type { MarketSummary } from "./market-data";
-import { formatLastPrice } from "./market-details-formatting";
-import { formatTradingFeeRate } from "./trade-ticket-fee";
 
 const maxUint128 = (1n << 128n) - 1n;
 

@@ -9,10 +9,13 @@ const tradePageSource = readFileSync(
 );
 const serverDataSource = readFileSync(new URL("./server-data.ts", import.meta.url), "utf8");
 const tradingScreenSource = readFileSync(
-  new URL("../../components/trading/trading-screen.tsx", import.meta.url),
+  new URL("../../views/trading/components/trading-screen.tsx", import.meta.url),
   "utf8",
 );
-const accountPanelSource = readFileSync(new URL("../../components/trading/account-panel.tsx", import.meta.url), "utf8");
+const accountPanelSource = readFileSync(
+  new URL("../../views/trading/components/account-panel.tsx", import.meta.url),
+  "utf8",
+);
 
 test("fetches each recent-trades page with a stable descending GraphQL window", () => {
   const recentTradesQuery =

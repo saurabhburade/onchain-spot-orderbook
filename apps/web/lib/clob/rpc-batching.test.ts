@@ -4,15 +4,22 @@ import { describe, it } from "node:test";
 
 const clientSource = readFileSync(new URL("../../config/viem.ts", import.meta.url), "utf8");
 const configSource = readFileSync(new URL("../../config/chains.ts", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const sharedHooksSource = readFileSync(new URL("../../hooks/clob/shared.ts", import.meta.url), "utf8");
+const marketHooksSource = readFileSync(new URL("../../hooks/clob/market-hooks.tsx", import.meta.url), "utf8");
+const marketDataHooksSource = readFileSync(new URL("../../hooks/clob/market-data-hooks.tsx", import.meta.url), "utf8");
+const accountHooksSource = readFileSync(new URL("../../hooks/clob/account-hooks.tsx", import.meta.url), "utf8");
+const hooksSource = [sharedHooksSource, marketHooksSource, marketDataHooksSource, accountHooksSource].join("\n");
 const indexerHooksSource = readFileSync(new URL("../../hooks/use-indexer.ts", import.meta.url), "utf8");
 const marketsScreenSource = readFileSync(
-  new URL("../../components/markets/markets-screen.tsx", import.meta.url),
+  new URL("../../views/markets/components/markets-screen.tsx", import.meta.url),
   "utf8",
 );
 const marketsPageSource = readFileSync(new URL("../../app/[chainId]/markets/page.tsx", import.meta.url), "utf8");
 const indexerServerDataSource = readFileSync(new URL("../indexer/server-data.ts", import.meta.url), "utf8");
-const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
+const faucetSource = readFileSync(
+  new URL("../../views/token-tools/components/faucet-screen.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("Monad RPC request batching", () => {
   it("keeps contract event watchers off the HTTP read client", () => {
@@ -70,7 +77,7 @@ describe("Monad RPC request batching", () => {
 
   it("reuses RPC snapshots and refreshes server-rendered indexer listings", () => {
     const useMarketsSource =
-      hooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
+      marketHooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
 
     assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.get\(snapshotKey\)/);
     assert.match(useMarketsSource, /marketSnapshotCache\(publicClient\)\.set\(snapshotKey, markets\)/);
@@ -85,9 +92,8 @@ describe("Monad RPC request batching", () => {
   });
 
   it("reads user orders with eth_call instead of historical event filters", () => {
-    const start = hooksSource.indexOf("export function useUserOrders");
-    const end = hooksSource.indexOf("function transactionError", start);
-    const userOrdersSource = hooksSource.slice(start, end);
+    const userOrdersSource =
+      accountHooksSource.split("export function useUserOrders")[1]?.split("export function useOpenOrders")[0] ?? "";
 
     assert.match(userOrdersSource, /functionName:\s*"getUserOrders"/);
     assert.match(userOrdersSource, /functionName:\s*"getUserOrderIds"/);

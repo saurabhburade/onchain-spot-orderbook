@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
 import { formatUnits, getAddress, isAddress } from "viem";
-
-import { PriceBitmapChart } from "@/components/markets/price-bitmap-chart";
 import { TokenIcon } from "@/components/token-icon";
 import {
   AlertDialog,
@@ -33,6 +31,7 @@ import {
   useCreateMarket,
 } from "@/lib/clob";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
+import { PriceBitmapChart } from "@/views/markets/components/price-bitmap-chart";
 
 type PairInfo = { base: MarketToken; quote: MarketToken; legacyFactory: boolean; existingPoolId?: PoolId };
 

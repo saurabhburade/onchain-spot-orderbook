@@ -4,28 +4,28 @@ import { describe, it } from "node:test";
 
 const marketListSource = readFileSync(new URL("./market-list.ts", import.meta.url), "utf8");
 const marketSelectorSource = readFileSync(
-  new URL("../../components/markets/market-selector.tsx", import.meta.url),
+  new URL("../../views/markets/components/market-selector.tsx", import.meta.url),
   "utf8",
 );
 const marketPairIconSource = readFileSync(
-  new URL("../../components/markets/market-pair-icon.tsx", import.meta.url),
+  new URL("../../views/markets/components/market-pair-icon.tsx", import.meta.url),
   "utf8",
 );
 const tokenIconSource = readFileSync(new URL("../../components/token-icon.tsx", import.meta.url), "utf8");
 const createMarketSource = readFileSync(
-  new URL("../../components/markets/create-market-screen.tsx", import.meta.url),
+  new URL("../../views/markets/components/create-market-screen.tsx", import.meta.url),
   "utf8",
 );
 const fundingDialogSource = readFileSync(
-  new URL("../../components/trading/funding-dialog.tsx", import.meta.url),
+  new URL("../../views/trading/components/funding-dialog.tsx", import.meta.url),
   "utf8",
 );
 const faucetScreenSource = readFileSync(
-  new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url),
+  new URL("../../views/token-tools/components/faucet-screen.tsx", import.meta.url),
   "utf8",
 );
 const tradingScreenSource = readFileSync(
-  new URL("../../components/trading/trading-screen.tsx", import.meta.url),
+  new URL("../../views/trading/components/trading-screen.tsx", import.meta.url),
   "utf8",
 );
 

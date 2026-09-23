@@ -1,4 +1,4 @@
-import { TradingScreen } from "@/components/trading/trading-screen";
+import { TradingScreen } from "@/views/trading/components/trading-screen";
 
 export default function TradePage() {
   return <TradingScreen />;

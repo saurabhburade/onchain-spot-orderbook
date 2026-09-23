@@ -16,7 +16,7 @@ import { MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@/lib/clob"
 import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
 import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
-import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/forms/numeric-input";
+import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
 
 const showTransactionLatency = process.env.NODE_ENV !== "production";
 

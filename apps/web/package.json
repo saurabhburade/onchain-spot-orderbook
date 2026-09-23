@@ -14,7 +14,7 @@
     "userop:session-fork": "node --env-file-if-exists=.env.local scripts/kernel-session-fork-e2e.ts",
     "maker:live": "node --env-file-if-exists=.env.local scripts/live-privy-market-maker.mjs",
     "seed:market": "node --env-file-if-exists=.env.local scripts/seed-demo-market.mjs",
-    "test": "node --test lib/clob/*.test.ts lib/forms/*.test.ts lib/indexer/*.test.ts components/markets/*.test.ts components/trading/*.test.ts scripts/*.test.mjs"
+    "test": "node --test lib/*.test.ts lib/clob/*.test.ts lib/indexer/*.test.ts lib/markets/*.test.ts lib/trading/*.test.ts scripts/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -4,29 +4,35 @@ import { describe, it } from "node:test";
 
 const optionsSource = readFileSync(new URL("./transaction-options.ts", import.meta.url), "utf8");
 const deploySource = readFileSync(
-  new URL("../../components/token-tools/deploy-token-screen.tsx", import.meta.url),
+  new URL("../../views/token-tools/components/deploy-token-screen.tsx", import.meta.url),
   "utf8",
 );
-const faucetSource = readFileSync(new URL("../../components/token-tools/faucet-screen.tsx", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const faucetSource = readFileSync(
+  new URL("../../views/token-tools/components/faucet-screen.tsx", import.meta.url),
+  "utf8",
+);
+const marketHooksSource = readFileSync(new URL("../../hooks/clob/market-hooks.tsx", import.meta.url), "utf8");
+const transactionHooksSource = readFileSync(new URL("../../hooks/clob/transaction-hooks.tsx", import.meta.url), "utf8");
 const tradingScreenSource = readFileSync(
-  new URL("../../components/trading/trading-screen.tsx", import.meta.url),
+  new URL("../../views/trading/components/trading-screen.tsx", import.meta.url),
   "utf8",
 );
 const directClientSource = readFileSync(new URL("./direct-userop-client.ts", import.meta.url), "utf8");
 const kernelSessionClientSource = readFileSync(new URL("./kernel-session-client.ts", import.meta.url), "utf8");
 const userOpAuthRouteSource = readFileSync(new URL("../../app/api/userops/auth/route.ts", import.meta.url), "utf8");
 const userOpSubmitRouteSource = readFileSync(new URL("../../app/api/userops/submit/route.ts", import.meta.url), "utf8");
-const createMarketSource =
-  hooksSource.split("export function useCreateMarket()")[1]?.split("export function useOrderbook")[0] ?? "";
+const createMarketSource = marketHooksSource.split("export function useCreateMarket()")[1] ?? "";
 const marketsSource =
-  hooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
-const atomicOrderSource = hooksSource.split("const sendAtomicOrder")[1]?.split("const placeLimit")[0] ?? "";
-const limitOrderSource = hooksSource.split("const placeLimit")[1]?.split("const executeMarket")[0] ?? "";
-const marketOrderSource = hooksSource.split("const executeMarket")[1]?.split("const cancel")[0] ?? "";
-const actionRunnerSource = hooksSource.split("const run = useCallback")[1]?.split("const sendAtomicOrder")[0] ?? "";
-const privyOrderSource = hooksSource.split("const sendPrivyOrder")[1]?.split("const sendDirectOrder")[0] ?? "";
-const directOrderSource = hooksSource.split("const sendDirectOrder")[1]?.split("const sendAtomicOrder")[0] ?? "";
+  marketHooksSource.split("export function useMarkets()")[1]?.split("export function useCreateMarket")[0] ?? "";
+const atomicOrderSource = transactionHooksSource.split("const sendAtomicOrder")[1]?.split("const placeLimit")[0] ?? "";
+const limitOrderSource = transactionHooksSource.split("const placeLimit")[1]?.split("const executeMarket")[0] ?? "";
+const marketOrderSource = transactionHooksSource.split("const executeMarket")[1]?.split("const cancel")[0] ?? "";
+const actionRunnerSource =
+  transactionHooksSource.split("const run = useCallback")[1]?.split("const sendAtomicOrder")[0] ?? "";
+const privyOrderSource =
+  transactionHooksSource.split("const sendPrivyOrder")[1]?.split("const sendDirectOrder")[0] ?? "";
+const directOrderSource =
+  transactionHooksSource.split("const sendDirectOrder")[1]?.split("const sendAtomicOrder")[0] ?? "";
 
 describe("headless sponsored token deployment", () => {
   it("hides the wallet UI and limits sponsorship to Monad Testnet", () => {

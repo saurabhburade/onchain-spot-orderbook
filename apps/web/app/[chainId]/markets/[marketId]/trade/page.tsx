@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
-
-import { TradingScreen } from "@/components/trading/trading-screen";
 import { isSupportedClobChainId } from "@/config/chains";
 import type { PoolId } from "@/lib/clob";
 import { loadTradingIndexerSnapshot } from "@/lib/indexer/server-data";
+import { TradingScreen } from "@/views/trading/components/trading-screen";
 
 const recentTradesPageSize = 10;
 const maxRecentTradesOffset = 10_000;

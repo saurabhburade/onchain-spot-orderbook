@@ -17,7 +17,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Address, encodeFunctionData, formatUnits, getAddress, type Hash, isAddress, parseUnits } from "viem";
 
 import { usePrivyConfigured } from "@/components/providers";
-import { type FundingAction, FundingDialog, type WalletAsset } from "@/components/trading/funding-dialog";
 import { Button } from "@/components/ui/button";
 import { floatingMenuItemClassName, floatingMenuPopupClassName } from "@/components/ui/floating-menu-styles";
 import { toast } from "@/components/ui/toast";
@@ -25,6 +24,7 @@ import { erc20Abi, MONAD_TESTNET_CHAIN_ID, useClobChain, useClobWallet } from "@
 import { notifyBalanceRefresh, subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
 import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
+import { type FundingAction, FundingDialog, type WalletAsset } from "@/views/trading/components/funding-dialog";
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;

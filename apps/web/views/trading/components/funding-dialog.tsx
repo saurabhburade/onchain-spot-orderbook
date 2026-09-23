@@ -8,7 +8,7 @@ import { type Address, isAddress } from "viem";
 import { TokenIcon } from "@/components/token-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { sanitizeDecimalInput } from "@/lib/forms/numeric-input";
+import { sanitizeDecimalInput } from "@/lib/utils";
 
 export type FundingAction = "deposit" | "withdraw";
 

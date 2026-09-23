@@ -6,9 +6,8 @@ import { useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { BestPrices } from "@/lib/clob";
+import type { OrderBookLevel } from "@/lib/trading/market-data";
 import { cn } from "@/lib/utils";
-
-import type { OrderBookLevel } from "./market-data";
 
 const skeletonRows = [38, 68, 52, 84, 61, 74, 46];
 

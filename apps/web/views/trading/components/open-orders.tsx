@@ -6,9 +6,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { OpenOrder } from "@/lib/trading/market-data";
 import { cn } from "@/lib/utils";
-
-import type { OpenOrder } from "./market-data";
 import { SectionHeading } from "./section-heading";
 
 export function OpenOrders({

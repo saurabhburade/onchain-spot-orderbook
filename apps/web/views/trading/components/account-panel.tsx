@@ -17,12 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type PoolMetadata, useClobChain } from "@/lib/clob";
+import type { Balance, MarketSummary, OpenOrder, RecentTrade } from "@/lib/trading/market-data";
+import { formatCurrencyAmount } from "@/lib/trading/market-details-formatting";
+import { formatTimeAgo } from "@/lib/trading/relative-time";
 import { cn } from "@/lib/utils";
-
-import type { Balance, MarketSummary, OpenOrder, RecentTrade } from "./market-data";
 import { MarketDetails } from "./market-details";
-import { formatCurrencyAmount } from "./market-details-formatting";
-import { formatTimeAgo } from "./relative-time";
 
 const accountTabs = ["Open Orders", "Assets", "Order History", "Recent Trades", "Market Details"] as const;
 type AccountTab = (typeof accountTabs)[number];

@@ -5,8 +5,6 @@ import { ExternalLink, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-
-import { MarketSelector } from "@/components/markets/market-selector";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   formatPrice,
@@ -22,8 +20,6 @@ import {
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 import { type IndexedTrade, type TradingIndexerSnapshot, useRpcFirstMarkets } from "@/lib/indexer";
 import { refreshIndexedRecentTrades } from "@/lib/indexer/recent-trades-action";
-
-import { AccountPanel } from "./account-panel";
 import type {
   Balance,
   MarketSummary,
@@ -31,11 +27,13 @@ import type {
   OrderBookLevel,
   RecentTrade,
   TransactionFeedback,
-} from "./market-data";
-import { missingMarketRecoveryPath } from "./market-route";
-import { deriveMarketSummary, type PriceCandle } from "./market-stats";
+} from "@/lib/trading/market-data";
+import { missingMarketRecoveryPath } from "@/lib/trading/market-route";
+import { deriveMarketSummary, type PriceCandle } from "@/lib/trading/market-stats";
+import { orderHistoryPrice } from "@/lib/trading/order-history";
+import { MarketSelector } from "@/views/markets/components/market-selector";
+import { AccountPanel } from "./account-panel";
 import { OrderBook } from "./order-book";
-import { orderHistoryPrice } from "./order-history";
 import { PriceChart } from "./price-chart";
 import { TradeTicket } from "./trade-ticket";
 

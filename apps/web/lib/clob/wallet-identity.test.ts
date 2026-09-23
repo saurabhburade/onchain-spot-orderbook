@@ -4,7 +4,7 @@ import test from "node:test";
 
 const walletButtonSource = readFileSync(new URL("../../components/wallet-button.tsx", import.meta.url), "utf8");
 const fundingDialogSource = readFileSync(
-  new URL("../../components/trading/funding-dialog.tsx", import.meta.url),
+  new URL("../../views/trading/components/funding-dialog.tsx", import.meta.url),
   "utf8",
 );
 const appHeaderSource = readFileSync(new URL("../../components/app-header.tsx", import.meta.url), "utf8");
@@ -16,7 +16,9 @@ const floatingMenuStylesSource = readFileSync(
 const themeToggleSource = readFileSync(new URL("../../components/theme-toggle.tsx", import.meta.url), "utf8");
 const privyConfigSource = readFileSync(new URL("../../config/privy.ts", import.meta.url), "utf8");
 const walletContextSource = readFileSync(new URL("./wallet.tsx", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const accountHooksSource = readFileSync(new URL("../../hooks/clob/account-hooks.tsx", import.meta.url), "utf8");
+const transactionHooksSource = readFileSync(new URL("../../hooks/clob/transaction-hooks.tsx", import.meta.url), "utf8");
+const hooksSource = `${accountHooksSource}\n${transactionHooksSource}`;
 
 test("matches Privy dialogs to the app's neutral light and dark palettes", () => {
   assert.match(privyConfigSource, /dark:\s*\{\s*accentColor:\s*"#e5e5e5",\s*theme:\s*"#111111"/);
@@ -109,7 +111,9 @@ test("pre-authorizes the local Kernel session when login completes", () => {
 
 test("keeps Privy root signing out of every transaction path", () => {
   const submitSource =
-    hooksSource.split("const submitDirectCalls = useCallback")[1]?.split("const placeOrder = useCallback")[0] ?? "";
+    transactionHooksSource
+      .split("const submitDirectCalls = useCallback")[1]
+      ?.split("const placeOrder = useCallback")[0] ?? "";
   const withdrawSource =
     walletButtonSource.split("async function withdraw")[1]?.split("if (connected && !address)")[0] ?? "";
 
@@ -160,9 +164,10 @@ test("sponsors every Monad native and ERC-20 withdrawal", () => {
 });
 
 test("reads token balances and orders only for the trading address", () => {
-  const balanceSource = hooksSource.split("export function useBalances")[1]?.split("function orderStatus")[0] ?? "";
+  const balanceSource =
+    accountHooksSource.split("export function useBalances")[1]?.split("function orderStatus")[0] ?? "";
   const orderSource =
-    hooksSource.split("export function useUserOrders")[1]?.split("export function useOpenOrders")[0] ?? "";
+    accountHooksSource.split("export function useUserOrders")[1]?.split("export function useOpenOrders")[0] ?? "";
   assert.match(balanceSource, /args:\s*\[tradingAddress/);
   assert.doesNotMatch(balanceSource, /wallet\.address/);
   assert.match(orderSource, /const walletAddress = tradingAddress/);

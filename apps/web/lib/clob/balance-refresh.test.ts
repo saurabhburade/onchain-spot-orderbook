@@ -5,7 +5,7 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const walletButtonSource = readFileSync(new URL("../../components/wallet-button.tsx", import.meta.url), "utf8");
-const hooksSource = readFileSync(new URL("../../hooks/use-clob.tsx", import.meta.url), "utf8");
+const accountHooksSource = readFileSync(new URL("../../hooks/clob/account-hooks.tsx", import.meta.url), "utf8");
 
 test("broadcasts one balance refresh to all mounted consumers", () => {
   const { notifyBalanceRefresh, subscribeToBalanceRefresh } =
@@ -40,5 +40,5 @@ test("broadcasts one balance refresh to all mounted consumers", () => {
 test("wires the receipt signal into the wallet menu and trading balances", () => {
   assert.match(walletButtonSource, /subscribeToBalanceRefresh/);
   assert.match(walletButtonSource, /notifyBalanceRefresh/);
-  assert.match(hooksSource, /subscribeToBalanceRefresh/);
+  assert.match(accountHooksSource, /subscribeToBalanceRefresh/);
 });

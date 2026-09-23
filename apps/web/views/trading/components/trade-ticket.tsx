@@ -10,12 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { validateOrderBalance } from "@/lib/clob/order-validation";
-import { sanitizeDecimalInput } from "@/lib/forms/numeric-input";
-
-import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback } from "./market-data";
-import { formatCurrencyAmount } from "./market-details-formatting";
-import { deriveAllocationPercentage } from "./trade-ticket-allocation";
-import { formatTradingFeeRate } from "./trade-ticket-fee";
+import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback } from "@/lib/trading/market-data";
+import { formatCurrencyAmount } from "@/lib/trading/market-details-formatting";
+import { deriveAllocationPercentage } from "@/lib/trading/trade-ticket-allocation";
+import { formatTradingFeeRate } from "@/lib/trading/trade-ticket-fee";
+import { sanitizeDecimalInput } from "@/lib/utils";
 
 function clean(value: string) {
   return value.replaceAll(",", "").trim();

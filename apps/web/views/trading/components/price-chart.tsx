@@ -18,8 +18,8 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TradeExecuted } from "@/lib/clob";
 
-import type { MarketSummary } from "./market-data";
-import { aggregatePriceCandles, buildPriceCandles, compactNumber, type PriceCandle } from "./market-stats";
+import type { MarketSummary } from "@/lib/trading/market-data";
+import { aggregatePriceCandles, buildPriceCandles, compactNumber, type PriceCandle } from "@/lib/trading/market-stats";
 
 type PriceChartProps = {
   summary: MarketSummary;

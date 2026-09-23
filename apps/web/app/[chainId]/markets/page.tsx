@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-
-import { MarketsScreen } from "@/components/markets/markets-screen";
 import { isSupportedClobChainId } from "@/config/chains";
 import { loadIndexedMarketListings } from "@/lib/indexer/server-data";
+import { MarketsScreen } from "@/views/markets/components/markets-screen";
 
 export const dynamic = "force-dynamic";
 

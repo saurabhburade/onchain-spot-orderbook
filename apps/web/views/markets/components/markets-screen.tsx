@@ -10,9 +10,8 @@ import { Input } from "@/components/ui/input";
 import { useClobChain } from "@/lib/clob";
 import type { MarketListing } from "@/lib/clob/types";
 import { useRpcFirstMarkets } from "@/lib/indexer";
-
+import { getMarketPage, marketsPerPage } from "@/lib/markets/pagination";
 import { MarketPairIcon } from "./market-pair-icon";
-import { getMarketPage, marketsPerPage } from "./pagination";
 
 const marketSkeletons = ["market-a", "market-b", "market-c", "market-d", "market-e", "market-f"];
 const skeletonColumns = ["price", "change", "volume", "book"];

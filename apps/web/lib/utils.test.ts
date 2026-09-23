@@ -3,8 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { sanitizeDecimalInput, sanitizeIntegerInput } =
-  require("./numeric-input.ts") as typeof import("./numeric-input");
+const { sanitizeDecimalInput, sanitizeIntegerInput } = require("./utils.ts") as typeof import("./utils");
 
 test("decimal input removes non-numeric text", () => {
   assert.equal(sanitizeDecimalInput("fgsdfgsdfg"), "");

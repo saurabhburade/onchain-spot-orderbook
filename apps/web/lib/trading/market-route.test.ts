@@ -3,10 +3,15 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { missingMarketRecoveryPath } = require("./market-route.ts") as typeof import("./market-route");
+const { defaultTradePath, missingMarketRecoveryPath } = require("./market-route.ts") as typeof import("./market-route");
 
 const stalePool = `0x${"11".repeat(32)}` as const;
 const defaultPool = `0x${"22".repeat(32)}` as const;
+
+test("opens the configured market from root and legacy trade routes", () => {
+  assert.equal(defaultTradePath(10143, defaultPool), `/10143/markets/${defaultPool}/trade`);
+  assert.equal(defaultTradePath(31337), "/31337/markets");
+});
 
 test("redirects a confirmed missing pool to the current deployment default", () => {
   assert.equal(

@@ -88,7 +88,7 @@ export const clobNetworksByChainId: Readonly<Record<number, ClobNetworkConfig>> 
       process.env.NEXT_PUBLIC_MONAD_DEFAULT_POOL_ID ||
         "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
     ),
-    deploymentBlock: BigInt(process.env.NEXT_PUBLIC_MONAD_CLOB_DEPLOYMENT_BLOCK || "63617140"),
+    deploymentBlock: BigInt(process.env.NEXT_PUBLIC_MONAD_CLOB_DEPLOYMENT_BLOCK || "66120915"),
   },
   [ANVIL_CHAIN_ID]: {
     chain: anvilChain,

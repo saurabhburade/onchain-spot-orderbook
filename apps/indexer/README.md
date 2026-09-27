@@ -54,8 +54,11 @@ pnpm codegen
 pnpm dev
 ```
 
-The default config starts at factory deployment block `63617140` and dynamically registers books
-created by `0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b`.
+The default config starts at factory deployment block `66120915` and dynamically registers books
+created by `0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB`.
+If this indexer already has data from the previous factory, stop it and run
+`pnpm exec envio start --restart` once (or `pnpm exec envio dev --restart` for development).
+This clears the indexed database and replays events from the configured start block.
 
 The current deployment emits the latest event signatures. The indexer also retains handlers for
 the legacy eight-field `PairCreated` and seven-field `MarketActivated` signatures so historical or

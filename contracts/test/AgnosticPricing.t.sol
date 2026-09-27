@@ -101,6 +101,7 @@ contract AgnosticTrader {
                 quantity: quantity,
                 priceLimit: 0,
                 minFillQuantity: quantity,
+                minReceive: 0,
                 clientOrderId: 0
             }),
             64

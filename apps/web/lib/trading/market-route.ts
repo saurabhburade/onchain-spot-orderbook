@@ -1,5 +1,9 @@
 import type { PoolId } from "@/lib/clob";
 
+export function defaultTradePath(chainId: number, defaultPoolId?: PoolId) {
+  return defaultPoolId ? `/${chainId}/markets/${defaultPoolId}/trade` : `/${chainId}/markets`;
+}
+
 export function missingMarketRecoveryPath({
   chainId,
   currentPoolId,
@@ -13,7 +17,7 @@ export function missingMarketRecoveryPath({
 }) {
   if (errorMessage !== `Pool ${currentPoolId} does not exist`) return null;
   if (defaultPoolId && defaultPoolId.toLowerCase() !== currentPoolId.toLowerCase()) {
-    return `/${chainId}/markets/${defaultPoolId}/trade`;
+    return defaultTradePath(chainId, defaultPoolId);
   }
-  return `/${chainId}/markets`;
+  return defaultTradePath(chainId);
 }

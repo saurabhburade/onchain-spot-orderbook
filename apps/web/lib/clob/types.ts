@@ -191,6 +191,9 @@ export type MarketOrderInput = {
   quantity: string;
   priceLimit?: string;
   minFillQuantity?: string;
+  referencePriceRaw?: bigint;
+  slippagePercent?: string;
+  minReceive?: string;
   clientOrderId?: bigint;
   maxBookSteps?: bigint;
 };

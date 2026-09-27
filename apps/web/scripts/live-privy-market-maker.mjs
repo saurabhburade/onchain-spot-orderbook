@@ -72,7 +72,7 @@ const currentFactoryAbi = parseAbi([
 const clobAbi = parseAbi([
   "event TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)",
   "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 expiry,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
-  "function executeMarketOrder((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 quantity,uint128 priceLimit,uint128 minFillQuantity,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId,uint128 filledQuantity,uint256 quoteQuantity)",
+  "function executeMarketOrder((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 quantity,uint128 priceLimit,uint128 minFillQuantity,uint256 minReceive,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId,uint128 filledQuantity,uint256 quoteQuantity)",
   "function cancelOrder(bytes32 orderId)",
   "function getUserOrderIds(bytes32 poolId,address trader,bytes32 cursor,uint16 limit,uint8 statusFlags) view returns (bytes32[] orderIds,bytes32 nextCursor)",
   "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint128 bidQuantity,bool askExists,uint128 askPrice,uint128 askQuantity)",
@@ -363,6 +363,7 @@ function marketOrderCall(wallet, market, side, quantity, maxBookSteps, clientOrd
           quantity,
           priceLimit: 0n,
           minFillQuantity: quantity,
+          minReceive: 0n,
           clientOrderId,
         },
         maxBookSteps,

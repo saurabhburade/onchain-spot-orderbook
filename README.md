@@ -30,6 +30,7 @@ entirely on-chain.
 ## Features
 
 - Limit and market orders with price-time priority
+- Market-order slippage tolerance and an on-chain minimum received amount
 - Per-order escrow with atomic settlement and cancellation
 - Sponsored ERC-4337 UserOperations for Monad Testnet transactions
 - Browser-local Kernel session keys authorized when the user signs in
@@ -70,30 +71,40 @@ the user's wallet or session private key.
 
 | Contract | Address |
 | --- | --- |
-| SpotCLOBFactory | [`0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b`](https://testnet.monadscan.com/address/0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b) |
-| SpotCLOBLens | [`0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F`](https://testnet.monadscan.com/address/0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F) |
+| SpotCLOBFactory | [`0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB`](https://testnet.monadscan.com/address/0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB) |
+| SpotCLOBLens | [`0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402`](https://testnet.monadscan.com/address/0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402) |
+| Default USDT/USDC book | [`0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3`](https://testnet.monadscan.com/address/0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3) |
 | ERC20TokenFactory | [`0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc`](https://testnet.monadscan.com/address/0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc) |
 | TokenFaucet | [`0xB8d1b7f2a722A0b5315eaF0840F652A95a758598`](https://testnet.monadscan.com/address/0xB8d1b7f2a722A0b5315eaF0840F652A95a758598) |
 
-Chain ID: `10143`
+Chain ID: `10143`. Current market addresses and transaction hashes are in
+[`contracts/deployments/monad-testnet.json`](contracts/deployments/monad-testnet.json).
+
+The current market-order contract checks `minReceive` against raw base-token atoms for buys and
+quote-token atoms received after fees for sells. Setting it to zero removes the output minimum;
+the order still needs liquidity and can fill partially.
 
 ## Monad gas benchmark
 
-- Gas price: `102 Gwei` (`0.000000102 MON/gas`)
-- USD reference: `0.003016344 MON = $0.000076`
+Measured on the current `SpotCLOB` contract with `minReceive` support using
+`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 27 September 2026.
+The market-order scenarios use `minReceive = 0`. Fixture seeding is excluded from
+measured gas. These are gas deltas around the actor-to-book calls in the Foundry
+harness, not deployed transaction receipts.
 
-Fixture seeding is excluded from measured gas.
+- Monad Testnet gas price at measurement: `102 Gwei` (`0.000000102 MON/gas`)
+- Illustrative USD conversion: `$0.02668/MON` ([CoinGecko](https://www.coingecko.com/en/coins/monad), 27 September 2026)
 
 | Action | Book before | Levels before | Matches | Total gas | Gas/match | Fee (MON) | Fee (USD) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create limit, new price level | 0 | 0 | 0 | 732,562 | — | 0.074721324 | $0.001883 |
-| Create limit, existing price level | 1 | 1 | 0 | 212,944 | — | 0.021720288 | $0.000547 |
-| Cancel one resting order | 1 | 1 | 0 | 49,487 | — | 0.005047674 | $0.000127 |
-| Fill one resting order, limit | 1 | 1 | 1 | 491,659 | 491,659 | 0.050149218 | $0.001264 |
-| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,112,030 | 91,120 | 0.929427060 | $0.023418 |
-| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 4,981,412 | 99,628 | 0.508104024 | $0.012802 |
-| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 9,651,622 | 96,516 | 0.984465444 | $0.024805 |
-| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 19,004,010 | 95,020 | 1.938409020 | $0.048840 |
+| Create limit, new price level | 0 | 0 | 0 | 732,580 | — | 0.074723160 | $0.001994 |
+| Create limit, existing price level | 1 | 1 | 0 | 212,962 | — | 0.021722124 | $0.000580 |
+| Cancel one resting order | 1 | 1 | 0 | 49,487 | — | 0.005047674 | $0.000135 |
+| Fill one resting order, limit | 1 | 1 | 1 | 492,175 | 492,175 | 0.050201850 | $0.001339 |
+| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,161,878 | 91,618 | 0.934511556 | $0.024933 |
+| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,006,360 | 100,127 | 0.510648720 | $0.013624 |
+| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 9,701,470 | 97,014 | 0.989549940 | $0.026401 |
+| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 19,103,658 | 95,518 | 1.948573116 | $0.051988 |
 
 ## Development
 

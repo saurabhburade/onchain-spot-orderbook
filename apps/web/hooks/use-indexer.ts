@@ -17,7 +17,9 @@ export function useRpcFirstMarkets(
 
     const indexedById = new Map(indexedMarkets.map((market) => [market.poolId.toLowerCase(), market]));
     return rpc.data.map((market) => {
-      const indexedMarket = indexedById.get(market.poolId.toLowerCase());
+      const candidate = indexedById.get(market.poolId.toLowerCase());
+      const indexedMarket =
+        candidate?.clobAddress.toLowerCase() === market.clobAddress.toLowerCase() ? candidate : undefined;
       return {
         ...market,
         lastPrice: indexedMarket?.lastPrice ?? market.lastPrice,

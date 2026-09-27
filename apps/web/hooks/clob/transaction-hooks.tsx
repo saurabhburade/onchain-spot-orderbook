@@ -11,6 +11,7 @@ import { type AtomicCall, encodeAtomicBatch } from "@/lib/clob/atomic-batch";
 import { useClobChain } from "@/lib/clob/chain-context";
 import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
 import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
+import { marketOrderTerms } from "@/lib/clob/market-order-protection";
 import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 import type {
@@ -21,7 +22,13 @@ import type {
   PoolMetadata,
   TransactionState,
 } from "@/lib/clob/types";
-import { parsePriceToRaw, parseQuantityToLots, quoteAmountRaw, quoteAmountWithPoolFee } from "@/lib/clob/utils";
+import {
+  parseHumanUnits,
+  parsePriceToRaw,
+  parseQuantityToLots,
+  quoteAmountRaw,
+  quoteAmountWithPoolFee,
+} from "@/lib/clob/utils";
 import { useClobWallet } from "@/lib/clob/wallet";
 import { useBalances, useUserOrders } from "./account-hooks";
 import { useOrderbook } from "./market-data-hooks";
@@ -267,8 +274,26 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
         const activeTrader = tradingAddress;
         if (!pool || !contractAddress || !poolId || !activeTrader)
           throw clobError(contractAddress) ?? new Error("Pool metadata is unavailable");
-        const quantity = parseQuantityToLots(input.quantity, pool);
-        const priceLimit = input.priceLimit ? parsePriceToRaw(input.priceLimit, pool) : 0n;
+        if (input.slippagePercent !== undefined && (input.priceLimit || input.minFillQuantity)) {
+          throw new Error("Choose slippage protection or an explicit price limit and minimum fill.");
+        }
+        const protectedOrder =
+          input.slippagePercent !== undefined
+            ? marketOrderTerms({
+                pool,
+                side: input.side,
+                quantity: input.quantity,
+                referencePriceRaw: input.referencePriceRaw ?? 0n,
+                slippagePercent: input.slippagePercent,
+                minReceive: input.minReceive,
+                maxBookSteps: input.maxBookSteps,
+              })
+            : null;
+        if (input.minReceive && input.minReceive !== "0" && !protectedOrder)
+          throw new Error("Minimum received requires slippage protection.");
+        const quantity = protectedOrder?.quantity ?? parseQuantityToLots(input.quantity, pool);
+        const priceLimit =
+          protectedOrder?.priceLimit ?? (input.priceLimit ? parsePriceToRaw(input.priceLimit, pool) : 0n);
         const effectiveLimit = priceLimit || (pool.agnosticPricing ? (1n << 128n) - 1n : pool.maxTick * pool.tickSize);
         const orderAsset = input.side === "buy" ? pool.quoteAsset : pool.baseAsset;
         const maxQuote = quoteAmountRaw(effectiveLimit, quantity, pool);
@@ -278,22 +303,28 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
             : pool.agnosticPricing
               ? quantity
               : pool.lotSize * quantity;
+        const request = {
+          trader: activeTrader,
+          baseAsset: pool.baseAsset,
+          quoteAsset: pool.quoteAsset,
+          side: input.side === "buy" ? 0 : 1,
+          quantity,
+          priceLimit,
+          minFillQuantity: protectedOrder
+            ? 0n
+            : input.minFillQuantity
+              ? parseQuantityToLots(input.minFillQuantity, pool)
+              : 0n,
+          minReceive: protectedOrder
+            ? parseHumanUnits(protectedOrder.minReceive, input.side === "buy" ? pool.baseDecimals : pool.quoteDecimals)
+            : 0n,
+          clientOrderId: input.clientOrderId ?? 0n,
+        } as const;
+        const maxBookSteps = (input.maxBookSteps ?? 64n) as unknown as number;
         const data = encodeFunctionData({
           abi: clobAbi,
           functionName: "executeMarketOrder",
-          args: [
-            {
-              trader: activeTrader,
-              baseAsset: pool.baseAsset,
-              quoteAsset: pool.quoteAsset,
-              side: input.side === "buy" ? 0 : 1,
-              quantity,
-              priceLimit,
-              minFillQuantity: input.minFillQuantity ? parseQuantityToLots(input.minFillQuantity, pool) : 0n,
-              clientOrderId: input.clientOrderId ?? 0n,
-            },
-            (input.maxBookSteps ?? 64n) as unknown as number,
-          ],
+          args: [request, maxBookSteps],
         });
         return sendAtomicOrder(orderAsset, contractAddress, escrowAmount, data);
       }),

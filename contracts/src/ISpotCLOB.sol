@@ -55,6 +55,9 @@ interface ISpotCLOB {
         uint128 priceLimit;
         /// @notice Revert unless at least this many lots/raw base atoms execute.
         uint128 minFillQuantity;
+        /// @notice Minimum output in raw base atoms for buys or net quote atoms for sells.
+        /// Zero applies no output minimum; `minFillQuantity` still applies.
+        uint256 minReceive;
         uint64 clientOrderId;
     }
 

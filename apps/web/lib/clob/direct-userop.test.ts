@@ -146,6 +146,23 @@ test("validates and binds the existing allowlisted calls", async () => {
   );
 });
 
+test("accepts canonical market orders with minReceive", async () => {
+  const request = {
+    trader: book,
+    baseAsset: token,
+    quoteAsset: "0x0000000000000000000000000000000000000003" as Address,
+    side: 0,
+    quantity: 1n,
+    priceLimit: 0n,
+    minFillQuantity: 0n,
+    minReceive: 1n,
+    clientOrderId: 0n,
+  } as const;
+  const data = encodeFunctionData({ abi: clobAbi, functionName: "executeMarketOrder", args: [request, 64] });
+  const validated = await encodeAllowedCalls([{ to: book, data }], book, orderValidationClient());
+  assert.equal(validated.calls[0]?.data, data);
+});
+
 test("canonicalizes faucet claims and withdrawals before sponsorship", async () => {
   const network = clobContractsByChainId[10143];
   const faucet = network.faucetAddress;

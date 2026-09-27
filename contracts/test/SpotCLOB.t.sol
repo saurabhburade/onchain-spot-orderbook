@@ -173,6 +173,7 @@ contract TraderActor {
                 quantity: quantity,
                 priceLimit: priceLimit,
                 minFillQuantity: minFillQuantity,
+                minReceive: 0,
                 clientOrderId: clientOrderId
             }),
             64
@@ -196,6 +197,54 @@ contract TraderActor {
             quantity: quantity,
             priceLimit: priceLimit,
             minFillQuantity: minFillQuantity,
+            minReceive: 0,
+            clientOrderId: 0
+        });
+        (success,) = address(exchange)
+            .call(abi.encodeCall(SpotCLOB.executeMarketOrder, (order, uint32(64))));
+    }
+
+    function marketWithMinReceive(
+        SpotCLOB exchange,
+        address baseAsset,
+        address quoteAsset,
+        ISpotCLOB.Side side,
+        uint128 quantity,
+        uint128 priceLimit,
+        uint256 minReceive
+    ) external returns (uint128 filledQuantity, uint256 quoteQuantity) {
+        ISpotCLOB.MarketOrder memory order = ISpotCLOB.MarketOrder({
+            trader: address(this),
+            baseAsset: baseAsset,
+            quoteAsset: quoteAsset,
+            side: side,
+            quantity: quantity,
+            priceLimit: priceLimit,
+            minFillQuantity: 0,
+            minReceive: minReceive,
+            clientOrderId: 0
+        });
+        (, filledQuantity, quoteQuantity) = exchange.executeMarketOrder(order, 64);
+    }
+
+    function attemptMarketWithMinReceive(
+        SpotCLOB exchange,
+        address baseAsset,
+        address quoteAsset,
+        ISpotCLOB.Side side,
+        uint128 quantity,
+        uint128 priceLimit,
+        uint256 minReceive
+    ) external returns (bool success) {
+        ISpotCLOB.MarketOrder memory order = ISpotCLOB.MarketOrder({
+            trader: address(this),
+            baseAsset: baseAsset,
+            quoteAsset: quoteAsset,
+            side: side,
+            quantity: quantity,
+            priceLimit: priceLimit,
+            minFillQuantity: 0,
+            minReceive: minReceive,
             clientOrderId: 0
         });
         (success,) = address(exchange)
@@ -529,6 +578,56 @@ contract SpotCLOBTest {
         require(!askExists, "depleted ask remained active");
     }
 
+    function testMarketBuyMinimumReceiveChecksActualBaseAtoms() public {
+        bytes32 ask = _place(sellerA, ISpotCLOB.Side.Sell, 100, 2, 1);
+        require(
+            !buyer.attemptMarketWithMinReceive(
+                exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 3, 100, 3 ether
+            ),
+            "buy received less base than requested minimum"
+        );
+        _assertOrder(ask, 0, ISpotCLOB.OrderStatus.Open);
+
+        (uint128 filled, uint256 grossQuote) = buyer.marketWithMinReceive(
+            exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 3, 100, 2 ether
+        );
+        require(filled == 2 && grossQuote == 200, "wrong protected buy fill");
+        _assertBalance(address(buyer), address(base), 2 ether, 0);
+    }
+
+    function testMarketSellMinimumReceiveChecksNetQuoteAfterFee() public {
+        _place(buyer, ISpotCLOB.Side.Buy, 10_000, 2, 1);
+        require(
+            !sellerA.attemptMarketWithMinReceive(
+                exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 10_000, 19_981
+            ),
+            "sell received less net quote than requested minimum"
+        );
+        _assertBalance(address(sellerA), address(base), 100 ether, 0);
+
+        (uint128 filled, uint256 grossQuote) = sellerA.marketWithMinReceive(
+            exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 10_000, 19_980
+        );
+        require(filled == 2 && grossQuote == 20_000, "wrong protected sell fill");
+        _assertBalance(address(sellerA), address(quote), 19_980, 0);
+    }
+
+    function testMarketSellMinimumReceiveSumsNetOutputAcrossFills() public {
+        _place(buyer, ISpotCLOB.Side.Buy, 999, 1, 1);
+        _place(buyer, ISpotCLOB.Side.Buy, 999, 1, 2);
+        require(
+            !sellerA.attemptMarketWithMinReceive(
+                exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 999, 1_999
+            ),
+            "minimum accepted more than the actual per-fill output"
+        );
+        (uint128 filled, uint256 grossQuote) = sellerA.marketWithMinReceive(
+            exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 999, 1_998
+        );
+        require(filled == 2 && grossQuote == 1_998, "wrong multi-fill result");
+        _assertBalance(address(sellerA), address(quote), 1_998, 0);
+    }
+
     function testMarketOrderOnEmptyBookRevertsAtomically() public {
         require(
             !buyer.attemptMarket(
@@ -849,6 +948,7 @@ contract SpotCLOBTest {
             quantity: 0,
             priceLimit: 100,
             minFillQuantity: 0,
+            minReceive: 0,
             clientOrderId: 0
         });
         require(!_callMarket(marketOrder), "zero market quantity accepted");

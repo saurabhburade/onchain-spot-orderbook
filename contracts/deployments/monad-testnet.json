@@ -2,22 +2,45 @@
   "chainId": 10143,
   "network": "monad-testnet",
   "rpcUrl": "https://testnet-rpc.monad.xyz",
-  "deploymentBlock": 63617140,
+  "deploymentBlock": 66120915,
   "deployer": "0x886540a55CFE78dc462C384a57E43ac275BE74FA",
   "contracts": {
-    "spotClobFactory": "0x50fcEa11c0F01F0eeAa5E980dc4ae9977559330b",
-    "spotClobImplementation": "0xA75063CcB5979B9EB82FddD91634C2100622c946",
-    "spotClob": "0x3d4E75bA9f53908345ce12951EE697B17a455E30",
-    "spotClobLens": "0xDD090DDa847b9BB8f71e4de2Bc3AA74efA528e0F"
+    "spotClobFactory": "0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB",
+    "spotClobImplementation": "0xDEF142bc36A8dd834934e75A902c5388434c9ee9",
+    "spotClob": "0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3",
+    "spotClobLens": "0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402"
   },
   "defaultMarket": {
     "poolId": "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
-    "book": "0x3d4E75bA9f53908345ce12951EE697B17a455E30",
+    "book": "0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3",
     "baseAsset": "0xef271f6433E05757A94e28873911Af92f0D0b9f3",
     "quoteAsset": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
-    "createdBlock": 63872333,
+    "createdBlock": 66120928,
     "agnosticPricing": true
   },
+  "markets": [
+    {
+      "poolId": "0x2fc62010d0de6f008d647ff949400609bd134b3225619656e06f9744cf1511d3",
+      "book": "0x50c55BE2f241862A4DD7FDce93Bb273CBd5390f3",
+      "baseAsset": "0x891874554c69A1006914a8fe6b733304E73CBDb5",
+      "quoteAsset": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
+      "createdBlock": 66120925
+    },
+    {
+      "poolId": "0x453ab8f8cee39a86e7ca582a11552cc53a761a4e2286929255ad148342d1909c",
+      "book": "0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3",
+      "baseAsset": "0xef271f6433E05757A94e28873911Af92f0D0b9f3",
+      "quoteAsset": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
+      "createdBlock": 66120928
+    },
+    {
+      "poolId": "0x673b2f52f867cd7059e9afe51119ccb282476ac04927e3dd3dd318949b7b2b38",
+      "book": "0x43522155CeD34d22aC0EB517e9f809293F983077",
+      "baseAsset": "0xFb8bf4c1CC7a94c73D209a149eA2AbEa852BC541",
+      "quoteAsset": "0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3",
+      "createdBlock": 66120932
+    }
+  ],
   "quoteTokens": [
     {
       "symbol": "USDC",
@@ -26,11 +49,12 @@
     }
   ],
   "transactions": {
-    "deployFactory": "0x61990aafcef4c71203a226968567976c02acb3c55aa6713976a368088579f84b",
-    "deployLens": "0xf6c32ea2755727312e2b6ff7eb06508bf3742c6a33ba9bfa176f6b64a2890815",
-    "allowlistUsdc": "0x2bf9e358bb4e9946e56beb315de5329246b089c20563889b87909786f04a92f8",
-    "createDummy1Usdc": "0x65af0900aae759b048830e8f2e33bf38e99c0433f55d9a6369afb3f416f1cf80",
-    "createUsdtUsdc": "0x5fa898df1bba5e12425c3380b831f669c15cff71cd0fa6f5bd10989dcaa7ac33"
+    "deployFactory": "0x87a8adb4a3f617f044ffffa13b81f6501b25bcad462b9a3bc270ccdddaa153eb",
+    "deployLens": "0x942fabfeff0293b5364a02d43fe3b0a252e9f350044566b681df7e950ec83024",
+    "allowlistUsdc": "0xf3a17d34871300745417669a5ff9fb5f61d8a474495b03245bba035ef3e62041",
+    "createDummy1Usdc": "0xcc563e26901fe9cf533ef2a777e37514afd27c34c11f6030cfb5a8ad141e332f",
+    "createUsdtUsdc": "0x87a18f0cde15e95770599620b07e2f2d487256ee85705e4b76705cabc0b0a4a6",
+    "createMonUsdc": "0x63677b58092a1b2a430906c6a3a25d1596d67248a8156f5e744748eb946904f0"
   },
   "sourceVerified": false
 }

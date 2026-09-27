@@ -27,6 +27,7 @@ contract LotExtremesBuyer {
                 quantity: quantity,
                 priceLimit: priceLimit,
                 minFillQuantity: quantity,
+                minReceive: 0,
                 clientOrderId: 1
             }),
             64

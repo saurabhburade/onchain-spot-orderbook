@@ -9,7 +9,15 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
+import {
+  DEFAULT_MARKET_SLIPPAGE_PERCENT,
+  marketOrderTerms,
+  parseSlippageBps,
+  requiresSlippageRiskAcceptance,
+} from "@/lib/clob/market-order-protection";
 import { validateOrderBalance } from "@/lib/clob/order-validation";
+import type { PoolMetadata } from "@/lib/clob/types";
+import { formatPrice, parseHumanUnits, quoteAmountRaw, quoteAmountWithPoolFee } from "@/lib/clob/utils";
 import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback } from "@/lib/trading/market-data";
 import { formatCurrencyAmount } from "@/lib/trading/market-details-formatting";
 import { deriveAllocationPercentage } from "@/lib/trading/trade-ticket-allocation";
@@ -90,10 +98,17 @@ type TradeTicketProps = {
   ready: boolean;
   transaction: TransactionFeedback;
   tradingFeeBps: number | null;
+  pool: PoolMetadata | null;
   marketPrice: string | null;
+  marketPriceRaw: bigint | null;
   selectedOrder: { price: string; size: string } | null;
   onLimitOrder: (input: { side: OrderSide; price: string; quantity: string }) => Promise<void>;
-  onMarketOrder: (input: { side: OrderSide; quantity: string }) => Promise<void>;
+  onMarketOrder: (input: {
+    side: OrderSide;
+    quantity: string;
+    minReceive: string;
+    slippagePercent: string;
+  }) => Promise<void>;
   onSideChange: (side: OrderSide) => void;
   onConnect?: () => void;
   mobileCompact?: boolean;
@@ -109,7 +124,9 @@ export function TradeTicket({
   ready,
   transaction,
   tradingFeeBps,
+  pool,
   marketPrice,
+  marketPriceRaw,
   selectedOrder,
   onLimitOrder,
   onMarketOrder,
@@ -121,18 +138,78 @@ export function TradeTicket({
   const [price, setPrice] = useState(summary.price ?? "");
   const [amount, setAmount] = useState("");
   const [allocation, setAllocation] = useState(0);
+  const [slippagePercent, setSlippagePercent] = useState(DEFAULT_MARKET_SLIPPAGE_PERCENT);
+  const [highSlippageAccepted, setHighSlippageAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const transactionToastId = useRef<string | null>(null);
   const completedTransaction = useRef<string | null>(null);
   const isBuy = side === "buy";
   const balance = isBuy ? quoteBalance : baseBalance;
-  const effectivePrice = orderType === "market" ? marketPrice || summary.price || "" : price || summary.price || "";
+  const marketPreview = useMemo(() => {
+    if (!amount || !pool || marketPriceRaw === null) return null;
+    try {
+      return marketOrderTerms({
+        pool,
+        side,
+        quantity: amount,
+        referencePriceRaw: marketPriceRaw,
+        slippagePercent,
+      });
+    } catch {
+      return null;
+    }
+  }, [amount, marketPriceRaw, pool, side, slippagePercent]);
+  const marketProtectionError = useMemo(() => {
+    if (orderType !== "market") return null;
+    try {
+      parseSlippageBps(slippagePercent);
+      if (!amount) return null;
+      if (!pool || marketPriceRaw === null) return "Market price is unavailable.";
+      marketOrderTerms({
+        pool,
+        side,
+        quantity: amount,
+        referencePriceRaw: marketPriceRaw,
+        slippagePercent,
+      });
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Market order protection is invalid.";
+    }
+  }, [amount, marketPriceRaw, orderType, pool, side, slippagePercent]);
+  const highSlippage = useMemo(() => {
+    try {
+      return requiresSlippageRiskAcceptance(slippagePercent);
+    } catch {
+      return false;
+    }
+  }, [slippagePercent]);
+  const effectivePrice =
+    orderType === "market"
+      ? marketPreview && pool
+        ? formatPrice(marketPreview.priceLimit, pool)
+        : marketPrice || ""
+      : price || summary.price || "";
   const estimatedTotal = useMemo(
-    () => (orderType === "market" ? "Market execution" : amount && price ? multiplyDecimal(amount, price) : null),
-    [amount, orderType, price],
+    () =>
+      orderType === "market"
+        ? (marketPreview?.estimatedQuote ?? null)
+        : amount && price
+          ? multiplyDecimal(amount, price)
+          : null,
+    [amount, marketPreview, orderType, price],
   );
   const balanceError = useMemo(() => {
     if (!balance || !amount) return null;
+    if (orderType === "market" && isBuy && marketPreview && pool) {
+      const worstCost = quoteAmountWithPoolFee(
+        quoteAmountRaw(marketPreview.priceLimit, marketPreview.quantity, pool),
+        pool,
+      );
+      if (worstCost > parseHumanUnits(balance.free, pool.quoteDecimals)) {
+        return `Insufficient ${balance.symbol} balance at the selected slippage.`;
+      }
+    }
     return validateOrderBalance({
       side,
       orderType,
@@ -141,13 +218,18 @@ export function TradeTicket({
       available: balance.free,
       symbol: balance.symbol,
     });
-  }, [amount, balance, effectivePrice, orderType, side]);
+  }, [amount, balance, effectivePrice, isBuy, marketPreview, orderType, pool, side]);
   const submitting = transaction.status === "pending";
   const canSubmit =
     ready &&
     !submitting &&
     (!connected ||
-      (Boolean(balance) && Boolean(amount) && (orderType === "market" || Boolean(price)) && !balanceError));
+      (Boolean(balance) &&
+        Boolean(amount) &&
+        (orderType === "market" || Boolean(price)) &&
+        !balanceError &&
+        !marketProtectionError &&
+        (orderType !== "market" || !highSlippage || highSlippageAccepted)));
 
   function allocationForAmount(nextAmount: string, nextPrice = price) {
     if (!balance) return 0;
@@ -164,6 +246,7 @@ export function TradeTicket({
     setOrderType("limit");
     setPrice(selectedOrder.price);
     setAmount(selectedOrder.size);
+    setHighSlippageAccepted(false);
     setAllocation(0);
     setFormError(null);
   }, [selectedOrder]);
@@ -246,18 +329,21 @@ export function TradeTicket({
 
   function selectOrderType(nextType: OrderType) {
     setOrderType(nextType);
+    setHighSlippageAccepted(false);
     setAllocation(0);
     setAmount("");
   }
 
   function selectSide(nextSide: OrderSide) {
     onSideChange(nextSide);
+    setHighSlippageAccepted(false);
     setAllocation(0);
     setAmount("");
   }
 
   function applyAllocation(nextAllocation: number) {
     setAllocation(nextAllocation);
+    setHighSlippageAccepted(false);
     if (!balance || nextAllocation === 0) {
       setAmount("");
       return;
@@ -271,6 +357,10 @@ export function TradeTicket({
     if (!connected) return setFormError("Connect your wallet to trade.");
     if (!balance) return setFormError("Balance data is unavailable.");
     if (!amount || (orderType === "limit" && !price)) return setFormError("Enter a price and amount.");
+    if (orderType === "market" && marketProtectionError) return setFormError(marketProtectionError);
+    if (orderType === "market" && highSlippage && !highSlippageAccepted) {
+      return setFormError("Accept the high-slippage risk before placing this order.");
+    }
     const validationError = validateOrderBalance({
       side,
       orderType,
@@ -281,9 +371,17 @@ export function TradeTicket({
     });
     if (validationError) return setFormError(validationError);
     try {
-      if (orderType === "market") await onMarketOrder({ side, quantity: amount });
-      else await onLimitOrder({ side, price, quantity: amount });
+      if (orderType === "market") {
+        if (!marketPreview) throw new Error("Market price is unavailable.");
+        await onMarketOrder({
+          side,
+          quantity: amount,
+          minReceive: marketPreview.suggestedMinReceive,
+          slippagePercent,
+        });
+      } else await onLimitOrder({ side, price, quantity: amount });
       setAmount("");
+      setHighSlippageAccepted(false);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Transaction could not be submitted.");
     }
@@ -418,6 +516,7 @@ export function TradeTicket({
                 onChange={(event) => {
                   const nextAmount = sanitizeDecimalInput(event.target.value);
                   setAmount(nextAmount);
+                  setHighSlippageAccepted(false);
                   setAllocation(allocationForAmount(nextAmount));
                 }}
                 placeholder="0.00"
@@ -451,24 +550,89 @@ export function TradeTicket({
           </output>
         </div>
         <div
-          className={`flex flex-col border-t border-border text-xs ${mobileCompact ? "gap-1 pt-2 text-[10px] lg:gap-2 lg:pt-4 lg:text-xs" : "gap-2 pt-4"}`}
+          className={`flex flex-col border-t border-border text-xs ${mobileCompact ? "gap-1 pt-2 lg:gap-2 lg:pt-4" : "gap-2 pt-4"}`}
         >
           <div className="flex justify-between gap-3 text-muted-foreground">
             <span>Estimated total</span>
             <span className="font-mono tabular-nums text-foreground">
-              {estimatedTotal ? `${estimatedTotal} ${summary.quoteAsset}` : "—"}
+              {estimatedTotal
+                ? `${estimatedTotal} ${summary.quoteAsset}`
+                : amount
+                  ? "Price unavailable"
+                  : `0 ${summary.quoteAsset}`}
             </span>
           </div>
           <div className="flex justify-between gap-3 text-muted-foreground">
             <span>Fee</span>
             <span className="font-mono tabular-nums">
-              {tradingFeeBps === null ? "—" : formatTradingFeeRate(tradingFeeBps)}
+              {tradingFeeBps === null ? "Fee unavailable" : formatTradingFeeRate(tradingFeeBps)}
             </span>
           </div>
+          {orderType === "market" ? (
+            <>
+              <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                <label htmlFor="market-slippage">Slippage tolerance</label>
+                <span className="relative w-20 shrink-0">
+                  <Input
+                    aria-invalid={Boolean(marketProtectionError)}
+                    className="h-8 rounded-lg border-input bg-background pr-6 text-right font-mono text-xs tabular-nums md:text-xs"
+                    id="market-slippage"
+                    inputMode="decimal"
+                    onChange={(event) => {
+                      setSlippagePercent(sanitizeDecimalInput(event.target.value));
+                      setHighSlippageAccepted(false);
+                    }}
+                    value={slippagePercent}
+                  />
+                  <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center font-mono text-xs">
+                    %
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                <span>Minimum received</span>
+                <span className="min-w-0 truncate font-mono tabular-nums text-foreground">
+                  {marketPreview
+                    ? `${marketPreview.suggestedMinReceive} ${isBuy ? summary.baseAsset : summary.quoteAsset}`
+                    : amount
+                      ? "Price unavailable"
+                      : `0 ${isBuy ? summary.baseAsset : summary.quoteAsset}`}
+                </span>
+              </div>
+              {marketPrice && amount ? (
+                <p className="text-xs text-muted-foreground">
+                  Based on the best {isBuy ? "ask" : "bid"} of {marketPrice} {summary.quoteAsset} per{" "}
+                  {summary.baseAsset}.
+                </p>
+              ) : null}
+              {highSlippage && !highSlippageAccepted ? (
+                <div
+                  role="alert"
+                  className="flex flex-col gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-destructive"
+                >
+                  <span>Slippage above 20% can execute far from the current market price.</span>
+                  <Button
+                    className="h-8 self-start rounded-lg border-destructive/40 px-3 text-xs text-destructive"
+                    onClick={() => setHighSlippageAccepted(true)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Accept risk
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
         {balanceError ? (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {balanceError}
+          </p>
+        ) : null}
+        {marketProtectionError && amount ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {marketProtectionError}
           </p>
         ) : null}
         {formError && formError !== transaction.message ? (

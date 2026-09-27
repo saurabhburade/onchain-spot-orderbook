@@ -161,6 +161,7 @@ export const clobAbi = [
           { name: "quantity", type: "uint128" },
           { name: "priceLimit", type: "uint128" },
           { name: "minFillQuantity", type: "uint128" },
+          { name: "minReceive", type: "uint256" },
           { name: "clientOrderId", type: "uint64" },
         ],
       },

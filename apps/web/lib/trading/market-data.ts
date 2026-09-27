@@ -80,6 +80,11 @@ export type TradeMarketData = {
 
 export type TradeActions = {
   submitLimitOrder?: (input: { side: OrderSide; price: string; quantity: string }) => Promise<void>;
-  submitMarketOrder?: (input: { side: OrderSide; quantity: string }) => Promise<void>;
+  submitMarketOrder?: (input: {
+    side: OrderSide;
+    quantity: string;
+    minReceive: string;
+    slippagePercent: string;
+  }) => Promise<void>;
   cancelOrder?: (orderId: `0x${string}`) => Promise<void>;
 };

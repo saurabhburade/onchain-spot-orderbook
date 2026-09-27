@@ -48,9 +48,12 @@ pulls exactly the order's maximum input amount from the trader's wallet. Fills s
 directly to both traders, price improvement is returned immediately, and cancellation returns
 unused escrow directly to the order owner's wallet. There is no separate deposit or withdrawal.
 
-Market orders accept a worst price and a minimum fill. They never rest on the book: an unmet
-minimum reverts the entire operation, while an explicitly permitted short fill returns its exact
-filled and unfilled quantities. A zero price limit uses the configured pool boundary.
+Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
+raw base-token atoms. For a sell, it is raw quote-token atoms actually paid to the trader after
+per-fill taker fees. An unmet minimum reverts the entire operation. Setting `minReceive` to zero
+disables only that output check: the market order still requires at least one fill, observes the
+price limit and book-step cap, and may fill partially when `minFillQuantity` is also zero. Market
+orders never rest on the book. A zero price limit uses the configured pool boundary.
 
 The read interface exposes aggregated, sorted top-N price levels through `getOrderBook(poolId,
 depth)`, capped at 256 levels per side, as well as best-price and individual-level views. State
@@ -121,18 +124,19 @@ Run the transaction-style benchmark with:
 forge test --match-path test/AgnosticGasBenchmark.t.sol --gas-report -vv
 ```
 
-The current optimized local EVM snapshot is:
+The optimized local EVM snapshot from 27 September 2026 uses the current `SpotCLOB`
+with `minReceive` support. Market-order scenarios set `minReceive = 0`.
 
 | Scenario | Gas | Quotes consumed | Gas per quote |
 | --- | ---: | ---: | ---: |
-| Create agnostic market clone | 467,931 | 1 | 467,931 |
-| Place first order at a new price | 749,986 | 1 | 749,986 |
-| Place another order at the same price | 322,273 | 1 | 322,273 |
-| Cancel an order | 152,634 | 1 | 152,634 |
-| Market buy consuming one ask | 425,579 | 1 | 425,579 |
-| Market buy consuming 50 asks | 5,108,864 | 50 | 102,177 |
-| Market sell consuming 50 bids | 5,947,604 | 50 | 118,952 |
-| Read best prices from a 50-level book | 59,812 | 1 | 59,812 |
+| Create agnostic market clone | 467,953 | 1 | 467,953 |
+| Place first order at a new price | 750,261 | 1 | 750,261 |
+| Place another order at the same price | 322,548 | 1 | 322,548 |
+| Cancel an order | 154,926 | 1 | 154,926 |
+| Market buy consuming one ask | 475,917 | 1 | 475,917 |
+| Market buy consuming 50 asks | 6,262,649 | 50 | 125,252 |
+| Market sell consuming 50 bids | 7,303,789 | 50 | 146,075 |
+| Read best prices from a 50-level book | 59,746 | 1 | 59,746 |
 | Read 50 levels per side | 1,624,997 | 50 | 32,499 |
 
 The same run reports direct contract-call gas as follows. Ranges reflect different book states used
@@ -141,17 +145,17 @@ charge the caller.
 
 | Function | Min | Median | Max |
 | --- | ---: | ---: | ---: |
-| `SpotCLOB.initialize` | 90,145 | 90,145 | 90,145 |
+| `SpotCLOB.initialize` | 90,167 | 90,167 | 90,167 |
 | `SpotCLOB.activatePool` | 124,876 | 124,876 | 124,876 |
-| `SpotCLOB.placeLimitOrderWithMaxBookSteps` | 293,845 | 462,436 | 741,829 |
-| `SpotCLOB.cancelOrder` | 132,132 | 132,132 | 132,132 |
-| `SpotCLOB.executeMarketOrder` | 488,603 | 6,348,712 | 7,397,110 |
-| `SpotCLOB.getMarket` | 10,512 | 10,512 | 10,512 |
-| `SpotCLOB.getBestPrices` | 53,962 | 53,962 | 53,962 |
+| `SpotCLOB.placeLimitOrderWithMaxBookSteps` | 294,120 | 462,711 | 734,909 |
+| `SpotCLOB.cancelOrder` | 134,424 | 134,424 | 134,424 |
+| `SpotCLOB.executeMarketOrder` | 538,875 | 7,790,878 | 9,092,276 |
+| `SpotCLOB.getMarket` | 10,518 | 10,518 | 10,518 |
+| `SpotCLOB.getBestPrices` | 53,896 | 53,896 | 53,896 |
 | `SpotCLOB.getOrderBook(50)` | 1,594,009 | 1,594,009 | 1,594,009 |
-| `SpotCLOBFactory.createPair` | 467,335 | 467,335 | 467,335 |
-| `SpotCLOBLens.minimumOrderQuantity` | 19,330 | 19,330 | 19,330 |
-| `SpotCLOBLens.quoteAmount` | 19,341 | 19,341 | 19,341 |
+| `SpotCLOBFactory.createPair` | 467,357 | 467,357 | 467,357 |
+| `SpotCLOBLens.minimumOrderQuantity` | 19,336 | 19,336 | 19,336 |
+| `SpotCLOBLens.quoteAmount` | 19,347 | 19,347 | 19,347 |
 
 These figures measure the requested operation after fixture setup; the 50-quote market-order rows do
 not include gas used to seed the 50 resting makers. They are comparative EVM gas measurements, not a
@@ -244,8 +248,8 @@ with `getBestPrices(poolId)` and `getOrderBook(poolId, depth)`.
 
 ## Monad Testnet deployment
 
-Deploy the wallet-native order book, approve the project's USDC, and create the DUMMY1/USDC
-market with an explicitly selected Foundry keystore account:
+`DeployWalletNativeMonadTestnet.s.sol` deploys the current factory and lens, allows the project's
+USDC, and creates DUMMY1/USDC, USDT/USDC, and MON/USDC markets. Use a Foundry keystore account:
 
 ```sh
 forge script \
@@ -255,38 +259,8 @@ forge script \
   --broadcast
 ```
 
-The wallet-native script does not read a private key from an environment variable. A Ledger or
-Trezor can be selected with Foundry's corresponding signer option instead of `--account`.
-
-The testnet script deploys `SpotCLOBFactory` and allowlists the project's faucet-backed USDC token
-at `0xa3bCAfb554fe87109b92B3655c7Cf36Ba5C46aF3`.
-It does not deploy mock tokens, create a market, seed orders, or verify source code on an explorer.
-
-```sh
-export PRIVATE_KEY=0x...
-forge script script/DeployMonadTestnet.s.sol:DeployMonadTestnet \
-  --rpc-url https://testnet-rpc.monad.xyz \
-  --broadcast
-```
-
-The script refuses to run unless the connected chain ID is `10143`.
-
-Deploy the precision-price USDT/USDC stable pair with the deployer key loaded from `.env`:
-
-```sh
-set -a
-source ../contracts-scaffold/.env
-set +a
-forge script \
-  script/DeployStablePairMonadTestnet.s.sol:DeployStablePairMonadTestnet \
-  --rpc-url https://testnet-rpc.monad.xyz \
-  --broadcast
-```
-
-`DeployStablePairMonadTestnet` reads `PRIVATE_KEY` from the environment, deploys the factory and
-lens, allowlists the faucet-backed USDC token, and creates the faucet-backed USDT/USDC pair. Privy
-wallets are not used for contract deployment; they are used only by the live market maker for
-sponsored order, cancellation, and taker transactions.
+The script requires chain ID `10143` and does not read a private key from an environment variable.
+Current addresses and transaction hashes are in [`deployments/monad-testnet.json`](deployments/monad-testnet.json).
 
 Deploy the permissionless ERC-20 factory and a funded test-token faucet with:
 
@@ -296,20 +270,6 @@ forge script script/DeployTokenToolsMonadTestnet.s.sol:DeployTokenToolsMonadTest
   --rpc-url https://testnet-rpc.monad.xyz \
   --broadcast
 ```
-
-To migrate the existing factory and create a `DUMMY1` market quoted in this project USDC, run:
-
-```sh
-export PRIVATE_KEY=0x...
-forge script \
-  script/ConfigureProjectUsdcMonadTestnet.s.sol:ConfigureProjectUsdcMonadTestnet \
-  --rpc-url https://testnet-rpc.monad.xyz \
-  --broadcast
-```
-
-The private key must belong to the existing factory owner. The script is safe to rerun: it
-allowlists the token only when necessary and reuses the pair if it already exists. It prints the
-new pool ID and pair-specific `SpotCLOB` address for verification or UI configuration.
 
 This deployment creates mock six-decimal USDC and USDT through the factory, configures 10,000-token
 claims with a one-day per-address cooldown, and funds the faucet with 10,000,000 of each token. The

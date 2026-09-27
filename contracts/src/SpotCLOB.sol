@@ -41,6 +41,7 @@ contract SpotCLOB is ISpotCLOB {
     error MatchLimitExceeded();
     error NoLiquidity();
     error MinimumFillNotMet();
+    error MinimumReceiveNotMet();
     error ViewDepthTooLarge();
     error InvalidPageSize();
     error InvalidOrderFlags();
@@ -303,10 +304,15 @@ contract SpotCLOB is ISpotCLOB {
 
         orderId = bytes32(uint256(internalOrderId));
         _emitOrderPlaced(orderId, incoming, market);
-        quoteQuantity = _match(id, internalOrderId, incoming, limitKey, maxBookSteps, true);
-        filledQuantity = request.quantity - incoming.remaining;
-        if (filledQuantity == 0) revert NoLiquidity();
-        if (filledQuantity < request.minFillQuantity) revert MinimumFillNotMet();
+        {
+            uint256 receivedQuantity;
+            (quoteQuantity, receivedQuantity) =
+                _match(id, internalOrderId, incoming, limitKey, maxBookSteps, true);
+            filledQuantity = request.quantity - incoming.remaining;
+            if (filledQuantity == 0) revert NoLiquidity();
+            if (filledQuantity < request.minFillQuantity) revert MinimumFillNotMet();
+            if (receivedQuantity < request.minReceive) revert MinimumReceiveNotMet();
+        }
 
         if (incoming.remaining != 0) {
             incoming.status =
@@ -681,7 +687,7 @@ contract SpotCLOB is ISpotCLOB {
         uint128 takerKey,
         uint32 maxBookSteps,
         bool takerUsesWallet
-    ) private returns (uint256 quoteQuantity) {
+    ) private returns (uint256 quoteQuantity, uint256 receivedQuantity) {
         uint32 steps;
 
         while (taker.remaining != 0) {
@@ -692,10 +698,11 @@ contract SpotCLOB is ISpotCLOB {
                 ++steps;
             }
 
-            (uint256 matchedQuote, bool progressed) =
+            (uint256 matchedQuote, uint256 matchedReceive, bool progressed) =
                 _matchOne(id, takerOrderId, taker, makerKey, takerUsesWallet);
             if (!progressed) break;
             quoteQuantity += matchedQuote;
+            receivedQuantity += matchedReceive;
         }
     }
 
@@ -705,27 +712,29 @@ contract SpotCLOB is ISpotCLOB {
         StoredOrder storage taker,
         uint128 makerKey,
         bool takerUsesWallet
-    ) private returns (uint256 tradedQuote, bool progressed) {
+    ) private returns (uint256 tradedQuote, uint256 receivedQuantity, bool progressed) {
         PriceLevel storage level = _sideBook(id, _opposite(taker.side)).levels[makerKey];
         uint64 makerOrderId = level.headOrderId;
         StoredOrder storage maker = _orders[makerOrderId];
 
         if (maker.expiry != 0 && maker.expiry <= block.timestamp) {
             _cancelRestingOrder(makerOrderId, maker);
-            return (0, true);
+            return (0, 0, true);
         }
 
         uint128 fillQuantity = taker.remaining < maker.remaining ? taker.remaining : maker.remaining;
         uint128 executionPrice = maker.price;
         Market storage market = _markets[id];
         tradedQuote = _quoteAmount(market, executionPrice, fillQuantity);
-        if (tradedQuote == 0) return (0, false);
+        if (tradedQuote == 0) return (0, 0, false);
         uint256 tradingFee;
         if (takerUsesWallet) {
             tradingFee = _settleMarketTaker(market, taker, maker, executionPrice, fillQuantity);
         } else {
             tradingFee = _settleMatch(market, taker, maker, executionPrice, fillQuantity);
         }
+        receivedQuantity =
+            taker.side == Side.Buy ? _baseAmount(market, fillQuantity) : tradedQuote - tradingFee;
 
         taker.remaining -= fillQuantity;
         maker.remaining -= fillQuantity;
@@ -751,7 +760,7 @@ contract SpotCLOB is ISpotCLOB {
         ) {
             _cancelRestingOrder(makerOrderId, maker);
         }
-        return (tradedQuote, true);
+        return (tradedQuote, receivedQuantity, true);
     }
 
     function _emitTradeExecuted(

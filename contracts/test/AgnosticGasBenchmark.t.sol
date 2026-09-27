@@ -85,6 +85,7 @@ contract AgnosticBenchmarkTrader {
                 quantity: quantity,
                 priceLimit: 0,
                 minFillQuantity: quantity,
+                minReceive: 0,
                 clientOrderId: clientOrderId
             }),
             64

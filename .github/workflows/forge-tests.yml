@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: forge-tests-${{ github.workflow }}-${{ github.ref }}
@@ -42,4 +43,87 @@ jobs:
         run: forge --version
 
       - name: Run Forge tests
-        run: forge test
+        id: forge
+        shell: bash
+        run: |
+          set +e
+          NO_COLOR=1 forge test 2>&1 | tee forge-test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
+          exit "${exit_code}"
+
+      - name: Publish Forge results
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORGE_OUTCOME: ${{ steps.forge.outcome }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          marker='<!-- forge-test-results -->'
+          result_icon='❌'
+          if [[ "${FORGE_OUTCOME}" == 'success' ]]; then
+            result_icon='✅'
+          fi
+
+          awk '
+            /^Ran [0-9]+ tests for / {
+              suite = $0
+              sub(/^.*:/, "", suite)
+            }
+            /^Suite result:/ && suite != "" {
+              split($0, fields, ";")
+              passed = fields[1]
+              failed = fields[2]
+              skipped = fields[3]
+              gsub(/[^0-9]/, "", passed)
+              gsub(/[^0-9]/, "", failed)
+              gsub(/[^0-9]/, "", skipped)
+              icon = failed == 0 ? "✅" : "❌"
+              printf "| `%s` | %s | %s | %s | %s |\n", suite, passed, failed, skipped, icon
+              suite = ""
+            }
+          ' forge-test-output.txt > forge-suite-rows.md
+
+          total_line=$(grep -E '^Ran [0-9]+ test suites in ' forge-test-output.txt | tail -1 || true)
+          passed=$(sed -E 's/.*: ([0-9]+) tests passed.*/\1/' <<< "${total_line}")
+          failed=$(sed -E 's/.*passed, ([0-9]+) failed.*/\1/' <<< "${total_line}")
+          skipped=$(sed -E 's/.*failed, ([0-9]+) skipped.*/\1/' <<< "${total_line}")
+          stateful=$(grep -E '^\[(PASS|FAIL).*invariant_StatefulHandlerConservesAccountingAndBookExtrema' forge-test-output.txt | tail -1 || true)
+          wide_price=$(grep -E '^\[(PASS|FAIL).*invariant_WidePriceAccountingFeesAndFIFO' forge-test-output.txt | tail -1 || true)
+
+          {
+            echo "${marker}"
+            echo "## Forge verification — ${FOUNDRY_INVARIANT_RUNS} invariant runs"
+            echo
+            echo '```text'
+            echo "FOUNDRY_INVARIANT_RUNS=${FOUNDRY_INVARIANT_RUNS} FOUNDRY_INVARIANT_DEPTH=${FOUNDRY_INVARIANT_DEPTH} forge test"
+            echo '```'
+            echo
+            echo '| Test suite | Passed | Failed | Skipped | Result |'
+            echo '|---|---:|---:|---:|:---:|'
+            cat forge-suite-rows.md
+            echo "| **Total** | **${passed}** | **${failed}** | **${skipped}** | **${result_icon}** |"
+            echo
+            echo '### Stateful invariant campaigns'
+            echo
+            echo '```text'
+            echo "${stateful}"
+            echo "${wide_price}"
+            echo '```'
+            echo
+            echo "[View workflow run](https://github.com/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+          } > forge-comment.md
+
+          comment_id=$(gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"${marker}\"))) | .id" \
+            | head -1)
+
+          if [[ -n "${comment_id}" ]]; then
+            gh api "repos/${REPOSITORY}/issues/comments/${comment_id}" \
+              --method PATCH --field body=@forge-comment.md > /dev/null
+          else
+            gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --method POST --field body=@forge-comment.md > /dev/null
+          fi

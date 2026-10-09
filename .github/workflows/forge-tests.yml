@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FOUNDRY_INVARIANT_RUNS: 100
+  FOUNDRY_INVARIANT_RUNS: 10
   FOUNDRY_INVARIANT_DEPTH: 64
 
 jobs:

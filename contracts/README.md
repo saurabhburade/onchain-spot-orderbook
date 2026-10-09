@@ -48,7 +48,12 @@ Account abstraction, session keys, transaction sponsorship, and wallet UX remain
 matching interface. Traders approve the pair contract as an ERC-20 spender; placing an order then
 pulls exactly the order's maximum input amount from the trader's wallet. Fills send output tokens
 directly to both traders, price improvement is returned immediately, and cancellation returns
-unused escrow directly to the order owner's wallet. There is no separate deposit or withdrawal.
+unused escrow directly to the order owner's wallet. If a resting maker cannot receive a payout,
+the fill attempt rolls back atomically, the order is quarantined outside the active FIFO queue, and
+matching continues at the cached next executable order. The owner can later release all remaining
+escrow with `closeQuarantinedOrder(orderId, receiver)`. Anyone may physically unlink abandoned
+quarantine tombstones in batches with `pruneQuarantinedOrders`; pruning cannot transfer escrow or
+change its owner. There is no general-purpose deposit or withdrawal balance.
 
 Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
 raw base-token atoms. For a sell, it is raw quote-token atoms actually paid to the trader after
@@ -100,6 +105,8 @@ slots. Off-chain indexers may read raw slots through RPC, but those reads are st
   solvent against all order escrow liabilities.
 - Settlement is atomic: base and quote movements and order-state updates either all succeed or all
   revert.
+- A failed maker payout quarantines only that maker order; failed taker receipts revert the taker's
+  transaction and cannot remove an innocent resting order.
 - Reentrancy, token transfer failures, fee-on-transfer behavior, and unsupported token behavior are
   handled explicitly before production deployment.
 - Market configuration, numeric precision, GTC-only order policy, replay protection, and
@@ -151,6 +158,20 @@ Known limitations reproduced by tests:
   a separate level and outranks an earlier bid even when both settle to the same quote atoms.
 - The current minimum is one quote-token atom: `0.000001 USDC` for a six-decimal quote token.
   A one-USDC minimum notional and a relative tick grid are not currently enforced.
+
+### Quarantine stress benchmark
+
+`testGasM02HundredBlockedOrdersUseCachedActiveHeadAndCanBePruned` places 100 blocked makers ahead
+of one valid maker at the same price. The optimized local EVM measurement from 9 October 2026 is:
+
+| Action | Gas |
+| --- | ---: |
+| Quarantine 100 blocked makers and fill the next valid order | 5,729,015 |
+| Match the cached active head without rescanning tombstones | 324,950 |
+| Physically prune all 100 quarantined linked-list nodes | 666,039 |
+
+The stress match explicitly sets `maxBookSteps` to 101. The default remains 64; callers processing
+a larger blocked prefix must select a sufficient bound and pay the corresponding gas.
 
 ### Supply-agnostic gas benchmark
 
@@ -210,6 +231,7 @@ From a fresh terminal, start Anvil with the exact mnemonic used by the script:
 ```sh
 cd contracts
 anvil --host 127.0.0.1 --port 8545 \
+  --code-size-limit 131072 \
   --mnemonic 'test test test test test test test test test test test junk' \
   --accounts 5
 ```

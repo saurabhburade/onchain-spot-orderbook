@@ -106,6 +106,30 @@ contract FindingTrader {
         );
     }
 
+    function placeWithMaxBookSteps(
+        SpotCLOB book,
+        address base,
+        address quote,
+        ISpotCLOB.Side side,
+        uint128 price,
+        uint128 quantity,
+        uint32 maxBookSteps
+    ) external returns (bytes32 orderId) {
+        return book.placeLimitOrderWithMaxBookSteps(
+            ISpotCLOB.LimitOrder({
+                trader: address(this),
+                baseAsset: base,
+                quoteAsset: quote,
+                side: side,
+                price: price,
+                quantity: quantity,
+                expiry: 0,
+                clientOrderId: 0
+            }),
+            maxBookSteps
+        );
+    }
+
     function attemptPlace(
         SpotCLOB book,
         address base,
@@ -130,40 +154,189 @@ contract FindingTrader {
     function attemptCancel(SpotCLOB book, bytes32 orderId) external returns (bool success) {
         (success,) = address(book).call(abi.encodeCall(SpotCLOB.cancelOrder, (orderId)));
     }
+
+    function closeQuarantined(SpotCLOB book, bytes32 orderId, address receiver) external {
+        book.closeQuarantinedOrder(orderId, receiver);
+    }
+
+    function attemptCloseQuarantined(SpotCLOB book, bytes32 orderId, address receiver)
+        external
+        returns (bool success)
+    {
+        (success,) = address(book)
+            .call(abi.encodeCall(SpotCLOB.closeQuarantinedOrder, (orderId, receiver)));
+    }
 }
 
 contract AuditTokenBehaviorFindingsTest {
     uint256 private constant ONE = 1 ether;
     uint256 private constant SURCHARGE = 1;
+    uint256 private constant BLOCKED_ORDER_COUNT = 100;
 
-    function testKnownIssue_M02ReceiverBlocklistFreezesFifoHead() public {
+    event log_named_uint(string key, uint256 value);
+
+    function testM02BlockedMakerIsQuarantinedAndNextMakerFills() public {
         ReceiverBlocklistToken quote = new ReceiverBlocklistToken();
         FindingERC20 base = new FindingERC20();
         (SpotCLOB book,) = _deployPair(address(base), address(quote));
-        FindingTrader maker = new FindingTrader();
+        FindingTrader blockedMaker = new FindingTrader();
+        FindingTrader validMaker = new FindingTrader();
         FindingTrader buyer = new FindingTrader();
 
-        base.mint(address(maker), ONE);
+        base.mint(address(blockedMaker), ONE);
+        base.mint(address(validMaker), ONE);
         quote.mint(address(buyer), 1_000);
-        maker.approve(base, book);
+        blockedMaker.approve(base, book);
+        validMaker.approve(base, book);
         buyer.approve(quote, book);
 
-        bytes32 ask = maker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
-        quote.setBlacklisted(address(maker), true);
+        bytes32 blockedAsk =
+            blockedMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        bytes32 validAsk =
+            validMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        quote.setBlacklisted(address(blockedMaker), true);
 
-        // A blocked maker payout reverts matching, so the blocked FIFO ask remains the head.
+        bytes32 taker = buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1);
+
+        _assertOrderStatus(book, blockedAsk, ISpotCLOB.OrderStatus.Quarantined, 0);
+        _assertOrderStatus(book, validAsk, ISpotCLOB.OrderStatus.Filled, 1);
+        _assertOrderStatus(book, taker, ISpotCLOB.OrderStatus.Filled, 1);
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, bytes32(0), 0);
+        require(base.balanceOf(address(buyer)) == ONE, "buyer did not receive valid fill");
+        require(quote.balanceOf(address(validMaker)) == 100, "valid maker was not paid");
+
+        (,, bool restingBeforePrune) = book.getOrderLinks(blockedAsk);
+        require(restingBeforePrune, "quarantine tombstone was eagerly removed");
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = blockedAsk;
+        book.pruneQuarantinedOrders(ids);
+        (bytes32 previous, bytes32 next, bool restingAfterPrune) = book.getOrderLinks(blockedAsk);
         require(
-            !buyer.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1),
-            "blocked maker payout matched"
+            previous == bytes32(0) && next == bytes32(0) && !restingAfterPrune,
+            "prune did not physically unlink quarantine"
         );
+    }
+
+    function testM02OnlyOwnerCanCloseQuarantineToAlternateReceiver() public {
+        ReceiverBlocklistToken base = new ReceiverBlocklistToken();
+        ReceiverBlocklistToken quote = new ReceiverBlocklistToken();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader blockedMaker = new FindingTrader();
+        FindingTrader buyer = new FindingTrader();
+        address receiver = address(0xBEEF);
+
+        base.mint(address(blockedMaker), ONE);
+        quote.mint(address(buyer), 1_000);
+        blockedMaker.approve(base, book);
+        buyer.approve(quote, book);
+        bytes32 blockedAsk =
+            blockedMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        quote.setBlacklisted(address(blockedMaker), true);
+        buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1);
+        _assertOrderStatus(book, blockedAsk, ISpotCLOB.OrderStatus.Quarantined, 0);
+
+        require(
+            !buyer.attemptCloseQuarantined(book, blockedAsk, receiver),
+            "non-owner closed quarantine"
+        );
+        base.setBlacklisted(address(blockedMaker), true);
+        require(
+            !blockedMaker.attemptCloseQuarantined(book, blockedAsk, address(blockedMaker)),
+            "blacklisted receiver accepted refund"
+        );
+        _assertOrderStatus(book, blockedAsk, ISpotCLOB.OrderStatus.Quarantined, 0);
+
+        blockedMaker.closeQuarantined(book, blockedAsk, receiver);
+        _assertOrderStatus(book, blockedAsk, ISpotCLOB.OrderStatus.Cancelled, 0);
+        require(base.balanceOf(receiver) == ONE, "alternate receiver did not receive full escrow");
+        (, uint256 locked,) = book.balanceOf(address(blockedMaker), address(base));
+        require(locked == 0, "closed quarantine retained locked accounting");
+    }
+
+    function testM02FailedTakerPayoutDoesNotQuarantineMakerDuringSelfTrade() public {
+        ReceiverBlocklistToken base = new ReceiverBlocklistToken();
+        FindingERC20 quote = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader trader = new FindingTrader();
+
+        base.mint(address(trader), ONE);
+        quote.mint(address(trader), 1_000);
+        trader.approve(base, book);
+        trader.approve(quote, book);
+        bytes32 ask = trader.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        base.setBlacklisted(address(trader), true);
+
+        require(
+            !trader.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1),
+            "blocked taker payout unexpectedly succeeded"
+        );
+        _assertOrderStatus(book, ask, ISpotCLOB.OrderStatus.Open, 0);
         _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, ask, 1);
+    }
 
-        bytes32 bid = buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 90, 1);
-        quote.setBlacklisted(address(buyer), true);
+    function testGasM02HundredBlockedOrdersUseCachedActiveHeadAndCanBePruned() public {
+        ReceiverBlocklistToken quote = new ReceiverBlocklistToken();
+        FindingERC20 base = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader blockedMaker = new FindingTrader();
+        FindingTrader validMaker = new FindingTrader();
+        FindingTrader buyer = new FindingTrader();
 
-        // A blocked refund receiver reverts cancellation, preserving the blocking FIFO bid too.
-        require(!buyer.attemptCancel(book, bid), "blocked refund receiver canceled");
-        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Buy, 90, bid, 1);
+        base.mint(address(blockedMaker), BLOCKED_ORDER_COUNT * ONE);
+        base.mint(address(validMaker), 2 * ONE);
+        quote.mint(address(buyer), 1_000);
+        blockedMaker.approve(base, book);
+        validMaker.approve(base, book);
+        buyer.approve(quote, book);
+
+        bytes32[] memory blockedOrders = new bytes32[](BLOCKED_ORDER_COUNT);
+        for (uint256 i; i < BLOCKED_ORDER_COUNT; ++i) {
+            blockedOrders[i] = blockedMaker.place(
+                book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1
+            );
+        }
+        bytes32 firstValid =
+            validMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        quote.setBlacklisted(address(blockedMaker), true);
+
+        uint256 gasBefore = gasleft();
+        buyer.placeWithMaxBookSteps(
+            book,
+            address(base),
+            address(quote),
+            ISpotCLOB.Side.Buy,
+            100,
+            1,
+            uint32(BLOCKED_ORDER_COUNT + 1)
+        );
+        uint256 quarantineAndMatchGas = gasBefore - gasleft();
+        emit log_named_uint("quarantine 100 blocked and fill next gas", quarantineAndMatchGas);
+        require(quarantineAndMatchGas < 30_000_000, "100-order quarantine exceeds block budget");
+
+        _assertOrderStatus(book, blockedOrders[0], ISpotCLOB.OrderStatus.Quarantined, 0);
+        _assertOrderStatus(
+            book, blockedOrders[BLOCKED_ORDER_COUNT - 1], ISpotCLOB.OrderStatus.Quarantined, 0
+        );
+        _assertOrderStatus(book, firstValid, ISpotCLOB.OrderStatus.Filled, 1);
+
+        // A fresh executable order is cached directly after the 100 structural tombstones.
+        bytes32 secondValid =
+            validMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        gasBefore = gasleft();
+        buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1);
+        uint256 cachedHeadMatchGas = gasBefore - gasleft();
+        emit log_named_uint("cached active-head match gas", cachedHeadMatchGas);
+        require(cachedHeadMatchGas < 1_500_000, "cached head rescanned quarantine wall");
+        _assertOrderStatus(book, secondValid, ISpotCLOB.OrderStatus.Filled, 1);
+
+        gasBefore = gasleft();
+        book.pruneQuarantinedOrders(blockedOrders);
+        uint256 pruneGas = gasBefore - gasleft();
+        emit log_named_uint("prune 100 quarantined orders gas", pruneGas);
+        require(pruneGas < 10_000_000, "100-order prune exceeds budget");
+        (,, bool firstResting) = book.getOrderLinks(blockedOrders[0]);
+        (,, bool lastResting) = book.getOrderLinks(blockedOrders[BLOCKED_ORDER_COUNT - 1]);
+        require(!firstResting && !lastResting, "quarantine wall was not pruned");
     }
 
     function testKnownIssue_M03NegativeRebaseMakesLaterCancelInsolvent() public {
@@ -262,5 +435,16 @@ contract AuditTokenBehaviorFindingsTest {
         (, ISpotCLOB.OrderState memory state) = book.getOrder(orderId);
         require(state.status == ISpotCLOB.OrderStatus.Open, "order is not open");
         require(state.quantity == expectedQuantity && state.filledQuantity == 0, "order changed");
+    }
+
+    function _assertOrderStatus(
+        SpotCLOB book,
+        bytes32 orderId,
+        ISpotCLOB.OrderStatus expectedStatus,
+        uint128 expectedFilled
+    ) private view {
+        (, ISpotCLOB.OrderState memory state) = book.getOrder(orderId);
+        require(state.status == expectedStatus, "wrong order status");
+        require(state.filledQuantity == expectedFilled, "wrong filled quantity");
     }
 }

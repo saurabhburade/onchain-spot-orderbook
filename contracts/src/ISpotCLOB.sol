@@ -19,7 +19,8 @@ interface ISpotCLOB {
         Open,
         PartiallyFilled,
         Filled,
-        Cancelled
+        Cancelled,
+        Quarantined
     }
 
     struct LimitOrder {
@@ -146,6 +147,24 @@ interface ISpotCLOB {
         uint128 remainingQuantity
     );
 
+    /// @notice Emitted when a resting maker cannot receive settlement and is removed from the
+    /// active FIFO queue.
+    event OrderQuarantined(
+        bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, address failedAsset
+    );
+
+    /// @notice Emitted when a quarantined order is physically removed from its price-level list.
+    event QuarantinedOrderPruned(bytes32 indexed orderId, bytes32 indexed poolId);
+
+    /// @notice Emitted after a quarantined order owner releases all remaining escrow.
+    event QuarantinedOrderClosed(
+        bytes32 indexed orderId,
+        address indexed trader,
+        address indexed receiver,
+        address asset,
+        uint256 amount
+    );
+
     /// @notice Place a limit order and match it against the resting book.
     /// @dev The implementation must reject invalid pairs, zero values, non-zero expiry, and
     /// insufficient available balance before mutating the book. Accepted orders remain open until
@@ -166,6 +185,14 @@ interface ISpotCLOB {
     /// @notice Cancel an order that still has resting quantity.
     /// @dev The caller must be the order owner.
     function cancelOrder(bytes32 orderId) external;
+
+    /// @notice Physically unlink quarantined tombstones from their price-level linked lists.
+    /// @dev Permissionless because this function never transfers or reassigns escrow.
+    function pruneQuarantinedOrders(bytes32[] calldata orderIds) external;
+
+    /// @notice Close one quarantined order and release its complete remaining escrow.
+    /// @dev Only the order owner may select the receiver.
+    function closeQuarantinedOrder(bytes32 orderId, address receiver) external;
 
     /// @notice Withdraw quote-token trading fees accrued by this order book.
     /// @dev Only the immutable protocol fee recipient may call this function.

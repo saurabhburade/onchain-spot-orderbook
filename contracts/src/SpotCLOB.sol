@@ -22,12 +22,14 @@ contract SpotCLOB is ISpotCLOB {
 
     uint32 public constant DEFAULT_MAX_BOOK_STEPS = 64;
     uint16 public constant MAX_VIEW_DEPTH = 256;
+    uint16 public constant MAX_PRUNE_BATCH = 256;
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint8 public constant USER_ORDER_FLAG_OPEN = 1 << 0;
     uint8 public constant USER_ORDER_FLAG_FILLED = 1 << 1;
     uint8 public constant USER_ORDER_FLAG_CANCELED = 1 << 2;
-    uint8 private constant _USER_ORDER_FLAGS_ALL =
-        USER_ORDER_FLAG_OPEN | USER_ORDER_FLAG_FILLED | USER_ORDER_FLAG_CANCELED;
+    uint8 public constant USER_ORDER_FLAG_QUARANTINED = 1 << 3;
+    uint8 private constant _USER_ORDER_FLAGS_ALL = USER_ORDER_FLAG_OPEN | USER_ORDER_FLAG_FILLED
+        | USER_ORDER_FLAG_CANCELED | USER_ORDER_FLAG_QUARANTINED;
 
     error Unauthorized();
     error ReentrantCall();
@@ -50,6 +52,10 @@ contract SpotCLOB is ISpotCLOB {
     error InvalidFeeWithdrawal();
     error InsufficientAccruedFees();
     error AlreadyInitialized();
+    error OrderNotQuarantined();
+    error InvalidReceiver();
+    error InvalidPruneBatch();
+    error SettlementPayoutFailed(address asset, address recipient, bool makerPayout);
 
     struct Market {
         address baseAsset;
@@ -74,8 +80,16 @@ contract SpotCLOB is ISpotCLOB {
         uint256 maker;
     }
 
+    struct PayoutFailure {
+        address asset;
+        address recipient;
+        bool recognized;
+        bool makerPayout;
+    }
+
     struct PriceLevel {
         uint64 headOrderId;
+        uint64 activeHeadOrderId;
         uint64 tailOrderId;
         uint128 totalQuantity;
     }
@@ -352,6 +366,56 @@ contract SpotCLOB is ISpotCLOB {
         _emitBookUpdated(order.marketId);
     }
 
+    function pruneQuarantinedOrders(bytes32[] calldata externalOrderIds)
+        external
+        override
+        nonReentrant
+    {
+        if (externalOrderIds.length == 0 || externalOrderIds.length > MAX_PRUNE_BATCH) {
+            revert InvalidPruneBatch();
+        }
+        for (uint256 i; i < externalOrderIds.length; ++i) {
+            uint64 orderId_ = _decodeOrderId(externalOrderIds[i]);
+            StoredOrder storage order = _orders[orderId_];
+            if (order.status != OrderStatus.Quarantined) revert OrderNotQuarantined();
+            if (!order.resting) continue;
+
+            bytes32 id = order.marketId;
+            _unlinkOrder(id, _priceToKey(_markets[id], order.price), orderId_, order);
+            emit QuarantinedOrderPruned(externalOrderIds[i], id);
+        }
+    }
+
+    function closeQuarantinedOrder(bytes32 externalOrderId, address receiver)
+        external
+        override
+        nonReentrant
+    {
+        if (receiver == address(0)) revert InvalidReceiver();
+        uint64 orderId_ = _decodeOrderId(externalOrderId);
+        StoredOrder storage order = _orders[orderId_];
+        if (order.trader == address(0)) revert InvalidOrder();
+        if (msg.sender != order.trader) revert Unauthorized();
+        if (order.status != OrderStatus.Quarantined) revert OrderNotQuarantined();
+
+        Market storage market = _markets[order.marketId];
+        address asset = order.side == Side.Buy ? market.quoteAsset : market.baseAsset;
+        uint256 amount = order.escrowRemaining + order.feeReserve;
+
+        if (order.resting) {
+            _unlinkOrder(order.marketId, _priceToKey(market, order.price), orderId_, order);
+        }
+        order.escrowRemaining = 0;
+        order.feeReserve = 0;
+        order.status = OrderStatus.Cancelled;
+        _balances[order.trader][asset].locked -= amount;
+        _pushAsset(asset, receiver, amount);
+
+        emit OrderEscrowReleased(order.trader, asset, amount);
+        emit OrderCancelled(externalOrderId, order.marketId, order.trader, order.remaining);
+        emit QuarantinedOrderClosed(externalOrderId, order.trader, receiver, asset, amount);
+    }
+
     function withdrawTradingFees(address asset, address recipient, uint256 amount)
         external
         override
@@ -451,6 +515,7 @@ contract SpotCLOB is ISpotCLOB {
     }
 
     function _userOrderFlag(StoredOrder storage order) private view returns (uint8) {
+        if (order.status == OrderStatus.Quarantined) return USER_ORDER_FLAG_QUARANTINED;
         if (order.resting) return USER_ORDER_FLAG_OPEN;
         if (order.status == OrderStatus.Filled) return USER_ORDER_FLAG_FILLED;
         return USER_ORDER_FLAG_CANCELED;
@@ -515,8 +580,8 @@ contract SpotCLOB is ISpotCLOB {
         PriceLevel storage level = _sideBook(id, side).levels[key];
         return (
             level.totalQuantity,
-            bytes32(uint256(level.headOrderId)),
-            bytes32(uint256(level.tailOrderId))
+            bytes32(uint256(level.activeHeadOrderId)),
+            level.activeHeadOrderId == 0 ? bytes32(0) : bytes32(uint256(level.tailOrderId))
         );
     }
 
@@ -722,14 +787,62 @@ contract SpotCLOB is ISpotCLOB {
         bool takerUsesWallet
     ) private returns (uint256 tradedQuote, uint256 receivedQuantity, bool progressed) {
         PriceLevel storage level = _sideBook(id, _opposite(taker.side)).levels[makerKey];
-        uint64 makerOrderId = level.headOrderId;
+        uint64 makerOrderId = level.activeHeadOrderId;
         StoredOrder storage maker = _orders[makerOrderId];
+
+        try this.settleMatchAtomic(takerOrderId, makerOrderId, makerKey, takerUsesWallet) returns (
+            uint256 quoteAmount, uint256 receiveAmount
+        ) {
+            if (quoteAmount == 0 && receiveAmount == 0) return (0, 0, false);
+            return (quoteAmount, receiveAmount, true);
+        } catch (bytes memory reason) {
+            PayoutFailure memory failure = _settlementFailure(reason);
+            if (failure.recognized && failure.makerPayout && failure.recipient == maker.trader) {
+                _quarantineOrder(id, makerKey, makerOrderId, maker, failure.asset);
+                return (0, 0, true);
+            }
+            _revertBytes(reason);
+        }
+    }
+
+    /// @dev Isolates every state change and token movement for one fill. A failed payout therefore
+    /// rolls back the whole fill before the outer matcher decides whether to quarantine the maker.
+    function settleMatchAtomic(
+        uint64 takerOrderId,
+        uint64 makerOrderId,
+        uint128 makerKey,
+        bool takerUsesWallet
+    ) external returns (uint256 tradedQuote, uint256 receivedQuantity) {
+        if (msg.sender != address(this)) revert Unauthorized();
+        StoredOrder storage taker = _orders[takerOrderId];
+        StoredOrder storage maker = _orders[makerOrderId];
+        bytes32 id = taker.marketId;
+        if (
+            maker.marketId != id || maker.status == OrderStatus.Quarantined
+                || _sideBook(id, _opposite(taker.side)).levels[makerKey].activeHeadOrderId
+                    != makerOrderId
+        ) revert InvalidOrder();
+
+        return
+            _settleMatchOne(id, takerOrderId, taker, makerKey, makerOrderId, maker, takerUsesWallet);
+    }
+
+    function _settleMatchOne(
+        bytes32 id,
+        uint64 takerOrderId,
+        StoredOrder storage taker,
+        uint128 makerKey,
+        uint64 makerOrderId,
+        StoredOrder storage maker,
+        bool takerUsesWallet
+    ) private returns (uint256 tradedQuote, uint256 receivedQuantity) {
+        PriceLevel storage level = _sideBook(id, _opposite(taker.side)).levels[makerKey];
 
         uint128 fillQuantity = taker.remaining < maker.remaining ? taker.remaining : maker.remaining;
         uint128 executionPrice = maker.price;
         Market storage market = _markets[id];
         tradedQuote = _quoteAmount(market, executionPrice, fillQuantity);
-        if (tradedQuote == 0) return (0, 0, false);
+        if (tradedQuote == 0) return (0, 0);
         FeeAmounts memory fees;
         if (takerUsesWallet) {
             fees = _settleMarketTaker(market, taker, maker, executionPrice, fillQuantity);
@@ -756,14 +869,14 @@ contract SpotCLOB is ISpotCLOB {
         _emitOrderFill(id, makerOrderId, maker, fillQuantity);
 
         if (maker.remaining == 0) {
-            _releaseFeeReserve(maker, market);
-            _unlinkOrder(id, makerKey, maker);
+            _releaseFeeReserveDuringSettlement(maker, market);
+            _unlinkOrder(id, makerKey, makerOrderId, maker);
         } else if (
             market.agnosticPricing && _quoteAmount(market, maker.price, maker.remaining) == 0
         ) {
-            _cancelRestingOrder(makerOrderId, maker);
+            _cancelRestingOrderDuringSettlement(makerOrderId, maker);
         }
-        return (tradedQuote, receivedQuantity, true);
+        return (tradedQuote, receivedQuantity);
     }
 
     function _emitTradeExecuted(
@@ -850,11 +963,11 @@ contract SpotCLOB is ISpotCLOB {
             _balances[maker.trader][market.baseAsset].locked -= tradedBase;
             maker.escrowRemaining -= tradedBase;
 
-            _pushAsset(market.baseAsset, taker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker);
+            _settlementPushAsset(market.baseAsset, taker.trader, tradedBase, false);
+            _settlementPushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker, true);
             uint256 priceImprovement = reservedQuote - tradedQuote;
             if (priceImprovement != 0) {
-                _pushAsset(market.quoteAsset, taker.trader, priceImprovement);
+                _settlementPushAsset(market.quoteAsset, taker.trader, priceImprovement, false);
             }
         } else {
             uint256 reservedQuote = _consumeBuyEscrow(maker, market, quantity);
@@ -864,11 +977,11 @@ contract SpotCLOB is ISpotCLOB {
             _balances[taker.trader][market.baseAsset].locked -= tradedBase;
             taker.escrowRemaining -= tradedBase;
 
-            _pushAsset(market.baseAsset, maker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker);
+            _settlementPushAsset(market.baseAsset, maker.trader, tradedBase, true);
+            _settlementPushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker, false);
             uint256 roundingRefund = reservedQuote - tradedQuote;
             if (roundingRefund != 0) {
-                _pushAsset(market.quoteAsset, maker.trader, roundingRefund);
+                _settlementPushAsset(market.quoteAsset, maker.trader, roundingRefund, true);
             }
         }
         accruedTradingFees[market.quoteAsset] += fees.taker + fees.maker;
@@ -890,19 +1003,19 @@ contract SpotCLOB is ISpotCLOB {
             _balances[maker.trader][market.baseAsset].locked -= tradedBase;
             maker.escrowRemaining -= tradedBase;
             _pullAsset(market.quoteAsset, taker.trader, tradedQuote + fees.taker);
-            _pushAsset(market.baseAsset, taker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker);
+            _settlementPushAsset(market.baseAsset, taker.trader, tradedBase, false);
+            _settlementPushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker, true);
         } else {
             uint256 reservedQuote = _consumeBuyEscrow(maker, market, quantity);
             Balance storage buyerQuote = _balances[maker.trader][market.quoteAsset];
             maker.feeReserve -= fees.maker;
             buyerQuote.locked -= reservedQuote + fees.maker;
             _pullAsset(market.baseAsset, taker.trader, tradedBase);
-            _pushAsset(market.baseAsset, maker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker);
+            _settlementPushAsset(market.baseAsset, maker.trader, tradedBase, true);
+            _settlementPushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker, false);
             uint256 roundingRefund = reservedQuote - tradedQuote;
             if (roundingRefund != 0) {
-                _pushAsset(market.quoteAsset, maker.trader, roundingRefund);
+                _settlementPushAsset(market.quoteAsset, maker.trader, roundingRefund, true);
             }
         }
         accruedTradingFees[market.quoteAsset] += fees.taker + fees.maker;
@@ -928,6 +1041,20 @@ contract SpotCLOB is ISpotCLOB {
         order.feeReserve = target;
         _balances[order.trader][market.quoteAsset].locked -= amount;
         _pushAsset(market.quoteAsset, order.trader, amount);
+        emit OrderEscrowReleased(order.trader, market.quoteAsset, amount);
+    }
+
+    function _releaseFeeReserveDuringSettlement(StoredOrder storage order, Market storage market)
+        private
+    {
+        uint256 target = order.side == Side.Buy
+            ? _tradingFee(_quoteAmount(market, order.price, order.remaining), order.feeBps)
+            : 0;
+        uint256 amount = order.feeReserve - target;
+        if (amount == 0) return;
+        order.feeReserve = target;
+        _balances[order.trader][market.quoteAsset].locked -= amount;
+        _settlementPushAsset(market.quoteAsset, order.trader, amount, true);
         emit OrderEscrowReleased(order.trader, market.quoteAsset, amount);
     }
 
@@ -971,10 +1098,13 @@ contract SpotCLOB is ISpotCLOB {
 
         if (oldTail == 0) {
             level.headOrderId = orderId_;
-            _setPrice(book, market, priceKey);
         } else {
             _orders[oldTail].nextOrderId = orderId_;
             order.previousOrderId = oldTail;
+        }
+        if (level.activeHeadOrderId == 0) {
+            level.activeHeadOrderId = orderId_;
+            _setPrice(book, market, priceKey);
         }
         level.tailOrderId = orderId_;
         level.totalQuantity += order.remaining;
@@ -996,18 +1126,66 @@ contract SpotCLOB is ISpotCLOB {
         _pushAsset(asset, order.trader, amount);
         emit OrderEscrowReleased(order.trader, asset, amount);
 
-        _unlinkOrder(order.marketId, priceKey, order);
+        _unlinkOrder(order.marketId, priceKey, orderId_, order);
         order.status = OrderStatus.Cancelled;
         emit OrderCancelled(
             bytes32(uint256(orderId_)), order.marketId, order.trader, order.remaining
         );
     }
 
-    function _unlinkOrder(bytes32 id, uint128 priceKey, StoredOrder storage order) private {
+    function _cancelRestingOrderDuringSettlement(uint64 orderId_, StoredOrder storage order)
+        private
+    {
+        Market storage market = _markets[order.marketId];
+        uint128 priceKey = _priceToKey(market, order.price);
+        PriceLevel storage level = _sideBook(order.marketId, order.side).levels[priceKey];
+        level.totalQuantity -= order.remaining;
+
+        address asset = order.side == Side.Buy ? market.quoteAsset : market.baseAsset;
+        uint256 amount = order.escrowRemaining + order.feeReserve;
+        order.escrowRemaining = 0;
+        order.feeReserve = 0;
+        _balances[order.trader][asset].locked -= amount;
+        _settlementPushAsset(asset, order.trader, amount, true);
+        emit OrderEscrowReleased(order.trader, asset, amount);
+
+        _unlinkOrder(order.marketId, priceKey, orderId_, order);
+        order.status = OrderStatus.Cancelled;
+        emit OrderCancelled(
+            bytes32(uint256(orderId_)), order.marketId, order.trader, order.remaining
+        );
+    }
+
+    function _quarantineOrder(
+        bytes32 id,
+        uint128 priceKey,
+        uint64 orderId_,
+        StoredOrder storage order,
+        address failedAsset
+    ) private {
+        SideBook storage book = _sideBook(id, order.side);
+        PriceLevel storage level = book.levels[priceKey];
+        if (level.activeHeadOrderId != orderId_) revert InvalidOrder();
+
+        level.totalQuantity -= order.remaining;
+        level.activeHeadOrderId = order.nextOrderId;
+        order.status = OrderStatus.Quarantined;
+        if (level.activeHeadOrderId == 0) _clearPrice(book, _markets[id], priceKey);
+
+        emit OrderQuarantined(bytes32(uint256(orderId_)), id, order.trader, failedAsset);
+    }
+
+    function _unlinkOrder(bytes32 id, uint128 priceKey, uint64 orderId_, StoredOrder storage order)
+        private
+    {
         SideBook storage book = _sideBook(id, order.side);
         PriceLevel storage level = book.levels[priceKey];
         uint64 previous = order.previousOrderId;
         uint64 next = order.nextOrderId;
+
+        if (level.activeHeadOrderId == orderId_) {
+            level.activeHeadOrderId = next;
+        }
 
         if (previous == 0) level.headOrderId = next;
         else _orders[previous].nextOrderId = next;
@@ -1019,8 +1197,10 @@ contract SpotCLOB is ISpotCLOB {
         order.nextOrderId = 0;
         order.resting = false;
 
-        if (level.headOrderId == 0) {
+        if (level.activeHeadOrderId == 0 && _containsPrice(book, _markets[id], priceKey)) {
             _clearPrice(book, _markets[id], priceKey);
+        }
+        if (level.headOrderId == 0) {
             delete book.levels[priceKey];
         }
     }
@@ -1197,5 +1377,50 @@ contract SpotCLOB is ISpotCLOB {
             contractBalanceBefore - contractBalanceAfter != amount
                 || recipientBalanceAfter - recipientBalanceBefore != amount
         ) revert UnsupportedTokenBehavior();
+    }
+
+    function _settlementPushAsset(address asset, address to, uint256 amount, bool makerPayout)
+        private
+    {
+        uint256 contractBalanceBefore = IERC20Minimal(asset).balanceOf(address(this));
+        if (contractBalanceBefore < amount) revert UnsupportedTokenBehavior();
+        uint256 recipientBalanceBefore = IERC20Minimal(asset).balanceOf(to);
+        (bool success, bytes memory data) =
+            asset.call(abi.encodeCall(IERC20Minimal.transfer, (to, amount)));
+        if (
+            !success || (data.length != 0 && data.length != 32)
+                || (data.length == 32 && !abi.decode(data, (bool)))
+        ) revert SettlementPayoutFailed(asset, to, makerPayout);
+
+        uint256 contractBalanceAfter = IERC20Minimal(asset).balanceOf(address(this));
+        uint256 recipientBalanceAfter = IERC20Minimal(asset).balanceOf(to);
+        if (
+            contractBalanceAfter > contractBalanceBefore
+                || recipientBalanceAfter < recipientBalanceBefore
+                || contractBalanceBefore - contractBalanceAfter != amount
+                || recipientBalanceAfter - recipientBalanceBefore != amount
+        ) revert SettlementPayoutFailed(asset, to, makerPayout);
+    }
+
+    function _settlementFailure(bytes memory reason)
+        private
+        pure
+        returns (PayoutFailure memory failure)
+    {
+        if (reason.length != 100) return failure;
+        bytes4 selector;
+        assembly ("memory-safe") {
+            selector := mload(add(reason, 0x20))
+            mstore(failure, mload(add(reason, 0x24)))
+            mstore(add(failure, 0x20), mload(add(reason, 0x44)))
+            mstore(add(failure, 0x60), mload(add(reason, 0x64)))
+        }
+        failure.recognized = selector == SettlementPayoutFailed.selector;
+    }
+
+    function _revertBytes(bytes memory reason) private pure {
+        assembly ("memory-safe") {
+            revert(add(reason, 0x20), mload(reason))
+        }
     }
 }

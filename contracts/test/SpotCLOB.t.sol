@@ -688,6 +688,7 @@ contract SpotCLOBTest {
         require(exchange.USER_ORDER_FLAG_OPEN() == 1, "wrong open flag");
         require(exchange.USER_ORDER_FLAG_FILLED() == 2, "wrong filled flag");
         require(exchange.USER_ORDER_FLAG_CANCELED() == 4, "wrong canceled flag");
+        require(exchange.USER_ORDER_FLAG_QUARANTINED() == 8, "wrong quarantined flag");
 
         (bytes32[] memory firstIds, bytes32 idsCursor) =
             exchange.getUserOrderIds(poolId, address(sellerA), bytes32(0), 2, 7);
@@ -762,7 +763,7 @@ contract SpotCLOBTest {
             .staticcall(
                 abi.encodeCall(
                     SpotCLOB.getUserOrderIds,
-                    (poolId, address(sellerA), bytes32(0), uint16(1), uint8(8))
+                    (poolId, address(sellerA), bytes32(0), uint16(1), uint8(16))
                 )
             );
         require(!unknownFlags, "unknown flags accepted");

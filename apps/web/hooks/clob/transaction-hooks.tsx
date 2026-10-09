@@ -256,7 +256,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
               side: input.side === "buy" ? 0 : 1,
               price,
               quantity,
-              expiry: input.expiry ?? 0n,
+              expiry: 0n,
               clientOrderId: input.clientOrderId ?? 0n,
             },
             (input.maxBookSteps ?? 64n) as unknown as number,

@@ -32,6 +32,8 @@ interface ISpotCLOB {
         uint128 price;
         /// @notice Legacy markets use base lots. Agnostic markets use raw base-token atoms.
         uint128 quantity;
+        /// @notice Reserved for ABI compatibility. Must be zero; limit orders are
+        /// good-til-cancelled.
         uint64 expiry;
         uint64 clientOrderId;
     }
@@ -145,8 +147,9 @@ interface ISpotCLOB {
     );
 
     /// @notice Place a limit order and match it against the resting book.
-    /// @dev The implementation must reject invalid pairs, zero values, expired orders, and
-    /// insufficient available balance before mutating the book.
+    /// @dev The implementation must reject invalid pairs, zero values, non-zero expiry, and
+    /// insufficient available balance before mutating the book. Accepted orders remain open until
+    /// filled or cancelled by their owner.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
@@ -168,7 +171,8 @@ interface ISpotCLOB {
     /// @dev Only the immutable protocol fee recipient may call this function.
     function withdrawTradingFees(address asset, address recipient, uint256 amount) external;
 
-    /// @notice Synchronize a factory-admin fee update into this order book.
+    /// @notice Set the fee snapshot used by subsequently accepted orders.
+    /// @dev Existing orders retain the fee captured when they were accepted.
     function setTradingFeeBps(bytes32 poolId, uint16 tradingFeeBps) external;
 
     function accruedTradingFees(address asset) external view returns (uint256);

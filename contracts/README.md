@@ -18,6 +18,8 @@ Market creation can carry an owner-configurable native MON fee. It defaults to z
 wei in `marketCreationFee`, and every pair-creation overload requires the caller to send the exact
 configured amount. The owner can collect accrued MON with `withdrawMarketCreationFees`. This fee
 is separate from per-market trading fees, which continue to be assessed in the quote token.
+Each order snapshots the market fee when it is accepted. Later fee updates apply only to newly
+submitted orders, so a resting bid's reserved fee always remains sufficient for its fills.
 
 The default two-address creation path is supply agnostic: price is quote tokens per whole base
 token with 18 fixed decimals (`priceX18`), while quantity is raw base-token atoms. This provides a
@@ -100,8 +102,8 @@ slots. Off-chain indexers may read raw slots through RPC, but those reads are st
   revert.
 - Reentrancy, token transfer failures, fee-on-transfer behavior, and unsupported token behavior are
   handled explicitly before production deployment.
-- Market configuration, numeric precision, expiry, replay protection, and authorization checks are
-  validated on-chain and covered by invariant and fuzz testing.
+- Market configuration, numeric precision, GTC-only order policy, replay protection, and
+  authorization checks are validated on-chain and covered by invariant and fuzz testing.
 
 ## Development
 
@@ -115,6 +117,40 @@ forge coverage --no-match-contract SpotCLOBInvariantTest --skip script --ir-mini
 The current production sources report 97.19% line, 95.94% statement, 86.55% branch, and 98.72%
 function coverage. The stateful invariant suite is run separately because coverage instrumentation
 does not preserve the production optimizer configuration.
+
+### Property and invariant tests
+
+`PriceTreeTest` compares randomized insertion, deletion, membership, extrema, and successor /
+predecessor lookups against an independent set over the full `uint128` domain. `SpotPriceMathTest`
+checks rounding, minimum-quantity saturation, and supported / rejected decimal relationships.
+
+`AgnosticPropertiesTest` checks randomized price-time matching, cancellation, per-fill fees,
+market price / minimum-output protections, atomic rollback, GTC behavior, and fee withdrawals.
+`AgnosticInvariantTest` mixes limit and market orders in both directions, authorized and unauthorized
+cancellations, time advances, fee updates, and fee withdrawals across eight sparse prices from
+`1e7` to `type(uint128).max`. It checks wallet conservation, escrow liabilities derived from
+remaining orders, independently tracked snapshotted fee reserves and accrued maker/taker fees,
+monotonic fills, closed-order finality, FIFO links, and radix / price-level consistency. Unexpected
+handler reverts fail invariant campaigns.
+`ArithmeticBoundsTest` exercises full-width prices and quantities, checked price-level accumulation,
+atomic rollback on overflow, unfunded transfers, and the highest supported decimal denominator.
+
+Run a bounded campaign without changing the default fuzz run count:
+
+```sh
+FOUNDRY_INVARIANT_RUNS=32 FOUNDRY_INVARIANT_DEPTH=64 forge test
+```
+
+`forge test` uses Foundry's default campaign sizes (256 fuzz runs and 256 invariant sequences of
+depth 500). These are randomized checks, not formal proofs; no formal verification runner is wired
+into this repository.
+
+Known limitations reproduced by tests:
+
+- Agnostic markets accept every positive `priceX18`, so improving a bid by one price unit creates
+  a separate level and outranks an earlier bid even when both settle to the same quote atoms.
+- The current minimum is one quote-token atom: `0.000001 USDC` for a six-decimal quote token.
+  A one-USDC minimum notional and a relative tick grid are not currently enforced.
 
 ### Supply-agnostic gas benchmark
 
@@ -291,9 +327,9 @@ The package has no external Solidity dependencies.
   production registry should use governance-approved tick parameters if configuration squatting
   is unacceptable. Lot precision is administrator-controlled and cannot be supplied by creators.
 - Quote-token removal only prevents future pair creation; existing books deliberately remain live.
-- Non-zero order expiry is cleaned lazily when an expired order reaches the head of a matched price
-  level; views can include expired liquidity until an on-chain operation cleans it.
-- Trading fees, self-trade prevention, native-token handling, upgradeability, and governance
-  transfer are intentionally not implemented.
+- Limit orders are good-til-cancelled. The ABI retains the `expiry` field for compatibility, but the
+  contract rejects every non-zero value.
+- Self-trade prevention, native-token handling, upgradeability, and governance transfer are
+  intentionally not implemented.
 - The contracts reject fee-on-transfer order funding and require standard ERC-20 transfer behavior.
 - This is an unaudited reference implementation, not production-ready order escrow.

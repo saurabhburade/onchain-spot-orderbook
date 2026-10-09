@@ -106,4 +106,69 @@ contract PriceTreeTest {
         (bool missing,) = address(tree).call(abi.encodeCall(PriceTreeHarness.clear, (uint128(43))));
         require(!missing, "missing price clear succeeded");
     }
+
+    function testFuzz_MutationsMatchIndependentSet(uint256 seed) public {
+        uint128[16] memory prices;
+        bool[16] memory active;
+        // Unique low nibbles permit arbitrary uint128 prefixes without duplicate generated prices.
+        for (uint256 i; i < prices.length; ++i) {
+            prices[i] =
+                (uint128(uint256(keccak256(abi.encode(seed, i)))) & ~uint128(15)) | uint128(i);
+        }
+        prices[0] = 0;
+        prices[15] = type(uint128).max;
+
+        for (uint256 step; step < 48; ++step) {
+            uint256 action = uint256(keccak256(abi.encode(seed, step, "mutation")));
+            uint256 index = action % prices.length;
+            if (active[index]) tree.clear(prices[index]);
+            else tree.set(prices[index]);
+            active[index] = !active[index];
+            _assertReferenceSet(prices, active, uint128(action >> 128));
+            _assertReferenceSet(prices, active, prices[index]);
+        }
+        for (uint256 i; i < prices.length; ++i) {
+            if (active[i]) tree.clear(prices[i]);
+        }
+        (bool exists,) = tree.min();
+        require(!exists, "cleared set retained a root");
+    }
+
+    function _assertReferenceSet(uint128[16] memory prices, bool[16] memory active, uint128 query)
+        private
+        view
+    {
+        bool any;
+        bool hasNext;
+        bool hasPrevious;
+        uint128 minimum = type(uint128).max;
+        uint128 maximum;
+        uint128 successor = type(uint128).max;
+        uint128 predecessor;
+        for (uint256 i; i < prices.length; ++i) {
+            require(tree.contains(prices[i]) == active[i], "set membership mismatch");
+            if (!active[i]) continue;
+            any = true;
+            if (prices[i] < minimum) minimum = prices[i];
+            if (prices[i] > maximum) maximum = prices[i];
+            if (prices[i] > query && (!hasNext || prices[i] < successor)) {
+                hasNext = true;
+                successor = prices[i];
+            }
+            if (prices[i] < query && (!hasPrevious || prices[i] > predecessor)) {
+                hasPrevious = true;
+                predecessor = prices[i];
+            }
+        }
+        (bool exists, uint128 actual) = tree.min();
+        require(exists == any && (!any || actual == minimum), "minimum mismatch");
+        (exists, actual) = tree.max();
+        require(exists == any && (!any || actual == maximum), "maximum mismatch");
+        (exists, actual) = tree.next(query);
+        require(exists == hasNext && (!hasNext || actual == successor), "successor mismatch");
+        (exists, actual) = tree.previous(query);
+        require(
+            exists == hasPrevious && (!hasPrevious || actual == predecessor), "predecessor mismatch"
+        );
+    }
 }

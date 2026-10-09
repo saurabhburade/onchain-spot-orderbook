@@ -181,7 +181,6 @@ export type LimitOrderInput = {
   side: OrderSide;
   price: string;
   quantity: string;
-  expiry?: bigint;
   clientOrderId?: bigint;
   maxBookSteps?: bigint;
 };

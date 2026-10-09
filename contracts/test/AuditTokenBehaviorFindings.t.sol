@@ -1,0 +1,266 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { ISpotCLOB } from "../src/ISpotCLOB.sol";
+import { SpotCLOB } from "../src/SpotCLOB.sol";
+import { SpotCLOBFactory } from "../src/SpotCLOBFactory.sol";
+
+interface FindingToken {
+    function approve(address spender, uint256 amount) external returns (bool);
+}
+
+contract FindingERC20 {
+    mapping(address account => uint256 amount) public balanceOf;
+    mapping(address owner => mapping(address spender => uint256 amount)) public allowance;
+
+    function decimals() external pure returns (uint8) {
+        return 18;
+    }
+
+    function mint(address account, uint256 amount) external {
+        balanceOf[account] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external virtual returns (bool) {
+        _move(msg.sender, to, amount);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount)
+        external
+        virtual
+        returns (bool)
+    {
+        uint256 approved = allowance[from][msg.sender];
+        if (approved != type(uint256).max) allowance[from][msg.sender] = approved - amount;
+        _move(from, to, amount);
+        return true;
+    }
+
+    function _move(address from, address to, uint256 amount) internal virtual {
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+    }
+}
+
+/// @dev The model only blocks transfers to a blacklisted receiver, which is the USDC behavior
+/// needed by these reproductions.
+contract ReceiverBlocklistToken is FindingERC20 {
+    mapping(address account => bool blocked) public blacklisted;
+
+    function setBlacklisted(address account, bool blocked) external {
+        blacklisted[account] = blocked;
+    }
+
+    function _move(address from, address to, uint256 amount) internal override {
+        if (blacklisted[to]) revert("blacklisted receiver");
+        super._move(from, to, amount);
+    }
+}
+
+contract NegativeRebaseToken is FindingERC20 {
+    function setBalance(address account, uint256 amount) external {
+        balanceOf[account] = amount;
+    }
+}
+
+/// @dev Pulls credit the requested amount but charges the sender an extra atom on every move.
+contract SenderSurchargeToken is FindingERC20 {
+    uint256 public constant SURCHARGE = 1;
+
+    function _move(address from, address to, uint256 amount) internal override {
+        balanceOf[from] -= amount + SURCHARGE;
+        balanceOf[to] += amount;
+    }
+}
+
+contract FindingTrader {
+    function approve(FindingERC20 token, SpotCLOB book) external {
+        token.approve(address(book), type(uint256).max);
+    }
+
+    function place(
+        SpotCLOB book,
+        address base,
+        address quote,
+        ISpotCLOB.Side side,
+        uint128 price,
+        uint128 quantity
+    ) external returns (bytes32 orderId) {
+        return book.placeLimitOrder(
+            ISpotCLOB.LimitOrder({
+                trader: address(this),
+                baseAsset: base,
+                quoteAsset: quote,
+                side: side,
+                price: price,
+                quantity: quantity,
+                expiry: 0,
+                clientOrderId: 0
+            })
+        );
+    }
+
+    function attemptPlace(
+        SpotCLOB book,
+        address base,
+        address quote,
+        ISpotCLOB.Side side,
+        uint128 price,
+        uint128 quantity
+    ) external returns (bool success) {
+        ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
+            trader: address(this),
+            baseAsset: base,
+            quoteAsset: quote,
+            side: side,
+            price: price,
+            quantity: quantity,
+            expiry: 0,
+            clientOrderId: 0
+        });
+        (success,) = address(book).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));
+    }
+
+    function attemptCancel(SpotCLOB book, bytes32 orderId) external returns (bool success) {
+        (success,) = address(book).call(abi.encodeCall(SpotCLOB.cancelOrder, (orderId)));
+    }
+}
+
+contract AuditTokenBehaviorFindingsTest {
+    uint256 private constant ONE = 1 ether;
+    uint256 private constant SURCHARGE = 1;
+
+    function testKnownIssue_M02ReceiverBlocklistFreezesFifoHead() public {
+        ReceiverBlocklistToken quote = new ReceiverBlocklistToken();
+        FindingERC20 base = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader maker = new FindingTrader();
+        FindingTrader buyer = new FindingTrader();
+
+        base.mint(address(maker), ONE);
+        quote.mint(address(buyer), 1_000);
+        maker.approve(base, book);
+        buyer.approve(quote, book);
+
+        bytes32 ask = maker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        quote.setBlacklisted(address(maker), true);
+
+        // A blocked maker payout reverts matching, so the blocked FIFO ask remains the head.
+        require(
+            !buyer.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1),
+            "blocked maker payout matched"
+        );
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, ask, 1);
+
+        bytes32 bid = buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 90, 1);
+        quote.setBlacklisted(address(buyer), true);
+
+        // A blocked refund receiver reverts cancellation, preserving the blocking FIFO bid too.
+        require(!buyer.attemptCancel(book, bid), "blocked refund receiver canceled");
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Buy, 90, bid, 1);
+    }
+
+    function testKnownIssue_M03NegativeRebaseMakesLaterCancelInsolvent() public {
+        NegativeRebaseToken base = new NegativeRebaseToken();
+        FindingERC20 quote = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader firstSeller = new FindingTrader();
+        FindingTrader secondSeller = new FindingTrader();
+
+        base.mint(address(firstSeller), 2 * ONE);
+        base.mint(address(secondSeller), 2 * ONE);
+        firstSeller.approve(base, book);
+        secondSeller.approve(base, book);
+
+        bytes32 firstAsk =
+            firstSeller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        bytes32 secondAsk =
+            secondSeller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+
+        base.setBalance(address(book), ONE);
+
+        // Rebase changes only token holdings; the book still records both nominal liabilities.
+        _assertOpenOrder(book, firstAsk, 1);
+        _assertOpenOrder(book, secondAsk, 1);
+        (, uint256 firstLocked,) = book.balanceOf(address(firstSeller), address(base));
+        (, uint256 secondLocked,) = book.balanceOf(address(secondSeller), address(base));
+        require(firstLocked == ONE && secondLocked == ONE, "nominal escrow changed on rebase");
+
+        require(firstSeller.attemptCancel(book, firstAsk), "early cancel unexpectedly failed");
+        require(!secondSeller.attemptCancel(book, secondAsk), "insolvent escrow paid out");
+
+        // Success means the first liability consumed the only remaining token and the FIFO head is
+        // still the second open order after its failed cleanup.
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, secondAsk, 1);
+        _assertOpenOrder(book, secondAsk, 1);
+        require(base.balanceOf(address(book)) == 0, "unexpected base balance");
+    }
+
+    function testKnownIssue_L02SenderSurchargeBreaksPushValidation() public {
+        SenderSurchargeToken base = new SenderSurchargeToken();
+        FindingERC20 quote = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader seller = new FindingTrader();
+
+        base.mint(address(seller), 2 * ONE);
+        seller.approve(base, book);
+        bytes32 ask = seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+        uint256 sellerBalanceBeforeCancel = base.balanceOf(address(seller));
+        base.mint(address(book), SURCHARGE);
+
+        // Pull validation sees the requested amount arrive, but push validation sees the sender
+        // fee.
+        require(!seller.attemptCancel(book, ask), "sender-surcharge payout accepted");
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, ask, 1);
+        _assertOpenOrder(book, ask, 1);
+        (, uint256 locked,) = book.balanceOf(address(seller), address(base));
+        require(locked == ONE, "escrow changed after failed payout");
+        require(
+            base.balanceOf(address(seller)) == sellerBalanceBeforeCancel,
+            "failed payout changed sender balance"
+        );
+        require(
+            base.balanceOf(address(book)) == ONE + SURCHARGE,
+            "failed payout changed contract balance"
+        );
+    }
+
+    function _deployPair(address base, address quote) private returns (SpotCLOB book, bytes32 id) {
+        SpotCLOBFactory factory = new SpotCLOBFactory();
+        factory.setQuoteToken(quote, true);
+        factory.setPairLotDecimals(base, quote, 0);
+        address deployed;
+        (id, deployed) = factory.createPair(base, quote, 1, 1, 100_000);
+        book = SpotCLOB(deployed);
+    }
+
+    function _assertHead(
+        SpotCLOB book,
+        address base,
+        address quote,
+        ISpotCLOB.Side side,
+        uint128 price,
+        bytes32 expectedHead,
+        uint128 expectedQuantity
+    ) private view {
+        bytes32 id = book.marketId(base, quote);
+        (uint128 totalQuantity, bytes32 head,) = book.getPriceLevel(id, side, price);
+        require(totalQuantity == expectedQuantity, "FIFO level quantity changed");
+        require(head == expectedHead, "FIFO head changed");
+    }
+
+    function _assertOpenOrder(SpotCLOB book, bytes32 orderId, uint128 expectedQuantity)
+        private
+        view
+    {
+        (, ISpotCLOB.OrderState memory state) = book.getOrder(orderId);
+        require(state.status == ISpotCLOB.OrderStatus.Open, "order is not open");
+        require(state.quantity == expectedQuantity && state.filledQuantity == 0, "order changed");
+    }
+}

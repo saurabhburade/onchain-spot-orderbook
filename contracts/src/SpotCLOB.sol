@@ -69,6 +69,11 @@ contract SpotCLOB is ISpotCLOB {
         uint256 locked;
     }
 
+    struct FeeAmounts {
+        uint256 taker;
+        uint256 maker;
+    }
+
     struct PriceLevel {
         uint64 headOrderId;
         uint64 tailOrderId;
@@ -98,6 +103,7 @@ contract SpotCLOB is ISpotCLOB {
         uint64 previousOrderId;
         uint64 nextOrderId;
         uint64 nextUserOrderId;
+        uint16 feeBps;
         Side side;
         OrderStatus status;
         OrderKind kind;
@@ -249,7 +255,7 @@ contract SpotCLOB is ISpotCLOB {
         _emitBookUpdated(_orders[_decodeOrderId(orderId)].marketId);
     }
 
-    /// @notice Place an order while explicitly bounding fills and expired-order cleanup work.
+    /// @notice Place an order while explicitly bounding matching work.
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
         external
         nonReentrant
@@ -297,6 +303,7 @@ contract SpotCLOB is ISpotCLOB {
         incoming.remaining = request.quantity;
         incoming.clientOrderId = request.clientOrderId;
         incoming.createdAt = uint64(block.timestamp);
+        incoming.feeBps = market.tradingFeeBps;
         incoming.side = request.side;
         incoming.status = OrderStatus.Open;
         incoming.kind = OrderKind.Market;
@@ -610,7 +617,7 @@ contract SpotCLOB is ISpotCLOB {
     {
         if (
             request.trader == address(0) || request.quantity == 0 || request.price == 0
-                || (request.expiry != 0 && request.expiry <= block.timestamp)
+                || request.expiry != 0
         ) revert InvalidOrder();
         if (msg.sender != request.trader) revert Unauthorized();
 
@@ -625,7 +632,8 @@ contract SpotCLOB is ISpotCLOB {
             revert InvalidLotQuantity();
         }
 
-        (uint256 feeReserve, uint256 escrowAmount) = _escrowOrderFunds(request, market);
+        uint16 feeBps = market.tradingFeeBps;
+        (uint256 feeReserve, uint256 escrowAmount) = _escrowOrderFunds(request, market, feeBps);
 
         uint64 orderId_ = _nextOrderId++;
         StoredOrder storage incoming = _orders[orderId_];
@@ -634,9 +642,9 @@ contract SpotCLOB is ISpotCLOB {
         incoming.price = request.price;
         incoming.quantity = request.quantity;
         incoming.remaining = request.quantity;
-        incoming.expiry = request.expiry;
         incoming.clientOrderId = request.clientOrderId;
         incoming.createdAt = uint64(block.timestamp);
+        incoming.feeBps = feeBps;
         incoming.side = request.side;
         incoming.status = OrderStatus.Open;
         incoming.kind = OrderKind.Limit;
@@ -717,24 +725,19 @@ contract SpotCLOB is ISpotCLOB {
         uint64 makerOrderId = level.headOrderId;
         StoredOrder storage maker = _orders[makerOrderId];
 
-        if (maker.expiry != 0 && maker.expiry <= block.timestamp) {
-            _cancelRestingOrder(makerOrderId, maker);
-            return (0, 0, true);
-        }
-
         uint128 fillQuantity = taker.remaining < maker.remaining ? taker.remaining : maker.remaining;
         uint128 executionPrice = maker.price;
         Market storage market = _markets[id];
         tradedQuote = _quoteAmount(market, executionPrice, fillQuantity);
         if (tradedQuote == 0) return (0, 0, false);
-        uint256 tradingFee;
+        FeeAmounts memory fees;
         if (takerUsesWallet) {
-            tradingFee = _settleMarketTaker(market, taker, maker, executionPrice, fillQuantity);
+            fees = _settleMarketTaker(market, taker, maker, executionPrice, fillQuantity);
         } else {
-            tradingFee = _settleMatch(market, taker, maker, executionPrice, fillQuantity);
+            fees = _settleMatch(market, taker, maker, executionPrice, fillQuantity);
         }
         receivedQuantity =
-            taker.side == Side.Buy ? _baseAmount(market, fillQuantity) : tradedQuote - tradingFee;
+            taker.side == Side.Buy ? _baseAmount(market, fillQuantity) : tradedQuote - fees.taker;
 
         taker.remaining -= fillQuantity;
         maker.remaining -= fillQuantity;
@@ -747,8 +750,8 @@ contract SpotCLOB is ISpotCLOB {
         _emitTradeExecuted(
             id, takerOrderId, makerOrderId, executionPrice, fillQuantity, tradedQuote
         );
-        _emitTradingFeeCharged(id, takerOrderId, tradingFee);
-        _emitTradingFeeCharged(id, makerOrderId, tradingFee);
+        _emitTradingFeeCharged(id, takerOrderId, fees.taker);
+        _emitTradingFeeCharged(id, makerOrderId, fees.maker);
         _emitOrderFill(id, takerOrderId, taker, fillQuantity);
         _emitOrderFill(id, makerOrderId, maker, fillQuantity);
 
@@ -807,7 +810,7 @@ contract SpotCLOB is ISpotCLOB {
         }
     }
 
-    function _escrowOrderFunds(LimitOrder calldata order, Market storage market)
+    function _escrowOrderFunds(LimitOrder calldata order, Market storage market, uint16 feeBps)
         private
         returns (uint256 feeReserve, uint256 escrowAmount)
     {
@@ -815,7 +818,7 @@ contract SpotCLOB is ISpotCLOB {
         if (order.side == Side.Buy) {
             asset = market.quoteAsset;
             escrowAmount = _quoteAmount(market, order.price, order.quantity);
-            feeReserve = _tradingFee(escrowAmount, market.tradingFeeBps);
+            feeReserve = _tradingFee(escrowAmount, feeBps);
         } else {
             asset = market.baseAsset;
             escrowAmount = _baseAmount(market, order.quantity);
@@ -833,21 +836,22 @@ contract SpotCLOB is ISpotCLOB {
         StoredOrder storage maker,
         uint128 executionPrice,
         uint128 quantity
-    ) private returns (uint256 tradingFee) {
+    ) private returns (FeeAmounts memory fees) {
         uint256 tradedQuote = _quoteAmount(market, executionPrice, quantity);
         uint256 tradedBase = _baseAmount(market, quantity);
-        tradingFee = _tradingFee(tradedQuote, market.tradingFeeBps);
+        fees.taker = _tradingFee(tradedQuote, taker.feeBps);
+        fees.maker = _tradingFee(tradedQuote, maker.feeBps);
 
         if (taker.side == Side.Buy) {
             uint256 reservedQuote = _consumeBuyEscrow(taker, market, quantity);
             Balance storage buyerQuote = _balances[taker.trader][market.quoteAsset];
-            buyerQuote.locked -= reservedQuote + tradingFee;
-            taker.feeReserve -= tradingFee;
+            buyerQuote.locked -= reservedQuote + fees.taker;
+            taker.feeReserve -= fees.taker;
             _balances[maker.trader][market.baseAsset].locked -= tradedBase;
             maker.escrowRemaining -= tradedBase;
 
             _pushAsset(market.baseAsset, taker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - tradingFee);
+            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker);
             uint256 priceImprovement = reservedQuote - tradedQuote;
             if (priceImprovement != 0) {
                 _pushAsset(market.quoteAsset, taker.trader, priceImprovement);
@@ -855,19 +859,19 @@ contract SpotCLOB is ISpotCLOB {
         } else {
             uint256 reservedQuote = _consumeBuyEscrow(maker, market, quantity);
             Balance storage buyerQuote = _balances[maker.trader][market.quoteAsset];
-            maker.feeReserve -= tradingFee;
-            buyerQuote.locked -= reservedQuote + tradingFee;
+            maker.feeReserve -= fees.maker;
+            buyerQuote.locked -= reservedQuote + fees.maker;
             _balances[taker.trader][market.baseAsset].locked -= tradedBase;
             taker.escrowRemaining -= tradedBase;
 
             _pushAsset(market.baseAsset, maker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - tradingFee);
+            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker);
             uint256 roundingRefund = reservedQuote - tradedQuote;
             if (roundingRefund != 0) {
                 _pushAsset(market.quoteAsset, maker.trader, roundingRefund);
             }
         }
-        accruedTradingFees[market.quoteAsset] += tradingFee << 1;
+        accruedTradingFees[market.quoteAsset] += fees.taker + fees.maker;
     }
 
     function _settleMarketTaker(
@@ -876,31 +880,32 @@ contract SpotCLOB is ISpotCLOB {
         StoredOrder storage maker,
         uint128 executionPrice,
         uint128 quantity
-    ) private returns (uint256 tradingFee) {
+    ) private returns (FeeAmounts memory fees) {
         uint256 tradedQuote = _quoteAmount(market, executionPrice, quantity);
         uint256 tradedBase = _baseAmount(market, quantity);
-        tradingFee = _tradingFee(tradedQuote, market.tradingFeeBps);
+        fees.taker = _tradingFee(tradedQuote, taker.feeBps);
+        fees.maker = _tradingFee(tradedQuote, maker.feeBps);
 
         if (taker.side == Side.Buy) {
             _balances[maker.trader][market.baseAsset].locked -= tradedBase;
             maker.escrowRemaining -= tradedBase;
-            _pullAsset(market.quoteAsset, taker.trader, tradedQuote + tradingFee);
+            _pullAsset(market.quoteAsset, taker.trader, tradedQuote + fees.taker);
             _pushAsset(market.baseAsset, taker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - tradingFee);
+            _pushAsset(market.quoteAsset, maker.trader, tradedQuote - fees.maker);
         } else {
             uint256 reservedQuote = _consumeBuyEscrow(maker, market, quantity);
             Balance storage buyerQuote = _balances[maker.trader][market.quoteAsset];
-            maker.feeReserve -= tradingFee;
-            buyerQuote.locked -= reservedQuote + tradingFee;
+            maker.feeReserve -= fees.maker;
+            buyerQuote.locked -= reservedQuote + fees.maker;
             _pullAsset(market.baseAsset, taker.trader, tradedBase);
             _pushAsset(market.baseAsset, maker.trader, tradedBase);
-            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - tradingFee);
+            _pushAsset(market.quoteAsset, taker.trader, tradedQuote - fees.taker);
             uint256 roundingRefund = reservedQuote - tradedQuote;
             if (roundingRefund != 0) {
                 _pushAsset(market.quoteAsset, maker.trader, roundingRefund);
             }
         }
-        accruedTradingFees[market.quoteAsset] += tradingFee << 1;
+        accruedTradingFees[market.quoteAsset] += fees.taker + fees.maker;
     }
 
     function _consumeBuyEscrow(
@@ -916,7 +921,7 @@ contract SpotCLOB is ISpotCLOB {
 
     function _releaseFeeReserve(StoredOrder storage order, Market storage market) private {
         uint256 target = order.side == Side.Buy
-            ? _tradingFee(_quoteAmount(market, order.price, order.remaining), market.tradingFeeBps)
+            ? _tradingFee(_quoteAmount(market, order.price, order.remaining), order.feeBps)
             : 0;
         uint256 amount = order.feeReserve - target;
         if (amount == 0) return;

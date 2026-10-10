@@ -53,7 +53,6 @@ contract SpotCLOB is ISpotCLOB {
     error AlreadyInitialized();
     error OrderNotQuarantined();
     error InvalidReceiver();
-    error MinimumEscrowNotMet();
     error SettlementPayoutFailed(address asset, address recipient, bool makerPayout);
 
     struct Market {
@@ -265,7 +264,7 @@ contract SpotCLOB is ISpotCLOB {
         nonReentrant
         returns (bytes32 orderId)
     {
-        orderId = _placeLimitOrder(order, order.quantity, DEFAULT_MAX_BOOK_STEPS);
+        orderId = _placeLimitOrder(order, DEFAULT_MAX_BOOK_STEPS);
         _emitBookUpdated(_orders[_decodeOrderId(orderId)].marketId);
     }
 
@@ -275,16 +274,7 @@ contract SpotCLOB is ISpotCLOB {
         nonReentrant
         returns (bytes32 orderId)
     {
-        orderId = _placeLimitOrder(order, order.quantity, maxBookSteps);
-        _emitBookUpdated(_orders[_decodeOrderId(orderId)].marketId);
-    }
-
-    function placeLimitOrderSupportingFeeOnTransfer(
-        LimitOrder calldata order,
-        uint128 minAcceptedQuantity,
-        uint32 maxBookSteps
-    ) external override nonReentrant returns (bytes32 orderId) {
-        orderId = _placeLimitOrder(order, minAcceptedQuantity, maxBookSteps);
+        orderId = _placeLimitOrder(order, maxBookSteps);
         _emitBookUpdated(_orders[_decodeOrderId(orderId)].marketId);
     }
 
@@ -662,15 +652,13 @@ contract SpotCLOB is ISpotCLOB {
         }
     }
 
-    function _placeLimitOrder(
-        LimitOrder calldata request,
-        uint128 minAcceptedQuantity,
-        uint32 maxBookSteps
-    ) private returns (bytes32 externalOrderId) {
+    function _placeLimitOrder(LimitOrder calldata request, uint32 maxBookSteps)
+        private
+        returns (bytes32 externalOrderId)
+    {
         if (
             request.trader == address(0) || request.quantity == 0 || request.price == 0
-                || request.expiry != 0 || minAcceptedQuantity == 0
-                || minAcceptedQuantity > request.quantity
+                || request.expiry != 0
         ) revert InvalidOrder();
         if (msg.sender != request.trader) revert Unauthorized();
 
@@ -686,7 +674,7 @@ contract SpotCLOB is ISpotCLOB {
         }
         uint16 feeBps = market.tradingFeeBps;
         (uint128 acceptedQuantity, uint256 feeReserve, uint256 escrowAmount) =
-            _escrowOrderFunds(request, market, feeBps, minAcceptedQuantity);
+            _escrowOrderFunds(request, market, feeBps);
         if (market.agnosticPricing && _quoteAmount(market, request.price, acceptedQuantity) == 0) {
             revert InvalidLotQuantity();
         }
@@ -916,19 +904,17 @@ contract SpotCLOB is ISpotCLOB {
         }
     }
 
-    function _escrowOrderFunds(
-        LimitOrder calldata order,
-        Market storage market,
-        uint16 feeBps,
-        uint128 minAcceptedQuantity
-    ) private returns (uint128 acceptedQuantity, uint256 feeReserve, uint256 escrowAmount) {
+    function _escrowOrderFunds(LimitOrder calldata order, Market storage market, uint16 feeBps)
+        private
+        returns (uint128 acceptedQuantity, uint256 feeReserve, uint256 escrowAmount)
+    {
         address asset = order.side == Side.Buy ? market.quoteAsset : market.baseAsset;
         uint256 requestedAmount = _requiredOrderEscrow(market, order, feeBps, order.quantity);
         uint256 receivedAmount = _pullEscrowAsset(asset, order.trader, requestedAmount);
         acceptedQuantity = order.side == Side.Buy
             ? _maximumFundedBuyQuantity(market, order.price, order.quantity, feeBps, receivedAmount)
             : _maximumFundedSellQuantity(market, order.quantity, receivedAmount);
-        if (acceptedQuantity < minAcceptedQuantity) revert MinimumEscrowNotMet();
+        if (acceptedQuantity == 0) revert UnsupportedTokenBehavior();
 
         if (order.side == Side.Buy) {
             escrowAmount = _quoteAmount(market, order.price, acceptedQuantity);

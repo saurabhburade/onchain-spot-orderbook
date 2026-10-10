@@ -169,22 +169,14 @@ interface ISpotCLOB {
 
     /// @notice Place a limit order and match it against the resting book.
     /// @dev The implementation must reject invalid pairs, zero values, non-zero expiry, and
-    /// insufficient available balance before mutating the book. Accepted orders remain open until
-    /// filled or cancelled by their owner.
+    /// insufficient available balance before mutating the book. `order.quantity` is the requested
+    /// maximum: recipient-side transfer tax reduces the accepted quantity to what the received
+    /// escrow can fund. Accepted orders remain open until filled or cancelled by their owner.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId);
-
-    /// @notice Place a limit order using the amount actually received as escrow.
-    /// @dev Reverts unless transfer-tax-adjusted quantity is at least `minAcceptedQuantity`.
-    /// Wallet-funded market orders continue to require exact input transfers.
-    function placeLimitOrderSupportingFeeOnTransfer(
-        LimitOrder calldata order,
-        uint128 minAcceptedQuantity,
-        uint32 maxBookSteps
-    ) external returns (bytes32 orderId);
 
     /// @notice Execute immediately against resting liquidity without placing a remainder on-book.
     /// @dev Reverts when no quantity can execute. A zero minimum permits a partial fill, not a zero

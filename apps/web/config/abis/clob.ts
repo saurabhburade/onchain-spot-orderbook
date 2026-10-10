@@ -147,30 +147,6 @@ export const clobAbi = [
   },
   {
     type: "function",
-    name: "placeLimitOrderSupportingFeeOnTransfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      {
-        name: "order",
-        type: "tuple",
-        components: [
-          { name: "trader", type: "address" },
-          { name: "baseAsset", type: "address" },
-          { name: "quoteAsset", type: "address" },
-          { name: "side", type: "uint8" },
-          { name: "price", type: "uint128" },
-          { name: "quantity", type: "uint128" },
-          { name: "expiry", type: "uint64" },
-          { name: "clientOrderId", type: "uint64" },
-        ],
-      },
-      { name: "minAcceptedQuantity", type: "uint128" },
-      { name: "maxBookSteps", type: "uint32" },
-    ],
-    outputs: [{ name: "orderId", type: "bytes32" }],
-  },
-  {
-    type: "function",
     name: "executeMarketOrder",
     stateMutability: "nonpayable",
     inputs: [

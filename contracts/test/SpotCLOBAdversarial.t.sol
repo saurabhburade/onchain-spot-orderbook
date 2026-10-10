@@ -111,38 +111,6 @@ contract AdversarialTrader {
             );
     }
 
-    function attemptPlaceSupportingFeeOnTransfer(
-        SpotCLOB book,
-        address base,
-        address quote,
-        ISpotCLOB.Side side,
-        uint128 price,
-        uint128 quantity,
-        uint128 minAcceptedQuantity
-    ) external returns (bool success, bytes32 orderId) {
-        ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
-            trader: address(this),
-            baseAsset: base,
-            quoteAsset: quote,
-            side: side,
-            price: price,
-            quantity: quantity,
-            expiry: 0,
-            clientOrderId: 0
-        });
-        bytes memory result;
-        (success, result) = address(book)
-            .call(
-                abi.encodeWithSignature(
-                    "placeLimitOrderSupportingFeeOnTransfer((address,address,address,uint8,uint128,uint128,uint64,uint64),uint128,uint32)",
-                    order,
-                    minAcceptedQuantity,
-                    uint32(64)
-                )
-            );
-        if (success) orderId = abi.decode(result, (bytes32));
-    }
-
     function attemptCancel(SpotCLOB book, bytes32 orderId) external returns (bool success) {
         (success,) = address(book).call(abi.encodeCall(SpotCLOB.cancelOrder, (orderId)));
     }
@@ -186,17 +154,20 @@ contract SpotCLOBAdversarialTest {
         require(!seller.attemptCancel(book, orderId), "false-return transfer accepted");
     }
 
-    function testStandardEntryPointRejectsFeeOnTransferFrom() public {
+    function testStandardEntryPointUsesFeeOnTransferBalanceDelta() public {
         (SpotCLOB book, AdversarialToken base, AdversarialToken quote) = _deployBook();
-        AdversarialTrader buyer = new AdversarialTrader();
-        quote.mint(address(buyer), 1_000);
-        buyer.approve(quote, book);
-        quote.setMode(quote.FEE_TRANSFER_FROM());
+        AdversarialTrader seller = new AdversarialTrader();
+        base.mint(address(seller), 100);
+        seller.approve(base, book);
+        base.setMode(base.FEE_TRANSFER_FROM());
 
-        require(
-            !buyer.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1),
-            "fee-on-transferFrom token accepted"
-        );
+        bytes32 orderId =
+            seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100);
+        (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
+            book.getOrder(orderId);
+        require(order.quantity == 99 && state.quantity == 99, "order ignored received amount");
+        (, uint256 locked,) = book.balanceOf(address(seller), address(base));
+        require(locked == 99 && base.balanceOf(address(book)) == 99, "wrong funded escrow");
     }
 
     function testFeeOnTransferFundingUsesReceivedQuantityAndNetPayout() public {
@@ -209,10 +180,8 @@ contract SpotCLOBAdversarialTest {
         buyer.approve(quote, book);
         base.setMode(base.FEE_TRANSFER_FROM());
 
-        (bool success, bytes32 orderId) = seller.attemptPlaceSupportingFeeOnTransfer(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100, 99
-        );
-        require(success, "fee-on-transfer funding rejected");
+        bytes32 orderId =
+            seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100);
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
             book.getOrder(orderId);
         require(order.quantity == 99 && state.quantity == 99, "order ignored received amount");
@@ -257,18 +226,21 @@ contract SpotCLOBAdversarialTest {
         require(base.balanceOf(address(book)) == 0, "market fill retained base escrow");
     }
 
-    function testFeeOnTransferFundingEnforcesMinimumAcceptedQuantity() public {
+    function testFeeOnTransferFundingRejectsZeroReceivedQuantity() public {
         (SpotCLOB book, AdversarialToken base, AdversarialToken quote) = _deployBook();
         AdversarialTrader seller = new AdversarialTrader();
         base.mint(address(seller), 100);
         seller.approve(base, book);
+        base.setTransferFee(100);
         base.setMode(base.FEE_TRANSFER_FROM());
 
-        (bool success,) = seller.attemptPlaceSupportingFeeOnTransfer(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100, 100
+        require(
+            !seller.attemptPlace(
+                book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100
+            ),
+            "zero-funded order accepted"
         );
-        require(!success, "minimum accepted quantity ignored");
-        require(base.balanceOf(address(seller)) == 100, "failed placement charged transfer tax");
+        require(base.balanceOf(address(seller)) == 100, "failed placement changed balance");
         require(base.balanceOf(address(book)) == 0, "failed placement retained escrow");
     }
 
@@ -279,10 +251,8 @@ contract SpotCLOBAdversarialTest {
         buyer.approve(quote, book);
         quote.setMode(quote.FEE_TRANSFER_FROM());
 
-        (bool success, bytes32 orderId) = buyer.attemptPlaceSupportingFeeOnTransfer(
-            book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 100, 99
-        );
-        require(success, "fee-on-transfer quote funding rejected");
+        bytes32 orderId =
+            buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 100);
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
             book.getOrder(orderId);
         require(order.quantity == 99 && state.quantity == 99, "wrong affordable buy quantity");
@@ -302,10 +272,8 @@ contract SpotCLOBAdversarialTest {
         base.setTransferFee(fee);
         base.setMode(base.FEE_TRANSFER_FROM());
 
-        (bool success, bytes32 orderId) = seller.attemptPlaceSupportingFeeOnTransfer(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100, acceptedQuantity
-        );
-        require(success, "measured fee-on-transfer funding rejected");
+        bytes32 orderId =
+            seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100);
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
             book.getOrder(orderId);
         require(
@@ -319,16 +287,14 @@ contract SpotCLOBAdversarialTest {
         );
     }
 
-    function testFeeOnTransferEntryPointPreservesNormalTokenQuantity() public {
+    function testNormalTokenFundingPreservesRequestedQuantity() public {
         (SpotCLOB book, AdversarialToken base, AdversarialToken quote) = _deployBook();
         AdversarialTrader seller = new AdversarialTrader();
         base.mint(address(seller), 100);
         seller.approve(base, book);
 
-        (bool success, bytes32 orderId) = seller.attemptPlaceSupportingFeeOnTransfer(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100, 100
-        );
-        require(success, "normal token rejected by fee-compatible entry point");
+        bytes32 orderId =
+            seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 100);
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
             book.getOrder(orderId);
         require(order.quantity == 100 && state.quantity == 100, "normal quantity changed");

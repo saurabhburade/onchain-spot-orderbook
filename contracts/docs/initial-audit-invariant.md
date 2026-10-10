@@ -7,7 +7,6 @@
 | Project | Onchain Spot Orderbook |
 | Component | `SpotCLOB`, factory, pricing libraries, and Solidity test suite |
 | Original reviewer | [@0x3b33](https://github.com/0x3b33) |
-| Original report | [Initial security findings](https://gist.github.com/0x3b33/a90ad75771dc570933c5cd5deda74dcd) |
 | Remediation branch | [`initial-audit-invariant`](https://github.com/saurabhburade/onchain-spot-orderbook/tree/initial-audit-invariant) |
 | Remediation PR | [#2 — Initial audit invariants and liveness fixes](https://github.com/saurabhburade/onchain-spot-orderbook/pull/2) |
 | Report date | 10 October 2026 |

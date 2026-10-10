@@ -724,10 +724,7 @@ contract SpotCLOB is ISpotCLOB {
         _match(id, orderId_, incoming, priceKey, maxBookSteps, false);
         _releaseFeeReserve(incoming, market);
         if (incoming.remaining != 0) {
-            if (
-                market.agnosticPricing
-                    && _quoteAmount(market, incoming.price, incoming.remaining) == 0
-            ) {
+            if (!_remainderCanRest(id, priceKey, incoming, market)) {
                 _releaseUnrestedRemainder(orderId_, incoming, market);
             } else {
                 _appendOrder(id, priceKey, orderId_, incoming);
@@ -1146,6 +1143,20 @@ contract SpotCLOB is ISpotCLOB {
         emit OrderCancelled(
             bytes32(uint256(orderId_)), order.marketId, order.trader, order.remaining
         );
+    }
+
+    /// @dev A limit remainder must never rest with zero settlement value or while crossed. The
+    /// latter can occur when a smaller incoming slice rounds to zero at a valid maker's price.
+    function _remainderCanRest(
+        bytes32 id,
+        uint128 priceKey,
+        StoredOrder storage order,
+        Market storage market
+    ) private view returns (bool) {
+        if (market.agnosticPricing && _quoteAmount(market, order.price, order.remaining) == 0) return false;
+
+        (bool oppositeExists, uint128 oppositeKey) = _bestOppositePrice(id, order.side);
+        return !oppositeExists || !_crosses(order.side, priceKey, oppositeKey);
     }
 
     function _tradingFee(uint256 quoteQuantity, uint16 tradingFeeBps)

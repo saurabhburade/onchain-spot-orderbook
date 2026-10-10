@@ -15,9 +15,10 @@
 ## Executive summary
 
 The initial review reported eleven findings: one high-severity, three medium-severity, two
-low-severity, and five informational findings. This branch fixes the high-severity finding and all
-three medium-severity findings. The two low-severity and five informational findings remain open
-or explicitly acknowledged, with regression tests preserving each known behavior.
+low-severity, and five informational findings. This branch fixes the high-severity finding, all
+three medium-severity findings, and one low-severity finding. The remaining low-severity finding
+is explicitly acknowledged, and the five informational findings remain open with regression tests
+preserving each known behavior.
 
 The remediation also adds support for conventional recipient-tax tokens, aggregate escrow
 liability accounting, adversarial token-behavior tests, and three stateful invariant campaigns.
@@ -26,9 +27,9 @@ liability accounting, adversarial token-behavior tests, and three stateful invar
 | --- | ---: | ---: | ---: |
 | High | 1 | 1 | 0 |
 | Medium | 3 | 3 | 0 |
-| Low | 2 | 0 | 2 |
+| Low | 2 | 1 | 1 |
 | Informational | 5 | 0 | 5 |
-| **Total** | **11** | **4** | **7** |
+| **Total** | **11** | **5** | **6** |
 
 ### Status definitions
 
@@ -61,7 +62,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 | M-01 | Medium | Fee increases can underfund old bid fee reserves and freeze sells | **Fixed** | Fee rate is snapshotted per order and maker/taker fees settle independently |
 | M-02 | Medium | A blacklisted maker payout can block FIFO matching | **Fixed** | Failed maker settlement is rolled back; the maker is quarantined and immediately unlinked |
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
-| L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Open** | Reproduced by a regression test; crossed remainder handling still needs correction |
+| L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Acknowledged** | Token model remains unsupported and documented; behavior is reproduced by a test |
 | I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Open** | Reproduced; cumulative fee accounting is not implemented |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
@@ -182,17 +183,34 @@ Regression coverage:
 ### L-01 — Dust ask can leave a crossed limit buy
 
 **Severity:** Low  
-**Status:** Open
+**Status:** Fixed
 
 When the best maker fill rounds to zero quote, matching stops. The incoming remainder may then rest
 at its own price even though it still crosses another order. This can expose a transaction-ordering
 attack in which the dust maker is cancelled and the victim's crossed bid is filled at its own
 limit.
 
-The behavior remains intentionally visible in
-[`testKnownIssue_L01_DustBestAskLeavesCrossedBuyAfterCancellation`](../test/AuditPricingFindings.t.sol).
-The recommended future correction is to cancel and release an incoming remainder whenever it still
-crosses the opposite book after matching stops.
+The remediation centralizes the post-match resting policy: an incoming remainder may rest only if
+it has nonzero settlement value at its own price and no longer crosses the best opposite order.
+Otherwise it is cancelled, unlinked, and its remaining escrow and fee reserve are returned. A
+small taker cannot delete the valid maker that exposed the rounding boundary; only the taker's
+unfillable remainder is closed. Resting maker remainders that become dust after a successful fill
+are likewise cancelled and refunded.
+
+Regression matrix:
+
+- [`testL01_ZeroQuoteSliceRefundsTakerWithoutRemovingValidMaker`](../test/AuditPricingFindings.t.sol)
+  proves that a tiny taker cannot grief valid maker liquidity or leave a crossed order;
+- [`testL01_MakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) and
+  [`testL01_TakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) cover both
+  sides of partial-fill dust cleanup;
+- [`testL01_ExactQuoteAtomBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects the
+  valid one-atom boundary; and
+- [`testL01_ZeroQuoteRefundIncludesFeeReserve`](../test/AuditPricingFindings.t.sol) verifies complete
+  escrow and fee-reserve recovery without charging a fee.
+
+The wide-price stateful invariant additionally requires every linked remainder to have nonzero
+quote value and requires the resting best bid to remain strictly below the best ask.
 
 ### L-02 — Sender-surcharge tokens can lock escrow
 
@@ -318,7 +336,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **180 passed, 0 failed, 2 intentionally skipped**;
+- **184 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.
@@ -345,19 +363,20 @@ pnpm check
 - Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, and the transfer-tax
   changes require a new implementation/factory deployment and migration; merging this branch does
   not change already deployed books.
-- The optimized `SpotCLOB` runtime is 30,535 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 30,640 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
 - Limit orders are GTC-only and the order ABI has no expiry field.
 - Positive rebase surplus is not distributed to order owners.
 - Sender-surcharge, reflection/reward, and malicious token accounting remain unsupported.
-- Open low and informational findings should remain visible in release notes and integration
-  documentation until they are fixed.
+- The acknowledged low finding and open informational findings should remain visible in release
+  notes and integration documentation until they are fixed.
 
 ## Conclusion
 
 The branch removes the reported high-severity liveness failure and fixes all three medium-severity
-findings with explicit regression and invariant coverage. Remaining findings are lower-severity
-rounding, representability, documentation, or unsupported-token concerns. They are not silently
-suppressed: each executable behavior is reproduced by a named test, and the mixed adversarial
-invariant continuously checks their interaction with the remediated accounting and matching paths.
+findings plus L-01 with explicit regression and invariant coverage. Remaining findings are
+lower-severity unsupported-token, rounding, representability, or documentation concerns. They are
+not silently suppressed: each executable behavior is reproduced by a named test, and the mixed
+adversarial invariant continuously checks their interaction with the remediated accounting and
+matching paths.

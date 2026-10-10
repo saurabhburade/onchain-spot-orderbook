@@ -199,6 +199,7 @@ contract AgnosticInvariantHandler {
                 askPrice == asks[0].price && askQuantity == asks[0].quantity, "best ask mismatch"
             );
         }
+        if (bidExists && askExists) require(bidPrice < askPrice, "resting book is crossed");
     }
 
     function _place(uint256 seed, ISpotCLOB.Side side) private returns (bytes32) {
@@ -362,6 +363,8 @@ contract AgnosticInvariantHandler {
                 state.kind == ISpotCLOB.OrderKind.Limit && state.filledQuantity < state.quantity,
                 "invalid resting order"
             );
+            uint128 remaining = state.quantity - state.filledQuantity;
+            require(_quote(order.price, remaining) != 0, "dust order remains linked");
             require(previous == last, "FIFO predecessor mismatch");
             if (last != bytes32(0)) {
                 (, bytes32 previousNext,) = book.getOrderLinks(last);
@@ -370,7 +373,7 @@ contract AgnosticInvariantHandler {
                 first = orderIds[i];
             }
             last = orderIds[i];
-            expectedQuantity += state.quantity - state.filledQuantity;
+            expectedQuantity += remaining;
         }
         (uint128 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
         require(

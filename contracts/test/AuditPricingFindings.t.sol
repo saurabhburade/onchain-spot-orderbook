@@ -124,7 +124,7 @@ contract AuditPricingFindingsTest {
 
     /// @dev I-04 is NatSpec-only and is intentionally omitted: its assertion is documentation
     /// quality, not runtime behavior that a Foundry test can meaningfully distinguish.
-    function testKnownIssue_L01_DustBestAskLeavesCrossedBuyAfterCancellation() public {
+    function testL01_ZeroQuoteSliceRefundsTakerWithoutRemovingValidMaker() public {
         (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote, bytes32 poolId) =
             _deployAgnostic(18, 6, 0);
         AuditPricingActor dustSeller = new AuditPricingActor();
@@ -142,19 +142,161 @@ contract AuditPricingFindingsTest {
             book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 1e12
         );
 
-        // The buy is valid at its own price, but the first fill at DUST_PRICE rounds to zero
-        // quote atoms. Matching stops without consuming the ask, so the buy remainder rests.
-        bytes32 crossedBuy =
+        // The buy is valid at its own price, but this taker slice is too small to produce one
+        // quote atom at DUST_PRICE. It must be refunded without deleting the valid maker.
+        bytes32 rejectedRemainder =
             buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 2e18, 1e12);
-        (, ISpotCLOB.OrderState memory buyState) = book.getOrder(crossedBuy);
-        require(buyState.filledQuantity == 0, "dust ask unexpectedly filled the buy");
+        {
+            (, ISpotCLOB.OrderState memory buyState) = book.getOrder(rejectedRemainder);
+            require(buyState.filledQuantity == 0, "dust ask unexpectedly filled the buy");
+            require(
+                buyState.status == ISpotCLOB.OrderStatus.Cancelled, "buy remainder was not closed"
+            );
+        }
+        _assertUnlinked(book, rejectedRemainder);
+        require(quote.balanceOf(address(buyer)) == 2, "buyer escrow was not refunded");
+        (, uint256 buyerLocked,) = book.balanceOf(address(buyer), address(quote));
+        require(buyerLocked == 0, "buyer retains locked quote");
+
+        (,, bool makerResting) = book.getOrderLinks(dustAsk);
+        require(makerResting, "valid maker was removed by tiny taker");
+        _assertOnlyBestAsk(book, poolId, DUST_PRICE);
 
         dustSeller.cancel(book, dustAsk);
-        (bool bidExists, uint128 bidPrice,, bool askExists, uint128 askPrice,) =
-            book.getBestPrices(poolId);
-        require(bidExists && askExists, "cancellation removed the wrong side");
-        require(bidPrice > askPrice, "crossed state was not exposed after cancellation");
-        require(askPrice == ONE_USDC_PER_TOKEN, "honest ask was not revealed");
+        _assertOnlyBestAsk(book, poolId, ONE_USDC_PER_TOKEN);
+    }
+
+    function testL01_MakerRemainderDustIsRefundedAndUnlinked() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote, bytes32 poolId) =
+            _deployAgnostic(18, 6, 0);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+        uint128 makerQuantity = 2e12;
+        uint128 fillQuantity = 1e12 + 1;
+
+        _fundBase(book, base, seller, makerQuantity);
+        _fundQuote(book, quote, buyer, 1);
+        bytes32 ask = seller.place(
+            book,
+            address(base),
+            address(quote),
+            ISpotCLOB.Side.Sell,
+            ONE_USDC_PER_TOKEN,
+            makerQuantity
+        );
+        bytes32 buy = buyer.place(
+            book,
+            address(base),
+            address(quote),
+            ISpotCLOB.Side.Buy,
+            ONE_USDC_PER_TOKEN,
+            fillQuantity
+        );
+
+        (, ISpotCLOB.OrderState memory askState) = book.getOrder(ask);
+        (, ISpotCLOB.OrderState memory buyState) = book.getOrder(buy);
+        require(askState.filledQuantity == fillQuantity, "maker fill changed");
+        require(askState.status == ISpotCLOB.OrderStatus.Cancelled, "maker dust was not closed");
+        require(buyState.status == ISpotCLOB.OrderStatus.Filled, "taker was not filled");
+        _assertUnlinked(book, ask);
+        require(base.balanceOf(address(seller)) == makerQuantity - fillQuantity, "maker dust lost");
+        require(quote.balanceOf(address(seller)) == 1, "maker proceeds changed");
+        require(base.balanceOf(address(buyer)) == fillQuantity, "taker base payout changed");
+        (, uint256 sellerLocked,) = book.balanceOf(address(seller), address(base));
+        require(sellerLocked == 0, "maker dust remains locked");
+        _assertEmptyBook(book, poolId);
+    }
+
+    function testL01_TakerRemainderDustIsRefundedAndUnlinked() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote, bytes32 poolId) =
+            _deployAgnostic(18, 6, 0);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+        uint128 makerQuantity = 1e12 + 1;
+        uint128 takerQuantity = 2e12;
+
+        _fundBase(book, base, seller, makerQuantity);
+        _fundQuote(book, quote, buyer, 2);
+        bytes32 ask = seller.place(
+            book,
+            address(base),
+            address(quote),
+            ISpotCLOB.Side.Sell,
+            ONE_USDC_PER_TOKEN,
+            makerQuantity
+        );
+        bytes32 buy = buyer.place(
+            book,
+            address(base),
+            address(quote),
+            ISpotCLOB.Side.Buy,
+            ONE_USDC_PER_TOKEN,
+            takerQuantity
+        );
+
+        (, ISpotCLOB.OrderState memory askState) = book.getOrder(ask);
+        (, ISpotCLOB.OrderState memory buyState) = book.getOrder(buy);
+        require(askState.status == ISpotCLOB.OrderStatus.Filled, "maker was not filled");
+        require(buyState.filledQuantity == makerQuantity, "taker fill changed");
+        require(buyState.status == ISpotCLOB.OrderStatus.Cancelled, "taker dust was not closed");
+        _assertUnlinked(book, buy);
+        require(quote.balanceOf(address(buyer)) == 1, "taker rounding refund changed");
+        require(base.balanceOf(address(buyer)) == makerQuantity, "taker base payout changed");
+        require(quote.balanceOf(address(seller)) == 1, "maker proceeds changed");
+        (, uint256 buyerLocked,) = book.balanceOf(address(buyer), address(quote));
+        require(buyerLocked == 0, "taker dust remains locked");
+        _assertEmptyBook(book, poolId);
+    }
+
+    function testL01_ExactQuoteAtomBoundaryFillsNormally() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote, bytes32 poolId) =
+            _deployAgnostic(18, 6, 0);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+        uint128 quantity = 1e12;
+
+        _fundBase(book, base, seller, quantity);
+        _fundQuote(book, quote, buyer, 1);
+        bytes32 ask = seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, quantity
+        );
+        bytes32 buy = buyer.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, quantity
+        );
+
+        (, ISpotCLOB.OrderState memory askState) = book.getOrder(ask);
+        (, ISpotCLOB.OrderState memory buyState) = book.getOrder(buy);
+        require(askState.status == ISpotCLOB.OrderStatus.Filled, "one-atom maker not filled");
+        require(buyState.status == ISpotCLOB.OrderStatus.Filled, "one-atom taker not filled");
+        require(quote.balanceOf(address(seller)) == 1, "one quote atom not settled");
+        _assertEmptyBook(book, poolId);
+    }
+
+    function testL01_ZeroQuoteRefundIncludesFeeReserve() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
+            _deployAgnostic(18, 6, 100);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+        uint128 takerQuantity = 1 ether;
+        uint256 buyerFunding = 2_020_000;
+
+        _fundBase(book, base, seller, DUST_MINIMUM);
+        _fundQuote(book, quote, buyer, buyerFunding);
+        bytes32 ask = seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, DUST_PRICE, DUST_MINIMUM
+        );
+        bytes32 buy = buyer.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, 2e18, takerQuantity
+        );
+
+        (, ISpotCLOB.OrderState memory buyState) = book.getOrder(buy);
+        require(buyState.status == ISpotCLOB.OrderStatus.Cancelled, "fee-backed dust not closed");
+        require(quote.balanceOf(address(buyer)) == buyerFunding, "fee reserve was not refunded");
+        (, uint256 buyerLocked,) = book.balanceOf(address(buyer), address(quote));
+        require(buyerLocked == 0, "fee reserve remains locked");
+        (,, bool makerResting) = book.getOrderLinks(ask);
+        require(makerResting, "valid maker was griefed");
+        require(book.accruedTradingFees(address(quote)) == 0, "fee charged without a fill");
     }
 
     function testKnownIssue_I01_SplittingSubThresholdFillsReducesFees() public {
@@ -308,5 +450,20 @@ contract AuditPricingFindingsTest {
     ) private {
         quote.mint(address(actor), amount);
         actor.approve(quote, book);
+    }
+
+    function _assertUnlinked(SpotCLOB book, bytes32 orderId) private view {
+        (bytes32 previous, bytes32 next, bool resting) = book.getOrderLinks(orderId);
+        require(!resting && previous == bytes32(0) && next == bytes32(0), "order remains linked");
+    }
+
+    function _assertOnlyBestAsk(SpotCLOB book, bytes32 poolId, uint128 expectedPrice) private view {
+        (bool bidExists,,, bool askExists, uint128 askPrice,) = book.getBestPrices(poolId);
+        require(!bidExists && askExists && askPrice == expectedPrice, "unexpected best prices");
+    }
+
+    function _assertEmptyBook(SpotCLOB book, bytes32 poolId) private view {
+        (bool bidExists,,, bool askExists,,) = book.getBestPrices(poolId);
+        require(!bidExists && !askExists, "closed orders remain on book");
     }
 }

@@ -22,7 +22,6 @@ contract SpotCLOB is ISpotCLOB {
 
     uint32 public constant DEFAULT_MAX_BOOK_STEPS = 64;
     uint16 public constant MAX_VIEW_DEPTH = 256;
-    uint16 public constant MAX_PRUNE_BATCH = 256;
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint8 public constant USER_ORDER_FLAG_OPEN = 1 << 0;
     uint8 public constant USER_ORDER_FLAG_FILLED = 1 << 1;
@@ -54,7 +53,6 @@ contract SpotCLOB is ISpotCLOB {
     error AlreadyInitialized();
     error OrderNotQuarantined();
     error InvalidReceiver();
-    error InvalidPruneBatch();
     error SettlementPayoutFailed(address asset, address recipient, bool makerPayout);
 
     struct Market {
@@ -366,26 +364,6 @@ contract SpotCLOB is ISpotCLOB {
         _emitBookUpdated(order.marketId);
     }
 
-    function pruneQuarantinedOrders(bytes32[] calldata externalOrderIds)
-        external
-        override
-        nonReentrant
-    {
-        if (externalOrderIds.length == 0 || externalOrderIds.length > MAX_PRUNE_BATCH) {
-            revert InvalidPruneBatch();
-        }
-        for (uint256 i; i < externalOrderIds.length; ++i) {
-            uint64 orderId_ = _decodeOrderId(externalOrderIds[i]);
-            StoredOrder storage order = _orders[orderId_];
-            if (order.status != OrderStatus.Quarantined) revert OrderNotQuarantined();
-            if (!order.resting) continue;
-
-            bytes32 id = order.marketId;
-            _unlinkOrder(id, _priceToKey(_markets[id], order.price), orderId_, order);
-            emit QuarantinedOrderPruned(externalOrderIds[i], id);
-        }
-    }
-
     function closeQuarantinedOrder(bytes32 externalOrderId, address receiver)
         external
         override
@@ -402,9 +380,6 @@ contract SpotCLOB is ISpotCLOB {
         address asset = order.side == Side.Buy ? market.quoteAsset : market.baseAsset;
         uint256 amount = order.escrowRemaining + order.feeReserve;
 
-        if (order.resting) {
-            _unlinkOrder(order.marketId, _priceToKey(market, order.price), orderId_, order);
-        }
         order.escrowRemaining = 0;
         order.feeReserve = 0;
         order.status = OrderStatus.Cancelled;
@@ -1168,9 +1143,8 @@ contract SpotCLOB is ISpotCLOB {
         if (level.activeHeadOrderId != orderId_) revert InvalidOrder();
 
         level.totalQuantity -= order.remaining;
-        level.activeHeadOrderId = order.nextOrderId;
         order.status = OrderStatus.Quarantined;
-        if (level.activeHeadOrderId == 0) _clearPrice(book, _markets[id], priceKey);
+        _unlinkOrder(id, priceKey, orderId_, order);
 
         emit OrderQuarantined(bytes32(uint256(orderId_)), id, order.trader, failedAsset);
     }

@@ -205,15 +205,10 @@ contract AuditTokenBehaviorFindingsTest {
         require(base.balanceOf(address(buyer)) == ONE, "buyer did not receive valid fill");
         require(quote.balanceOf(address(validMaker)) == 100, "valid maker was not paid");
 
-        (,, bool restingBeforePrune) = book.getOrderLinks(blockedAsk);
-        require(restingBeforePrune, "quarantine tombstone was eagerly removed");
-        bytes32[] memory ids = new bytes32[](1);
-        ids[0] = blockedAsk;
-        book.pruneQuarantinedOrders(ids);
-        (bytes32 previous, bytes32 next, bool restingAfterPrune) = book.getOrderLinks(blockedAsk);
+        (bytes32 previous, bytes32 next, bool resting) = book.getOrderLinks(blockedAsk);
         require(
-            previous == bytes32(0) && next == bytes32(0) && !restingAfterPrune,
-            "prune did not physically unlink quarantine"
+            previous == bytes32(0) && next == bytes32(0) && !resting,
+            "quarantined maker remains linked"
         );
     }
 
@@ -274,7 +269,7 @@ contract AuditTokenBehaviorFindingsTest {
         _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, ask, 1);
     }
 
-    function testGasM02HundredBlockedOrdersUseCachedActiveHeadAndCanBePruned() public {
+    function testGasM02HundredBlockedOrdersAreUnlinkedDuringMatching() public {
         ReceiverBlocklistToken quote = new ReceiverBlocklistToken();
         FindingERC20 base = new FindingERC20();
         (SpotCLOB book,) = _deployPair(address(base), address(quote));
@@ -309,9 +304,9 @@ contract AuditTokenBehaviorFindingsTest {
             1,
             uint32(BLOCKED_ORDER_COUNT + 1)
         );
-        uint256 quarantineAndMatchGas = gasBefore - gasleft();
-        emit log_named_uint("quarantine 100 blocked and fill next gas", quarantineAndMatchGas);
-        require(quarantineAndMatchGas < 30_000_000, "100-order quarantine exceeds block budget");
+        uint256 unlinkAndMatchGas = gasBefore - gasleft();
+        emit log_named_uint("unlink 100 blocked and fill next gas", unlinkAndMatchGas);
+        require(unlinkAndMatchGas < 30_000_000, "100-order unlink exceeds block budget");
 
         _assertOrderStatus(book, blockedOrders[0], ISpotCLOB.OrderStatus.Quarantined, 0);
         _assertOrderStatus(
@@ -319,24 +314,31 @@ contract AuditTokenBehaviorFindingsTest {
         );
         _assertOrderStatus(book, firstValid, ISpotCLOB.OrderStatus.Filled, 1);
 
-        // A fresh executable order is cached directly after the 100 structural tombstones.
+        {
+            (bytes32 previous, bytes32 next, bool resting) = book.getOrderLinks(blockedOrders[0]);
+            require(
+                previous == bytes32(0) && next == bytes32(0) && !resting,
+                "first quarantine remains linked"
+            );
+        }
+        {
+            (bytes32 previous, bytes32 next, bool resting) =
+                book.getOrderLinks(blockedOrders[BLOCKED_ORDER_COUNT - 1]);
+            require(
+                previous == bytes32(0) && next == bytes32(0) && !resting,
+                "last quarantine remains linked"
+            );
+        }
+
+        // A fresh executable order matches without traversing the removed makers.
         bytes32 secondValid =
             validMaker.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
         gasBefore = gasleft();
         buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1);
-        uint256 cachedHeadMatchGas = gasBefore - gasleft();
-        emit log_named_uint("cached active-head match gas", cachedHeadMatchGas);
-        require(cachedHeadMatchGas < 1_500_000, "cached head rescanned quarantine wall");
+        uint256 nextMatchGas = gasBefore - gasleft();
+        emit log_named_uint("next match after immediate unlink gas", nextMatchGas);
+        require(nextMatchGas < 1_500_000, "next match traversed removed makers");
         _assertOrderStatus(book, secondValid, ISpotCLOB.OrderStatus.Filled, 1);
-
-        gasBefore = gasleft();
-        book.pruneQuarantinedOrders(blockedOrders);
-        uint256 pruneGas = gasBefore - gasleft();
-        emit log_named_uint("prune 100 quarantined orders gas", pruneGas);
-        require(pruneGas < 10_000_000, "100-order prune exceeds budget");
-        (,, bool firstResting) = book.getOrderLinks(blockedOrders[0]);
-        (,, bool lastResting) = book.getOrderLinks(blockedOrders[BLOCKED_ORDER_COUNT - 1]);
-        require(!firstResting && !lastResting, "quarantine wall was not pruned");
     }
 
     function testKnownIssue_M03NegativeRebaseMakesLaterCancelInsolvent() public {

@@ -153,9 +153,6 @@ interface ISpotCLOB {
         bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, address failedAsset
     );
 
-    /// @notice Emitted when a quarantined order is physically removed from its price-level list.
-    event QuarantinedOrderPruned(bytes32 indexed orderId, bytes32 indexed poolId);
-
     /// @notice Emitted after a quarantined order owner releases all remaining escrow.
     event QuarantinedOrderClosed(
         bytes32 indexed orderId,
@@ -185,10 +182,6 @@ interface ISpotCLOB {
     /// @notice Cancel an order that still has resting quantity.
     /// @dev The caller must be the order owner.
     function cancelOrder(bytes32 orderId) external;
-
-    /// @notice Physically unlink quarantined tombstones from their price-level linked lists.
-    /// @dev Permissionless because this function never transfers or reassigns escrow.
-    function pruneQuarantinedOrders(bytes32[] calldata orderIds) external;
 
     /// @notice Close one quarantined order and release its complete remaining escrow.
     /// @dev Only the order owner may select the receiver.

@@ -49,11 +49,11 @@ matching interface. Traders approve the pair contract as an ERC-20 spender; plac
 pulls exactly the order's maximum input amount from the trader's wallet. Fills send output tokens
 directly to both traders, price improvement is returned immediately, and cancellation returns
 unused escrow directly to the order owner's wallet. If a resting maker cannot receive a payout,
-the fill attempt rolls back atomically, the order is quarantined outside the active FIFO queue, and
-matching continues at the cached next executable order. The owner can later release all remaining
-escrow with `closeQuarantinedOrder(orderId, receiver)`. Anyone may physically unlink abandoned
-quarantine tombstones in batches with `pruneQuarantinedOrders`; pruning cannot transfer escrow or
-change its owner. There is no general-purpose deposit or withdrawal balance.
+the fill attempt rolls back atomically, the order is marked quarantined and immediately unlinked
+from the FIFO queue, and matching continues at the next executable order. The owner can later
+release all remaining escrow with `closeQuarantinedOrder(orderId, receiver)`. A quarantined order
+remains stored only as an escrow-recovery record with `resting == false`; no separate book cleanup
+is required. There is no general-purpose deposit or withdrawal balance.
 
 Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
 raw base-token atoms. For a sell, it is raw quote-token atoms actually paid to the trader after
@@ -159,16 +159,15 @@ Known limitations reproduced by tests:
 - The current minimum is one quote-token atom: `0.000001 USDC` for a six-decimal quote token.
   A one-USDC minimum notional and a relative tick grid are not currently enforced.
 
-### Quarantine stress benchmark
+### Immediate-unlink stress benchmark
 
-`testGasM02HundredBlockedOrdersUseCachedActiveHeadAndCanBePruned` places 100 blocked makers ahead
-of one valid maker at the same price. The optimized local EVM measurement from 9 October 2026 is:
+`testGasM02HundredBlockedOrdersAreUnlinkedDuringMatching` places 100 blocked makers ahead of one
+valid maker at the same price. The optimized local EVM measurement from 10 October 2026 is:
 
 | Action | Gas |
 | --- | ---: |
-| Quarantine 100 blocked makers and fill the next valid order | 5,729,015 |
-| Match the cached active head without rescanning tombstones | 324,950 |
-| Physically prune all 100 quarantined linked-list nodes | 666,039 |
+| Unlink 100 blocked makers and fill the next valid order | 5,928,959 |
+| Match the next order after immediate unlinking | 325,394 |
 
 The stress match explicitly sets `maxBookSteps` to 101. The default remains 64; callers processing
 a larger blocked prefix must select a sufficient bound and pay the corresponding gas.

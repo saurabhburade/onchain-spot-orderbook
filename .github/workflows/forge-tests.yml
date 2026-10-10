@@ -90,8 +90,8 @@ jobs:
           passed=$(sed -E 's/.*: ([0-9]+) tests passed.*/\1/' <<< "${total_line}")
           failed=$(sed -E 's/.*passed, ([0-9]+) failed.*/\1/' <<< "${total_line}")
           skipped=$(sed -E 's/.*failed, ([0-9]+) skipped.*/\1/' <<< "${total_line}")
-          stateful=$(grep -E '^\[(PASS|FAIL).*invariant_StatefulHandlerConservesAccountingAndBookExtrema' forge-test-output.txt | tail -1 || true)
-          wide_price=$(grep -E '^\[(PASS|FAIL).*invariant_WidePriceAccountingFeesAndFIFO' forge-test-output.txt | tail -1 || true)
+          grep -E '^\[(PASS|FAIL)\] invariant_' forge-test-output.txt \
+            > forge-invariant-results.md || true
 
           {
             echo "${marker}"
@@ -109,8 +109,7 @@ jobs:
             echo '### Stateful invariant campaigns'
             echo
             echo '```text'
-            echo "${stateful}"
-            echo "${wide_price}"
+            cat forge-invariant-results.md
             echo '```'
             echo
             echo "[View workflow run](https://github.com/${REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"

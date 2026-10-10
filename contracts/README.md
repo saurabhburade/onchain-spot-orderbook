@@ -46,9 +46,13 @@ explicit lot of `100_000e18` raw units for an 18-decimal base token lets a one-a
 
 Account abstraction, session keys, transaction sponsorship, and wallet UX remain outside the
 matching interface. Traders approve the pair contract as an ERC-20 spender; placing an order then
-pulls exactly the order's maximum input amount from the trader's wallet. Fills send output tokens
-directly to both traders, price improvement is returned immediately, and cancellation returns
-unused escrow directly to the order owner's wallet. If a resting maker cannot receive a payout,
+pulls the order's maximum input amount from the trader's wallet. The standard limit-order entry
+points require the book to receive that exact amount. The opt-in
+`placeLimitOrderSupportingFeeOnTransfer` entry point instead measures the received balance delta,
+reduces the order to the maximum funded quantity, and reverts if it is below the trader's
+`minAcceptedQuantity`. Fills send output tokens directly to both traders, price improvement is
+returned immediately, and cancellation returns unused escrow directly to the order owner's wallet.
+If a resting maker cannot receive a payout,
 the fill attempt rolls back atomically, the order is marked quarantined and immediately unlinked
 from the FIFO queue, and matching continues at the next executable order. The owner can later
 release all remaining escrow with `closeQuarantinedOrder(orderId, receiver)`. A quarantined order
@@ -56,11 +60,13 @@ remains stored only as an escrow-recovery record with `resting == false`; no sep
 is required. There is no general-purpose deposit or withdrawal balance.
 
 Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
-raw base-token atoms. For a sell, it is raw quote-token atoms actually paid to the trader after
-per-fill taker fees. An unmet minimum reverts the entire operation. Setting `minReceive` to zero
-disables only that output check: the market order still requires at least one fill, observes the
-price limit and book-step cap, and may fill partially when `minFillQuantity` is also zero. Market
-orders never rest on the book. A zero price limit uses the configured pool boundary.
+raw base-token atoms actually received after any recipient-side transfer tax. For a sell, it is raw
+quote-token atoms actually received after per-fill taker fees and any recipient-side transfer tax.
+An unmet minimum reverts the entire operation. Setting `minReceive` to zero disables only that
+output check: the market order still requires at least one fill, observes the price limit and
+book-step cap, and may fill partially when `minFillQuantity` is also zero. Wallet-funded market
+inputs remain exact-transfer only so a short transfer can never consume another order's pooled
+escrow. Market orders never rest on the book. A zero price limit uses the configured pool boundary.
 
 The read interface exposes aggregated, sorted top-N price levels through `getOrderBook(poolId,
 depth)`, capped at 256 levels per side, as well as best-price and individual-level views. State
@@ -352,5 +358,8 @@ The package has no external Solidity dependencies.
   contract rejects every non-zero value.
 - Self-trade prevention, native-token handling, upgradeability, and governance transfer are
   intentionally not implemented.
-- The contracts reject fee-on-transfer order funding and require standard ERC-20 transfer behavior.
+- The opt-in limit-order entry point supports conventional recipient-tax tokens by measuring actual
+  balance deltas. Sender-surcharge, reflection/reward, rebasing, and otherwise mutable or malicious
+  token accounting remain unsupported; permissionless listing does not make their liabilities
+  solvent.
 - This is an unaudited reference implementation, not production-ready order escrow.

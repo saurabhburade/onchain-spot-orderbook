@@ -89,6 +89,11 @@ interface ISpotCLOB {
         uint64 clientOrderId
     );
 
+    /// @notice Emitted when transfer tax reduces the quantity funded by an order.
+    event OrderQuantityAdjusted(
+        bytes32 indexed orderId, uint128 requestedQuantity, uint128 acceptedQuantity
+    );
+
     /// @notice Emitted for every fill produced by a state-changing operation.
     event TradeExecuted(
         bytes32 indexed poolId,
@@ -171,6 +176,15 @@ interface ISpotCLOB {
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId);
+
+    /// @notice Place a limit order using the amount actually received as escrow.
+    /// @dev Reverts unless transfer-tax-adjusted quantity is at least `minAcceptedQuantity`.
+    /// Wallet-funded market orders continue to require exact input transfers.
+    function placeLimitOrderSupportingFeeOnTransfer(
+        LimitOrder calldata order,
+        uint128 minAcceptedQuantity,
+        uint32 maxBookSteps
+    ) external returns (bytes32 orderId);
 
     /// @notice Execute immediately against resting liquidity without placing a remainder on-book.
     /// @dev Reverts when no quantity can execute. A zero minimum permits a partial fill, not a zero

@@ -443,4 +443,14 @@ contract AgnosticInvariantTest {
         require(handler.timeAdvances() == 1, "time advance not exercised");
         require(handler.feeUpdates() == 1, "fee update not exercised");
     }
+
+    function testRegression_ZeroEscrowDustCleanupDoesNotQuarantine() public {
+        handler.act(9993);
+        handler.act(2563991712433960642540854971761029811582818741952848999397942);
+        handler.act(132111622194633123064977512839933);
+        handler.act(1_000_000_000);
+        handler.act(10_908);
+        handler.assertAccounting();
+        handler.assertBook();
+    }
 }

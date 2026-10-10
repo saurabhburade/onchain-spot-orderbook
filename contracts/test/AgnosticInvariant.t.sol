@@ -124,6 +124,14 @@ contract AgnosticInvariantHandler {
         }
         require(book.accruedTradingFees(address(quote)) == expectedFees, "ghost fee mismatch");
         require(book.accruedTradingFees(address(base)) == 0, "base fees accrued");
+        require(
+            book.totalEscrowLiability(address(base)) == totalBaseLocked,
+            "aggregate base escrow mismatch"
+        );
+        require(
+            book.totalEscrowLiability(address(quote)) == totalQuoteLocked,
+            "aggregate quote escrow mismatch"
+        );
         require(base.balanceOf(address(book)) == totalBaseLocked, "base liabilities insolvent");
         require(
             quote.balanceOf(address(book)) == totalQuoteLocked + expectedFees,

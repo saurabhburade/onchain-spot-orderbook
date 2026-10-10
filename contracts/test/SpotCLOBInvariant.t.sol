@@ -132,6 +132,14 @@ contract SpotCLOBInvariantHandler {
     function assertConservation() external view {
         uint256 baseTotal = _totalEscrow(address(base));
         uint256 quoteTotal = _totalEscrow(address(quote));
+        require(
+            exchange.totalEscrowLiability(address(base)) == baseTotal,
+            "aggregate base escrow mismatch"
+        );
+        require(
+            exchange.totalEscrowLiability(address(quote)) == quoteTotal,
+            "aggregate quote escrow mismatch"
+        );
         require(base.balanceOf(address(exchange)) == baseTotal, "base conservation broken");
         require(quote.balanceOf(address(exchange)) == quoteTotal, "quote conservation broken");
         _assertBookMatchesOrders();
@@ -490,6 +498,14 @@ contract SpotCLOBInvariantTest {
     function _assertConservation() private view {
         uint256 baseTotal = _totalEscrow(address(base));
         uint256 quoteTotal = _totalEscrow(address(quote));
+        require(
+            exchange.totalEscrowLiability(address(base)) == baseTotal,
+            "aggregate base escrow mismatch"
+        );
+        require(
+            exchange.totalEscrowLiability(address(quote)) == quoteTotal,
+            "aggregate quote escrow mismatch"
+        );
         require(base.balanceOf(address(exchange)) == baseTotal, "base conservation broken");
         require(quote.balanceOf(address(exchange)) == quoteTotal, "quote conservation broken");
     }

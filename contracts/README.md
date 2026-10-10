@@ -51,7 +51,10 @@ measures the received balance delta and reduces the stored order to the maximum 
 This treats a recipient-side transfer tax as part of the token's economics; `OrderQuantityAdjusted`
 reports any difference between requested and accepted quantity. Fills send output tokens directly
 to both traders, price improvement is returned immediately, and cancellation returns unused escrow
-directly to the order owner's wallet. If a resting maker cannot receive a payout,
+directly to the order owner's wallet. Before accepting or matching an order, the book verifies that
+both market assets cover aggregate escrow and fee liabilities. An insolvent market rejects trading
+with `MarketInsolvent`; order owners may still cancel, receiving the pro-rata recoverable value of
+their remaining escrow. If a resting maker cannot receive a payout,
 the fill attempt rolls back atomically, the order is marked quarantined and immediately unlinked
 from the FIFO queue, and matching continues at the next executable order. The owner can later
 release all remaining escrow with `closeQuarantinedOrder(orderId, receiver)`. A quarantined order
@@ -106,8 +109,9 @@ slots. Off-chain indexers may read raw slots through RPC, but those reads are st
   resting price or an earlier order at the same price.
 - Only the order owner can cancel an open resting order; cancelling a filled or already-cancelled
   order reverts and cannot resurrect quantity.
-- Only funds required by open orders remain in the contract, and contract token balances remain
-  solvent against all order escrow liabilities.
+- Aggregate escrow liabilities equal the sum of trader locked balances. Trading requires contract
+  balances to cover escrow and accrued-fee liabilities; an external balance reduction instead
+  enters proportional order-close recovery.
 - Settlement is atomic: base and quote movements and order-state updates either all succeed or all
   revert.
 - A failed maker payout quarantines only that maker order; failed taker receipts revert the taker's
@@ -358,6 +362,7 @@ The package has no external Solidity dependencies.
 - Self-trade prevention, native-token handling, upgradeability, and governance transfer are
   intentionally not implemented.
 - Limit-order funding supports conventional recipient-tax tokens by measuring actual balance
-  deltas. Sender-surcharge, reflection/reward, rebasing, and otherwise mutable or malicious token
-  accounting remain unsupported; permissionless listing does not make their liabilities solvent.
+  deltas. Negative rebases are contained by a live solvency gate and proportional cancellation;
+  positive rebases are not assigned to order owners. Sender-surcharge, reflection/reward, and
+  otherwise mutable or malicious token accounting remain unsupported.
 - This is an unaudited reference implementation, not production-ready order escrow.

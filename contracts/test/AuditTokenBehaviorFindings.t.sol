@@ -341,17 +341,20 @@ contract AuditTokenBehaviorFindingsTest {
         _assertOrderStatus(book, secondValid, ISpotCLOB.OrderStatus.Filled, 1);
     }
 
-    function testKnownIssue_M03NegativeRebaseMakesLaterCancelInsolvent() public {
+    function testM03NegativeRebaseBlocksTradingAndCancelsProRata() public {
         NegativeRebaseToken base = new NegativeRebaseToken();
         FindingERC20 quote = new FindingERC20();
         (SpotCLOB book,) = _deployPair(address(base), address(quote));
         FindingTrader firstSeller = new FindingTrader();
         FindingTrader secondSeller = new FindingTrader();
+        FindingTrader buyer = new FindingTrader();
 
         base.mint(address(firstSeller), 2 * ONE);
         base.mint(address(secondSeller), 2 * ONE);
+        quote.mint(address(buyer), 1_000);
         firstSeller.approve(base, book);
         secondSeller.approve(base, book);
+        buyer.approve(quote, book);
 
         bytes32 firstAsk =
             firstSeller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
@@ -366,15 +369,54 @@ contract AuditTokenBehaviorFindingsTest {
         (, uint256 firstLocked,) = book.balanceOf(address(firstSeller), address(base));
         (, uint256 secondLocked,) = book.balanceOf(address(secondSeller), address(base));
         require(firstLocked == ONE && secondLocked == ONE, "nominal escrow changed on rebase");
+        require(book.totalEscrowLiability(address(base)) == 2 * ONE, "wrong total liability");
 
-        require(firstSeller.attemptCancel(book, firstAsk), "early cancel unexpectedly failed");
-        require(!secondSeller.attemptCancel(book, secondAsk), "insolvent escrow paid out");
+        require(
+            !buyer.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1),
+            "insolvent market accepted matching"
+        );
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, firstAsk, 2);
 
-        // Success means the first liability consumed the only remaining token and the FIFO head is
-        // still the second open order after its failed cleanup.
-        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, secondAsk, 1);
-        _assertOpenOrder(book, secondAsk, 1);
+        require(firstSeller.attemptCancel(book, firstAsk), "first recovery close failed");
+        require(
+            base.balanceOf(address(firstSeller)) == 3 * ONE / 2,
+            "first order did not receive half of nominal escrow"
+        );
+        require(book.totalEscrowLiability(address(base)) == ONE, "first claim not removed");
+        require(base.balanceOf(address(book)) == ONE / 2, "first claim broke recovery ratio");
+
+        require(secondSeller.attemptCancel(book, secondAsk), "second recovery close failed");
+        require(
+            base.balanceOf(address(secondSeller)) == 3 * ONE / 2,
+            "second order did not receive half of nominal escrow"
+        );
+        require(book.totalEscrowLiability(address(base)) == 0, "liability remained after closes");
         require(base.balanceOf(address(book)) == 0, "unexpected base balance");
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, bytes32(0), 0);
+
+        // There is no stored pause flag: trading becomes available again once liabilities clear.
+        firstSeller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+    }
+
+    function testM03ProRataCloseUsesFullPrecision() public {
+        NegativeRebaseToken base = new NegativeRebaseToken();
+        FindingERC20 quote = new FindingERC20();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader seller = new FindingTrader();
+        uint128 quantity = type(uint128).max;
+        uint256 nominalEscrow = uint256(quantity) * ONE;
+        uint256 recoverable = nominalEscrow / 2;
+
+        base.mint(address(seller), nominalEscrow);
+        seller.approve(base, book);
+        bytes32 ask =
+            seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, quantity);
+        base.setBalance(address(book), recoverable);
+
+        require(seller.attemptCancel(book, ask), "full-precision recovery close failed");
+        require(base.balanceOf(address(seller)) == recoverable, "wrong full-width payout");
+        require(book.totalEscrowLiability(address(base)) == 0, "full-width claim remained");
+        require(base.balanceOf(address(book)) == 0, "full-width assets remained");
     }
 
     function testKnownIssue_L02SenderSurchargeBreaksPushValidation() public {

@@ -7,6 +7,16 @@ export const clobAbi = [
     inputs: [],
   },
   {
+    type: "error",
+    name: "MarketInsolvent",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "asset", type: "address" },
+      { name: "availableAssets", type: "uint256" },
+      { name: "liabilities", type: "uint256" },
+    ],
+  },
+  {
     type: "function",
     name: "balanceOf",
     stateMutability: "view",
@@ -19,6 +29,13 @@ export const clobAbi = [
       { name: "locked", type: "uint256" },
       { name: "total", type: "uint256" },
     ],
+  },
+  {
+    type: "function",
+    name: "totalEscrowLiability",
+    stateMutability: "view",
+    inputs: [{ name: "asset", type: "address" }],
+    outputs: [{ name: "amount", type: "uint256" }],
   },
   {
     type: "function",
@@ -179,6 +196,16 @@ export const clobAbi = [
     stateMutability: "nonpayable",
     inputs: [{ name: "externalOrderId", type: "bytes32" }],
     outputs: [],
+  },
+  {
+    type: "event",
+    name: "InsolventOrderClosed",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "asset", type: "address", indexed: true },
+      { name: "nominalEscrow", type: "uint256", indexed: false },
+      { name: "payout", type: "uint256", indexed: false },
+    ],
   },
   {
     type: "event",

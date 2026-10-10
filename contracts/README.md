@@ -2,6 +2,9 @@
 
 Foundry package for the fully on-chain spot central limit order book (CLOB) on Monad.
 
+Security findings, remediation status, regression coverage, and residual risks are documented in
+the [initial audit and remediation report](docs/initial-audit-invariant.md).
+
 `SpotCLOB` is a fully on-chain matching engine with per-order escrow. New markets use a sparse
 16-level radix tree over the full `uint128` price domain. A doubly linked FIFO queue at each active
 price preserves price-time priority and supports O(1) cancellation. Legacy bitmap markets remain

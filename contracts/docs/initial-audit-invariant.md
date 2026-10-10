@@ -16,9 +16,8 @@
 
 The initial review reported eleven findings: one high-severity, three medium-severity, two
 low-severity, and five informational findings. This branch fixes the high-severity finding, all
-three medium-severity findings, and one low-severity finding. The remaining low-severity finding
-is explicitly acknowledged, and the five informational findings remain open with regression tests
-preserving each known behavior.
+three medium-severity findings, and both low-severity findings. The five informational findings
+remain open with regression tests preserving each known behavior.
 
 The remediation also adds support for conventional recipient-tax tokens, aggregate escrow
 liability accounting, adversarial token-behavior tests, and three stateful invariant campaigns.
@@ -27,9 +26,9 @@ liability accounting, adversarial token-behavior tests, and three stateful invar
 | --- | ---: | ---: | ---: |
 | High | 1 | 1 | 0 |
 | Medium | 3 | 3 | 0 |
-| Low | 2 | 1 | 1 |
+| Low | 2 | 2 | 0 |
 | Informational | 5 | 0 | 5 |
-| **Total** | **11** | **5** | **6** |
+| **Total** | **11** | **6** | **5** |
 
 ### Status definitions
 
@@ -63,7 +62,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 | M-02 | Medium | A blacklisted maker payout can block FIFO matching | **Fixed** | Failed maker settlement is rolled back; the maker is quarantined and immediately unlinked |
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
 | L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
-| L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Acknowledged** | Token model remains unsupported and documented; behavior is reproduced by a test |
+| L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
 | I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Open** | Reproduced; cumulative fee accounting is not implemented |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
 | I-03 | Informational | Saturated minimum quantity can still be unfillable | **Open** | Reproduced; the lens still returns `type(uint128).max` |
@@ -215,17 +214,31 @@ quote value and requires the resting best bid to remain strictly below the best 
 ### L-02 — Sender-surcharge tokens can lock escrow
 
 **Severity:** Low  
-**Status:** Acknowledged as unsupported
+**Status:** Fixed for behavior observable during funding
 
 A token may credit the requested amount to the book while debiting the sender by an additional
 surcharge. That pull passes recipient-delta validation, but a later push also surcharges the book
 and is rejected by the exact contract-debit check. Settlement or cancellation can therefore fail.
 
-Sender-surcharge, reflection/reward, and otherwise mutable or malicious token accounting are
-explicitly unsupported. The known behavior is preserved by
-[`testKnownIssue_L02SenderSurchargeBreaksPushValidation`](../test/AuditTokenBehaviorFindings.t.sol).
-If these tokens must be rejected at funding time, the pull boundary should additionally validate
-the sender's balance delta.
+The funding seam now measures both sides of the real `transferFrom`: the book balance determines
+the accepted quantity, while the trader balance must decrease by exactly the requested amount. A
+larger or smaller sender debit reverts the complete transaction before an order or escrow liability
+is created. This preserves support for recipient-tax tokens, where the sender still loses exactly
+the requested amount but the book receives less.
+
+Regression coverage:
+
+- [`testL02SenderSurchargeIsRejectedBeforeEscrow`](../test/AuditTokenBehaviorFindings.t.sol) checks
+  atomic rejection, zero liability, and unchanged trader and book balances;
+- [`testL02SenderSurchargeMarketTakerCannotGriefMaker`](../test/AuditTokenBehaviorFindings.t.sol)
+  verifies that rejected wallet funding cannot mutate a resting maker; and
+- [`testNormalTokenFundingPreservesRequestedQuantity`](../test/SpotCLOBAdversarial.t.sol),
+  [`testStandardEntryPointUsesFeeOnTransferBalanceDelta`](../test/SpotCLOBAdversarial.t.sol), and the
+  1% through 99% funding fuzz campaign protect normal and recipient-tax compatibility.
+
+The outgoing exact-debit check remains a second safety boundary. A token that changes its accounting
+after funding, or behaves differently specifically when the book is the sender, remains an
+unsupported mutable-token behavior because ERC-20 exposes no reliable on-chain preflight interface.
 
 ### I-01 — Per-fill fee flooring
 
@@ -296,6 +309,8 @@ points; a separate fee-token function is not required.
 - Sell quantity is reduced to the number of complete lots or raw base atoms received.
 - Buy quantity is reduced to the maximum amount covered by received quote plus its snapshotted fee
   reserve.
+- Funding also requires the trader's balance to decrease by exactly the requested transfer amount,
+  rejecting sender surcharges without rejecting recipient-side transfer taxes.
 - `OrderPlaced` reports accepted quantity, and `OrderQuantityAdjusted` reports requested and
   accepted quantities when they differ.
 - Settlement measures the recipient's actual balance increase, so market-order `minReceive` checks
@@ -336,7 +351,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **183 passed, 0 failed, 2 intentionally skipped**;
+- **184 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.
@@ -363,20 +378,20 @@ pnpm check
 - Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, and the
   transfer-tax changes require a new implementation/factory deployment and migration; merging this
   branch does not change already deployed books.
-- The optimized `SpotCLOB` runtime is 30,640 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 30,889 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
 - Limit orders are GTC-only and the order ABI has no expiry field.
 - Positive rebase surplus is not distributed to order owners.
-- Sender-surcharge, reflection/reward, and malicious token accounting remain unsupported.
-- The acknowledged low finding and open informational findings should remain visible in release
-  notes and integration documentation until they are fixed.
+- Direction-dependent fees, reflection/reward, and malicious mutable-token accounting remain
+  unsupported.
+- The open informational findings should remain visible in release notes and integration
+  documentation until they are fixed.
 
 ## Conclusion
 
 The branch removes the reported high-severity liveness failure and fixes all three medium-severity
-findings plus L-01 with explicit regression and invariant coverage. Remaining findings are
-lower-severity unsupported-token, rounding, representability, or documentation concerns. They are
-not silently suppressed: each executable behavior is reproduced by a named test, and the mixed
-adversarial invariant continuously checks their interaction with the remediated accounting and
-matching paths.
+and both low-severity findings with explicit regression and invariant coverage. The remaining five
+findings concern rounding, representability, or documentation. They are not silently suppressed:
+each executable behavior is reproduced by a named test, and the mixed adversarial invariant
+continuously checks its interaction with the remediated accounting and matching paths.

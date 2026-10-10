@@ -1462,10 +1462,16 @@ contract SpotCLOB is ISpotCLOB {
         returns (uint256 received)
     {
         if (!_supportedAssets[asset]) revert UnsupportedAsset();
+        uint256 senderBalanceBefore = IERC20Minimal(asset).balanceOf(from);
         uint256 beforeBalance = IERC20Minimal(asset).balanceOf(address(this));
         _safeTransferFrom(asset, from, address(this), amount);
+        uint256 senderBalanceAfter = IERC20Minimal(asset).balanceOf(from);
         uint256 afterBalance = IERC20Minimal(asset).balanceOf(address(this));
-        if (afterBalance < beforeBalance) revert UnsupportedTokenBehavior();
+        if (
+            senderBalanceAfter > senderBalanceBefore
+                || senderBalanceBefore - senderBalanceAfter != amount
+                || afterBalance < beforeBalance
+        ) revert UnsupportedTokenBehavior();
         received = afterBalance - beforeBalance;
         if (received == 0 || received > amount) revert UnsupportedTokenBehavior();
     }

@@ -177,6 +177,8 @@ interface ISpotCLOB {
     /// balance before mutating the book. `order.quantity` is the requested maximum: recipient-side
     /// transfer tax reduces the accepted quantity to what the received escrow can fund. Accepted
     /// orders are good-til-cancelled and remain open until filled or cancelled by their owner.
+    /// Funding must debit the trader by exactly the requested transfer amount; sender-surcharge
+    /// and otherwise mutable sender accounting are unsupported and revert atomically.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
@@ -185,7 +187,7 @@ interface ISpotCLOB {
 
     /// @notice Execute immediately against resting liquidity without placing a remainder on-book.
     /// @dev Reverts when no quantity can execute. A zero minimum permits a partial fill, not a zero
-    /// fill.
+    /// fill. Wallet funding must debit the trader by exactly the requested input amount.
     function executeMarketOrder(MarketOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId, uint128 filledQuantity, uint256 quoteQuantity);

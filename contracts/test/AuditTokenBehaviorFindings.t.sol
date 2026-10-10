@@ -152,6 +152,28 @@ contract FindingTrader {
         (success,) = address(book).call(abi.encodeCall(SpotCLOB.cancelOrder, (orderId)));
     }
 
+    function attemptMarketBuy(
+        SpotCLOB book,
+        address base,
+        address quote,
+        uint128 quantity,
+        uint128 priceLimit
+    ) external returns (bool success) {
+        ISpotCLOB.MarketOrder memory order = ISpotCLOB.MarketOrder({
+            trader: address(this),
+            baseAsset: base,
+            quoteAsset: quote,
+            side: ISpotCLOB.Side.Buy,
+            quantity: quantity,
+            priceLimit: priceLimit,
+            minFillQuantity: quantity,
+            minReceive: 0,
+            clientOrderId: 0
+        });
+        (success,) =
+            address(book).call(abi.encodeCall(SpotCLOB.executeMarketOrder, (order, uint32(64))));
+    }
+
     function closeQuarantined(SpotCLOB book, bytes32 orderId, address receiver) external {
         book.closeQuarantinedOrder(orderId, receiver);
     }
@@ -167,7 +189,6 @@ contract FindingTrader {
 
 contract AuditTokenBehaviorFindingsTest {
     uint256 private constant ONE = 1 ether;
-    uint256 private constant SURCHARGE = 1;
     uint256 private constant BLOCKED_ORDER_COUNT = 100;
 
     event log_named_uint(string key, uint256 value);
@@ -416,7 +437,7 @@ contract AuditTokenBehaviorFindingsTest {
         require(base.balanceOf(address(book)) == 0, "full-width assets remained");
     }
 
-    function testKnownIssue_L02SenderSurchargeBreaksPushValidation() public {
+    function testL02SenderSurchargeIsRejectedBeforeEscrow() public {
         SenderSurchargeToken base = new SenderSurchargeToken();
         FindingERC20 quote = new FindingERC20();
         (SpotCLOB book,) = _deployPair(address(base), address(quote));
@@ -424,25 +445,42 @@ contract AuditTokenBehaviorFindingsTest {
 
         base.mint(address(seller), 2 * ONE);
         seller.approve(base, book);
-        bytes32 ask = seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
-        uint256 sellerBalanceBeforeCancel = base.balanceOf(address(seller));
-        base.mint(address(book), SURCHARGE);
+        require(
+            !seller.attemptPlace(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1),
+            "sender-surcharge funding accepted"
+        );
 
-        // Pull validation sees the requested amount arrive, but push validation sees the sender
-        // fee.
-        require(!seller.attemptCancel(book, ask), "sender-surcharge payout accepted");
+        _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, bytes32(0), 0);
+        (, uint256 locked,) = book.balanceOf(address(seller), address(base));
+        require(locked == 0, "rejected funding created escrow");
+        require(book.totalEscrowLiability(address(base)) == 0, "rejected funding created liability");
+        require(base.balanceOf(address(seller)) == 2 * ONE, "rejected funding charged trader");
+        require(base.balanceOf(address(book)) == 0, "rejected funding retained tokens");
+    }
+
+    function testL02SenderSurchargeMarketTakerCannotGriefMaker() public {
+        FindingERC20 base = new FindingERC20();
+        SenderSurchargeToken quote = new SenderSurchargeToken();
+        (SpotCLOB book,) = _deployPair(address(base), address(quote));
+        FindingTrader seller = new FindingTrader();
+        FindingTrader buyer = new FindingTrader();
+
+        base.mint(address(seller), ONE);
+        quote.mint(address(buyer), 101);
+        seller.approve(base, book);
+        buyer.approve(quote, book);
+        bytes32 ask = seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1);
+
+        require(
+            !buyer.attemptMarketBuy(book, address(base), address(quote), 1, 100),
+            "sender-surcharge market funding accepted"
+        );
+
         _assertHead(book, address(base), address(quote), ISpotCLOB.Side.Sell, 100, ask, 1);
         _assertOpenOrder(book, ask, 1);
-        (, uint256 locked,) = book.balanceOf(address(seller), address(base));
-        require(locked == ONE, "escrow changed after failed payout");
-        require(
-            base.balanceOf(address(seller)) == sellerBalanceBeforeCancel,
-            "failed payout changed sender balance"
-        );
-        require(
-            base.balanceOf(address(book)) == ONE + SURCHARGE,
-            "failed payout changed contract balance"
-        );
+        require(base.balanceOf(address(book)) == ONE, "failed taker changed maker escrow");
+        require(quote.balanceOf(address(buyer)) == 101, "failed taker charged buyer");
+        require(quote.balanceOf(address(book)) == 0, "failed taker retained quote");
     }
 
     function _deployPair(address base, address quote) private returns (SpotCLOB book, bytes32 id) {

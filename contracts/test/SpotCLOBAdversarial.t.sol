@@ -91,7 +91,6 @@ contract AdversarialTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: 0
             })
         );

@@ -61,7 +61,6 @@ contract AgnosticTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: 0
             })
         );
@@ -82,7 +81,6 @@ contract AgnosticTrader {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));

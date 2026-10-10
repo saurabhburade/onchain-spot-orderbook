@@ -360,8 +360,7 @@ The package has no external Solidity dependencies.
   production registry should use governance-approved tick parameters if configuration squatting
   is unacceptable. Lot precision is administrator-controlled and cannot be supplied by creators.
 - Quote-token removal only prevents future pair creation; existing books deliberately remain live.
-- Limit orders are good-til-cancelled. The ABI retains the `expiry` field for compatibility, but the
-  contract rejects every non-zero value.
+- Limit orders are good-til-cancelled and the order ABI has no expiry field.
 - Self-trade prevention, native-token handling, upgradeability, and governance transfer are
   intentionally not implemented.
 - Limit-order funding supports conventional recipient-tax tokens by measuring actual balance

@@ -152,7 +152,6 @@ export function useUserOrders(poolId?: PoolId) {
               side: number;
               price: bigint;
               quantity: bigint;
-              expiry: bigint;
               clientOrderId: bigint;
             };
             state: {
@@ -236,7 +235,6 @@ export function useUserOrders(poolId?: PoolId) {
           remaining: formatQuantity(order.quantity - orderState.filledQuantity, metadata),
           status: orderStatus(orderState.status),
           createdAt: orderState.createdAt,
-          expiry: order.expiry,
           clientOrderId: order.clientOrderId,
         }));
         const openOrderSet = new Set(openOrderIds);

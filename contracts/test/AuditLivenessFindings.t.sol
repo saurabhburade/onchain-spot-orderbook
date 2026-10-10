@@ -7,8 +7,7 @@ import { SpotCLOBFactory } from "../src/SpotCLOBFactory.sol";
 
 interface AuditLivenessVm {
     function prank(address sender) external;
-    function expectRevert(bytes4 selector) external;
-    function expectRevert(bytes calldata reason) external;
+    function warp(uint256 timestamp) external;
 }
 
 contract AuditLivenessToken {
@@ -48,7 +47,6 @@ contract AuditLivenessFindingsTest {
     AuditLivenessVm private constant vm =
         AuditLivenessVm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-    uint256 private constant EXPIRING_ORDER_ATTEMPTS = 65;
     uint128 private constant PRICE = 1e18;
     uint128 private constant QUANTITY = 1e18;
     address private constant MAKER = address(0xA11CE);
@@ -71,27 +69,20 @@ contract AuditLivenessFindingsTest {
         book = SpotCLOB(deployed);
     }
 
-    /// @dev H-01 regression: the ABI keeps `expiry`, but GTC-only validation prevents an attacker
-    /// from creating the 65-order expired wall that exhausted the default 64-step match limit.
-    function testExpiryWallCannotBeCreatedBecauseNonZeroExpiryIsRejected() public {
-        uint256 makerBalance = EXPIRING_ORDER_ATTEMPTS * uint256(QUANTITY);
-        base.mint(MAKER, makerBalance);
+    /// @dev H-01 regression: the limit-order ABI has no expiry and a resting GTC order remains
+    /// matchable regardless of elapsed time.
+    function testGtcOrderRemainsMatchableAfterTimePasses() public {
+        base.mint(MAKER, QUANTITY);
+        quote.mint(BIDDER, 2e6);
         _approve(MAKER, base);
-        uint64 expiry = uint64(block.timestamp + 1);
-        for (uint256 i; i < EXPIRING_ORDER_ATTEMPTS; ++i) {
-            vm.expectRevert(SpotCLOB.InvalidOrder.selector);
-            vm.prank(MAKER);
-            book.placeLimitOrder(_order(MAKER, ISpotCLOB.Side.Sell, PRICE, QUANTITY, expiry));
-        }
+        _approve(BIDDER, quote);
+        bytes32 ask = _placeDefault(MAKER, ISpotCLOB.Side.Sell, PRICE, QUANTITY);
 
-        (uint128 remaining, bytes32 head, bytes32 tail) =
-            book.getPriceLevel(poolId, ISpotCLOB.Side.Sell, PRICE);
-        require(
-            remaining == 0 && head == bytes32(0) && tail == bytes32(0),
-            "rejected expiring orders changed the book"
-        );
-        require(base.balanceOf(MAKER) == makerBalance, "rejected orders pulled maker funds");
-        require(base.balanceOf(address(book)) == 0, "rejected orders created escrow");
+        vm.warp(block.timestamp + 365 days);
+        _placeDefault(BIDDER, ISpotCLOB.Side.Buy, PRICE, QUANTITY);
+
+        (, ISpotCLOB.OrderState memory state) = book.getOrder(ask);
+        require(state.status == ISpotCLOB.OrderStatus.Filled, "GTC order became unmatchable");
     }
 
     /// @dev M-01 regression: resting makers pay their snapshotted fee while a new taker pays the
@@ -136,7 +127,7 @@ contract AuditLivenessFindingsTest {
         returns (bytes32)
     {
         vm.prank(trader);
-        return book.placeLimitOrder(_order(trader, side, price, quantity, 0));
+        return book.placeLimitOrder(_order(trader, side, price, quantity));
     }
 
     function _marketSell(address trader, uint128 quantity) private {
@@ -157,13 +148,11 @@ contract AuditLivenessFindingsTest {
         );
     }
 
-    function _order(
-        address trader,
-        ISpotCLOB.Side side,
-        uint128 price,
-        uint128 quantity,
-        uint64 expiry
-    ) private view returns (ISpotCLOB.LimitOrder memory) {
+    function _order(address trader, ISpotCLOB.Side side, uint128 price, uint128 quantity)
+        private
+        view
+        returns (ISpotCLOB.LimitOrder memory)
+    {
         return ISpotCLOB.LimitOrder({
             trader: trader,
             baseAsset: address(base),
@@ -171,7 +160,6 @@ contract AuditLivenessFindingsTest {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: expiry,
             clientOrderId: 0
         });
     }

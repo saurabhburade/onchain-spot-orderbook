@@ -111,7 +111,6 @@ contract SpotCLOB is ISpotCLOB {
         uint128 price;
         uint128 quantity;
         uint128 remaining;
-        uint64 expiry;
         uint64 clientOrderId;
         uint64 createdAt;
         uint64 previousOrderId;
@@ -531,7 +530,6 @@ contract SpotCLOB is ISpotCLOB {
             side: stored.side,
             price: stored.price,
             quantity: stored.quantity,
-            expiry: stored.expiry,
             clientOrderId: stored.clientOrderId
         });
         state = OrderState({
@@ -677,10 +675,9 @@ contract SpotCLOB is ISpotCLOB {
         private
         returns (bytes32 externalOrderId)
     {
-        if (
-            request.trader == address(0) || request.quantity == 0 || request.price == 0
-                || request.expiry != 0
-        ) revert InvalidOrder();
+        if (request.trader == address(0) || request.quantity == 0 || request.price == 0) {
+            revert InvalidOrder();
+        }
         if (msg.sender != request.trader) revert Unauthorized();
 
         bytes32 id = marketId(request.baseAsset, request.quoteAsset);
@@ -752,7 +749,6 @@ contract SpotCLOB is ISpotCLOB {
             order.side,
             order.price,
             order.quantity,
-            order.expiry,
             order.clientOrderId
         );
     }

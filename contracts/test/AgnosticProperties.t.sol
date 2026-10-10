@@ -51,13 +51,13 @@ contract AgnosticPropertiesTest {
 
     function testFeeIncreaseKeepsBestBidFillableForLimitAndMarketSells() public {
         factory.setPairTradingFeeBps(address(base), address(quote), 10);
-        bytes32 firstBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17, 0);
-        bytes32 secondBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17, 0);
+        bytes32 firstBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17);
+        bytes32 secondBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17);
         factory.setPairTradingFeeBps(address(base), address(quote), 20);
-        bytes32 lowerBid = _limit(BOB, ISpotCLOB.Side.Buy, 9e17, 1e18, 0);
+        bytes32 lowerBid = _limit(BOB, ISpotCLOB.Side.Buy, 9e17, 1e18);
 
         _market(CAROL, ISpotCLOB.Side.Sell, 5e17, 0, 5e17, 0, 64);
-        _limit(CAROL, ISpotCLOB.Side.Sell, 9e17, 5e17, 0);
+        _limit(CAROL, ISpotCLOB.Side.Sell, 9e17, 5e17);
 
         (, ISpotCLOB.OrderState memory firstState) = book.getOrder(firstBid);
         (, ISpotCLOB.OrderState memory secondState) = book.getOrder(secondBid);
@@ -79,7 +79,7 @@ contract AgnosticPropertiesTest {
         uint16 oldFee = oldSeed % 1_000;
         uint16 newFee = oldFee + 1 + newSeed % (1_000 - oldFee);
         factory.setPairTradingFeeBps(address(base), address(quote), oldFee);
-        bytes32 bid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18, 0);
+        bytes32 bid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18);
         factory.setPairTradingFeeBps(address(base), address(quote), newFee);
         (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Sell, 1e18, 0, 1e18, 0, 64);
         require(filled == 1e18 && gross == 1e6, "old bid became unfillable");
@@ -93,8 +93,8 @@ contract AgnosticPropertiesTest {
     }
 
     function testOnePriceUnitImprovementJumpsExistingBidQueue() public {
-        bytes32 earlier = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18, 0);
-        bytes32 improved = _limit(BOB, ISpotCLOB.Side.Buy, 1e18 + 1, 1e18, 0);
+        bytes32 earlier = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18);
+        bytes32 improved = _limit(BOB, ISpotCLOB.Side.Buy, 1e18 + 1, 1e18);
         (uint128 firstQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18);
         (uint128 secondQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18 + 1);
         require(firstQuantity == 1e18 && secondQuantity == 1e18, "adjacent prices aggregated");
@@ -111,8 +111,8 @@ contract AgnosticPropertiesTest {
 
     function testMinimumTradeIsOneUsdcAtomRatherThanOneUsdc() public {
         vm.expectRevert(SpotCLOB.InvalidLotQuantity.selector);
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12 - 1, 0);
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12, 0);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12 - 1);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12);
         (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Buy, 1e12, 0, 1e12, 0, 64);
         require(filled == 1e12 && gross == 1, "one-atom trade rejected");
         require(quote.balanceOf(ALICE) == INITIAL + 1, "wrong minimum trade proceeds");
@@ -128,8 +128,7 @@ contract AgnosticPropertiesTest {
             uint256 draw = uint256(keccak256(abi.encode(seed, i)));
             uint128 price = uint128(1 + draw % 3) * 1e18;
             uint128 quantity = uint128(1 + (draw >> 8) % 4) * 1e15;
-            makers[i] =
-                Maker(_limit(ALICE, makerSide, price, quantity, 0), price, quantity, 0, false);
+            makers[i] = Maker(_limit(ALICE, makerSide, price, quantity), price, quantity, 0, false);
             total += quantity;
         }
         uint256 cancelled = seed % makers.length;
@@ -173,9 +172,8 @@ contract AgnosticPropertiesTest {
     function testFuzz_MarketProtectionsRevertAtomically(uint256 seed, bool makerBuys) public {
         uint128 quantity = uint128(1 + seed % 4) * 1e15;
         uint128 price = uint128(1 + (seed >> 8) % 4) * 1e18;
-        bytes32 maker = _limit(
-            ALICE, makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell, price, quantity, 0
-        );
+        bytes32 maker =
+            _limit(ALICE, makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell, price, quantity);
         ISpotCLOB.Side side = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
         bytes32 before = _snapshot(maker);
         vm.expectRevert(SpotCLOB.MinimumFillNotMet.selector);
@@ -196,7 +194,7 @@ contract AgnosticPropertiesTest {
         public
     {
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
-        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e18, 0);
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e18);
         vm.warp(block.timestamp + 1 + delaySeed);
         ISpotCLOB.Side takerSide = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
         _market(BOB, takerSide, 1e18, 0, 1e18, 0, 1);
@@ -209,9 +207,9 @@ contract AgnosticPropertiesTest {
     }
 
     function testFeeWithdrawalCannotSpendOrderEscrow() public {
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e18, 0);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e18);
         _market(BOB, ISpotCLOB.Side.Buy, 1e18, 0, 1e18, 0, 64);
-        bytes32 bid = _limit(CAROL, ISpotCLOB.Side.Buy, 1e18, 1e18, 0);
+        bytes32 bid = _limit(CAROL, ISpotCLOB.Side.Buy, 1e18, 1e18);
         uint256 fees = book.accruedTradingFees(address(quote));
         require(fees == 7_400, "fees were not exercised");
         bytes32 before = _snapshot(bid);
@@ -267,13 +265,10 @@ contract AgnosticPropertiesTest {
         quote.approve(address(book), type(uint256).max);
     }
 
-    function _limit(
-        address trader,
-        ISpotCLOB.Side side,
-        uint128 price,
-        uint128 quantity,
-        uint64 expiry
-    ) private returns (bytes32) {
+    function _limit(address trader, ISpotCLOB.Side side, uint128 price, uint128 quantity)
+        private
+        returns (bytes32)
+    {
         ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
             trader: trader,
             baseAsset: address(base),
@@ -281,7 +276,6 @@ contract AgnosticPropertiesTest {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: expiry,
             clientOrderId: 0
         });
         vm.prank(trader);

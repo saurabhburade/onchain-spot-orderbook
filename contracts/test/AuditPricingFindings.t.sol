@@ -63,7 +63,6 @@ contract AuditPricingActor {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: 0
             })
         );
@@ -84,7 +83,6 @@ contract AuditPricingActor {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(book).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));

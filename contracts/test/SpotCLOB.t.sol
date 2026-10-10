@@ -78,32 +78,9 @@ contract TraderActor {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: clientOrderId
             })
         );
-    }
-
-    function attemptPlaceWithExpiry(
-        SpotCLOB exchange,
-        address baseAsset,
-        address quoteAsset,
-        ISpotCLOB.Side side,
-        uint128 price,
-        uint128 quantity,
-        uint64 expiry
-    ) external returns (bool success) {
-        ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
-            trader: address(this),
-            baseAsset: baseAsset,
-            quoteAsset: quoteAsset,
-            side: side,
-            price: price,
-            quantity: quantity,
-            expiry: expiry,
-            clientOrderId: 0
-        });
-        (success,) = address(exchange).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));
     }
 
     function attemptPlaceWithZeroSteps(
@@ -121,7 +98,6 @@ contract TraderActor {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange)
@@ -143,7 +119,6 @@ contract TraderActor {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));
@@ -917,7 +892,6 @@ contract SpotCLOBTest {
             side: ISpotCLOB.Side.Buy,
             price: 100,
             quantity: 0,
-            expiry: 0,
             clientOrderId: 0
         });
         require(!_callLimit(order), "zero quantity accepted");
@@ -930,9 +904,6 @@ contract SpotCLOBTest {
         order.baseAsset = address(base);
         order.price = 100_001;
         require(!_callLimit(order), "out-of-range limit accepted");
-        order.price = 100;
-        order.expiry = uint64(block.timestamp + 1);
-        require(!_callLimit(order), "non-zero expiry accepted");
 
         ISpotCLOB.MarketOrder memory marketOrder = ISpotCLOB.MarketOrder({
             trader: address(this),
@@ -973,23 +944,6 @@ contract SpotCLOBTest {
             ),
             "misaligned price accepted"
         );
-    }
-
-    function testRejectsNonZeroExpirySoLimitOrdersAreGtcOnly() public {
-        require(
-            !sellerA.attemptPlaceWithExpiry(
-                exchange,
-                address(base),
-                address(quote),
-                ISpotCLOB.Side.Sell,
-                100,
-                1,
-                uint64(block.timestamp + 1)
-            ),
-            "non-zero expiry accepted"
-        );
-        (,,, bool askExists,,) = exchange.getBestPrices(poolId);
-        require(!askExists, "rejected expiring order changed the book");
     }
 
     function _callLimit(ISpotCLOB.LimitOrder memory order) private returns (bool success) {

@@ -85,7 +85,6 @@ contract MatrixTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: 0
             }),
             64
@@ -107,7 +106,6 @@ contract MatrixTrader {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(book)

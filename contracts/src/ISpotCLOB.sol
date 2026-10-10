@@ -37,9 +37,6 @@ interface ISpotCLOB {
         uint128 price;
         /// @notice Legacy markets use base lots. Agnostic markets use raw base-token atoms.
         uint128 quantity;
-        /// @notice Reserved for ABI compatibility. Must be zero; limit orders are
-        /// good-til-cancelled.
-        uint64 expiry;
         uint64 clientOrderId;
     }
 
@@ -89,7 +86,6 @@ interface ISpotCLOB {
         Side side,
         uint128 price,
         uint128 quantity,
-        uint64 expiry,
         uint64 clientOrderId
     );
 
@@ -177,10 +173,10 @@ interface ISpotCLOB {
     );
 
     /// @notice Place a limit order and match it against the resting book.
-    /// @dev The implementation must reject invalid pairs, zero values, non-zero expiry, and
-    /// insufficient available balance before mutating the book. `order.quantity` is the requested
-    /// maximum: recipient-side transfer tax reduces the accepted quantity to what the received
-    /// escrow can fund. Accepted orders remain open until filled or cancelled by their owner.
+    /// @dev The implementation must reject invalid pairs, zero values, and insufficient available
+    /// balance before mutating the book. `order.quantity` is the requested maximum: recipient-side
+    /// transfer tax reduces the accepted quantity to what the received escrow can fund. Accepted
+    /// orders are good-til-cancelled and remain open until filled or cancelled by their owner.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)

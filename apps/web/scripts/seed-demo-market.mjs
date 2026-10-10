@@ -82,7 +82,7 @@ const factoryAbi = parseAbi([
   "function getPool(bytes32 id) view returns ((address baseAsset, address quoteAsset, address book, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick, bool exists) pool)",
 ]);
 const clobAbi = parseAbi([
-  "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 expiry,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
+  "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
   "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint128 bidQuantity,bool askExists,uint128 askPrice,uint128 askQuantity)",
   "function getUserOrderIds(bytes32 poolId,address trader,bytes32 cursor,uint16 limit,uint8 statusFlags) view returns (bytes32[] orderIds,bytes32 nextCursor)",
 ]);
@@ -327,7 +327,6 @@ function limitOrderCall(wallet, token, book, side, price, quantity, clientOrderI
           side,
           price,
           quantity,
-          expiry: 0n,
           clientOrderId,
         },
         128,

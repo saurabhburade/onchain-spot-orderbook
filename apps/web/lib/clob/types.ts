@@ -111,7 +111,6 @@ export type OpenOrder = {
   remaining: string;
   status: "open" | "partially-filled" | "filled" | "cancelled";
   createdAt: bigint;
-  expiry: bigint;
   clientOrderId: bigint;
   transactionHash?: Hash;
 };

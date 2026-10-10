@@ -57,7 +57,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 
 | ID | Severity | Finding | Status | Resolution |
 | --- | --- | --- | --- | --- |
-| H-01 | High | Expired-order walls can permanently halt a pair | **Fixed** | Limit orders are GTC-only; every non-zero expiry is rejected |
+| H-01 | High | Expired-order walls can permanently halt a pair | **Fixed** | Expiry was removed from the limit-order ABI; orders are GTC-only |
 | M-01 | Medium | Fee increases can underfund old bid fee reserves and freeze sells | **Fixed** | Fee rate is snapshotted per order and maker/taker fees settle independently |
 | M-02 | Medium | A blacklisted maker payout can block FIFO matching | **Fixed** | Failed maker settlement is rolled back; the maker is quarantined and immediately unlinked |
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
@@ -80,15 +80,14 @@ Expired makers were previously removed only during matching. Cleanup consumed th
 steps without filling the taker, and a revert rolled back every removal. A sufficiently large wall
 at one price could therefore become impossible to clear within the transaction gas limit.
 
-The selected design removes expiry from the accepted order model. The ABI field remains for
-compatibility, but [`SpotCLOB`](../src/SpotCLOB.sol) rejects every non-zero `expiry`; all accepted
+The selected design removes expiry from the limit-order ABI and stored order model. All accepted
 limit orders are good-til-cancelled. Consequently, an expired-order wall cannot be created.
 
 Regression coverage:
 
-- [`testExpiryWallCannotBeCreatedBecauseNonZeroExpiryIsRejected`](../test/AuditLivenessFindings.t.sol)
-  attempts 65 expiring placements, exceeding the default 64-step match bound, and verifies that
-  every order is rejected without escrow or book mutation.
+- [`testGtcOrderRemainsMatchableAfterTimePasses`](../test/AuditLivenessFindings.t.sol) verifies that
+  elapsed time cannot make a resting order unmatchable. Solidity compilation also enforces that
+  callers cannot supply expiry through the typed limit-order ABI.
 
 ### M-01 — Fee increases can freeze resting bids
 
@@ -346,10 +345,10 @@ pnpm check
 - Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, and the transfer-tax
   changes require a new implementation/factory deployment and migration; merging this branch does
   not change already deployed books.
-- The optimized `SpotCLOB` runtime is 30,660 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 30,535 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
-- Limit orders are GTC-only. The ABI retains `expiry` solely for compatibility.
+- Limit orders are GTC-only and the order ABI has no expiry field.
 - Positive rebase surplus is not distributed to order owners.
 - Sender-surcharge, reflection/reward, and malicious token accounting remain unsupported.
 - Open low and informational findings should remain visible in release notes and integration

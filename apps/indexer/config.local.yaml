@@ -23,7 +23,7 @@ contracts:
       - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick, uint16 tradingFeeBps)"
       - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick)"
         name: MarketActivatedLegacy
-      - event: "OrderPlaced(bytes32 indexed orderId, address indexed trader, bytes32 indexed poolId, address baseAsset, address quoteAsset, uint8 side, uint128 price, uint128 quantity, uint64 expiry, uint64 clientOrderId)"
+      - event: "OrderPlaced(bytes32 indexed orderId, address indexed trader, bytes32 indexed poolId, address baseAsset, address quoteAsset, uint8 side, uint128 price, uint128 quantity, uint64 clientOrderId)"
       - event: "TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)"
       - event: "TradingFeeCharged(bytes32 indexed poolId, bytes32 indexed orderId, address indexed feePayer, address quoteAsset, uint256 amount)"
       - event: "OrderFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 totalFilledQuantity)"

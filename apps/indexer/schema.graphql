@@ -72,7 +72,6 @@ type Order
   filledQuantity: BigInt!
   remainingQuantity: BigInt!
   quoteQuantity: BigInt!
-  expiry: BigInt!
   clientOrderId: BigInt!
   createdAt: Int!
   createdBlock: Int!

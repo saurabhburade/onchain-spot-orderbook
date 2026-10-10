@@ -63,7 +63,6 @@ export type IndexedOrder = {
   filledQuantity: string;
   remainingQuantity: string;
   quoteQuantity: string;
-  expiry: string;
   clientOrderId: string;
   createdAt: number;
   createdTxHash: Hash;
@@ -220,7 +219,6 @@ const orderHistoryQuery = `
       filledQuantity
       remainingQuantity
       quoteQuantity
-      expiry
       clientOrderId
       createdAt
       createdTxHash

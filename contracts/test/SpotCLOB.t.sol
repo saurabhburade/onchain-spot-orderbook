@@ -7,10 +7,6 @@ import { SpotCLOB } from "../src/SpotCLOB.sol";
 import { SpotCLOBFactory } from "../src/SpotCLOBFactory.sol";
 import { SpotCLOBLens } from "../src/SpotCLOBLens.sol";
 
-interface SpotCLOBTestVm {
-    function warp(uint256 timestamp) external;
-}
-
 contract MockERC20 {
     string public name;
     mapping(address account => uint256 amount) public balanceOf;
@@ -82,31 +78,7 @@ contract TraderActor {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: clientOrderId
-            })
-        );
-    }
-
-    function placeWithExpiry(
-        SpotCLOB exchange,
-        address baseAsset,
-        address quoteAsset,
-        ISpotCLOB.Side side,
-        uint128 price,
-        uint128 quantity,
-        uint64 expiry
-    ) external returns (bytes32) {
-        return exchange.placeLimitOrder(
-            ISpotCLOB.LimitOrder({
-                trader: address(this),
-                baseAsset: baseAsset,
-                quoteAsset: quoteAsset,
-                side: side,
-                price: price,
-                quantity: quantity,
-                expiry: expiry,
-                clientOrderId: 0
             })
         );
     }
@@ -126,7 +98,6 @@ contract TraderActor {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange)
@@ -148,7 +119,6 @@ contract TraderActor {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));
@@ -272,8 +242,6 @@ contract TraderActor {
 
 contract SpotCLOBTest {
     uint128 private constant LOT_SIZE = 1 ether;
-    address private constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
-    SpotCLOBTestVm private constant vm = SpotCLOBTestVm(VM_ADDRESS);
 
     SpotCLOB private exchange;
     SpotCLOBFactory private registry;
@@ -695,6 +663,7 @@ contract SpotCLOBTest {
         require(exchange.USER_ORDER_FLAG_OPEN() == 1, "wrong open flag");
         require(exchange.USER_ORDER_FLAG_FILLED() == 2, "wrong filled flag");
         require(exchange.USER_ORDER_FLAG_CANCELED() == 4, "wrong canceled flag");
+        require(exchange.USER_ORDER_FLAG_QUARANTINED() == 8, "wrong quarantined flag");
 
         (bytes32[] memory firstIds, bytes32 idsCursor) =
             exchange.getUserOrderIds(poolId, address(sellerA), bytes32(0), 2, 7);
@@ -769,7 +738,7 @@ contract SpotCLOBTest {
             .staticcall(
                 abi.encodeCall(
                     SpotCLOB.getUserOrderIds,
-                    (poolId, address(sellerA), bytes32(0), uint16(1), uint8(8))
+                    (poolId, address(sellerA), bytes32(0), uint16(1), uint8(16))
                 )
             );
         require(!unknownFlags, "unknown flags accepted");
@@ -923,7 +892,6 @@ contract SpotCLOBTest {
             side: ISpotCLOB.Side.Buy,
             price: 100,
             quantity: 0,
-            expiry: 0,
             clientOrderId: 0
         });
         require(!_callLimit(order), "zero quantity accepted");
@@ -936,9 +904,6 @@ contract SpotCLOBTest {
         order.baseAsset = address(base);
         order.price = 100_001;
         require(!_callLimit(order), "out-of-range limit accepted");
-        order.price = 100;
-        order.expiry = uint64(block.timestamp);
-        require(!_callLimit(order), "expired limit accepted");
 
         ISpotCLOB.MarketOrder memory marketOrder = ISpotCLOB.MarketOrder({
             trader: address(this),
@@ -979,22 +944,6 @@ contract SpotCLOBTest {
             ),
             "misaligned price accepted"
         );
-    }
-
-    function testExpiredMakerIsRemovedDuringMatching() public {
-        uint64 expiry = uint64(block.timestamp + 1);
-        bytes32 expiredAsk = sellerA.placeWithExpiry(
-            exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 100, 1, expiry
-        );
-        _place(sellerB, ISpotCLOB.Side.Sell, 110, 1, 2);
-        vm.warp(block.timestamp + 2);
-        (, uint128 filled, uint256 quoteFilled) = buyer.executeMarket(
-            exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 1, 110, 1, 3
-        );
-        require(filled == 1 && quoteFilled == 110, "live maker was not filled");
-        _assertOrder(expiredAsk, 0, ISpotCLOB.OrderStatus.Cancelled);
-        (,,, bool askExists,,) = exchange.getBestPrices(poolId);
-        require(!askExists, "expired maker remained active");
     }
 
     function _callLimit(ISpotCLOB.LimitOrder memory order) private returns (bool success) {

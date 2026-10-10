@@ -4,6 +4,10 @@ pragma solidity ^0.8.24;
 /// @notice The matching boundary for a fully on-chain spot central limit order book.
 /// @dev Implementations must perform price-time matching and settlement on-chain.
 interface ISpotCLOB {
+    error MarketInsolvent(
+        bytes32 marketId, address asset, uint256 availableAssets, uint256 liabilities
+    );
+
     enum Side {
         Buy,
         Sell
@@ -19,7 +23,8 @@ interface ISpotCLOB {
         Open,
         PartiallyFilled,
         Filled,
-        Cancelled
+        Cancelled,
+        Quarantined
     }
 
     struct LimitOrder {
@@ -32,7 +37,6 @@ interface ISpotCLOB {
         uint128 price;
         /// @notice Legacy markets use base lots. Agnostic markets use raw base-token atoms.
         uint128 quantity;
-        uint64 expiry;
         uint64 clientOrderId;
     }
 
@@ -82,8 +86,12 @@ interface ISpotCLOB {
         Side side,
         uint128 price,
         uint128 quantity,
-        uint64 expiry,
         uint64 clientOrderId
+    );
+
+    /// @notice Emitted when transfer tax reduces the quantity funded by an order.
+    event OrderQuantityAdjusted(
+        bytes32 indexed orderId, uint128 requestedQuantity, uint128 acceptedQuantity
     );
 
     /// @notice Emitted for every fill produced by a state-changing operation.
@@ -107,6 +115,11 @@ interface ISpotCLOB {
     );
 
     event TradingFeesWithdrawn(address indexed asset, address indexed recipient, uint256 amount);
+
+    /// @notice Emitted when an insolvent asset pays an order's pro-rata recovery value.
+    event InsolventOrderClosed(
+        bytes32 indexed orderId, address indexed asset, uint256 nominalEscrow, uint256 payout
+    );
 
     event TradingFeeUpdated(bytes32 indexed poolId, uint16 previousFeeBps, uint16 newFeeBps);
 
@@ -144,9 +157,28 @@ interface ISpotCLOB {
         uint128 remainingQuantity
     );
 
+    /// @notice Emitted when a resting maker cannot receive settlement and is removed from the
+    /// active FIFO queue.
+    event OrderQuarantined(
+        bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, address failedAsset
+    );
+
+    /// @notice Emitted after a quarantined order owner releases all remaining escrow.
+    event QuarantinedOrderClosed(
+        bytes32 indexed orderId,
+        address indexed trader,
+        address indexed receiver,
+        address asset,
+        uint256 amount
+    );
+
     /// @notice Place a limit order and match it against the resting book.
-    /// @dev The implementation must reject invalid pairs, zero values, expired orders, and
-    /// insufficient available balance before mutating the book.
+    /// @dev The implementation must reject invalid pairs, zero values, and insufficient available
+    /// balance before mutating the book. `order.quantity` is the requested maximum: recipient-side
+    /// transfer tax reduces the accepted quantity to what the received escrow can fund. Accepted
+    /// orders are good-til-cancelled and remain open until filled or cancelled by their owner.
+    /// Funding must debit the trader by exactly the requested transfer amount; sender-surcharge
+    /// and otherwise mutable sender accounting are unsupported and revert atomically.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
@@ -155,23 +187,31 @@ interface ISpotCLOB {
 
     /// @notice Execute immediately against resting liquidity without placing a remainder on-book.
     /// @dev Reverts when no quantity can execute. A zero minimum permits a partial fill, not a zero
-    /// fill.
+    /// fill. Wallet funding must debit the trader by exactly the requested input amount.
     function executeMarketOrder(MarketOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId, uint128 filledQuantity, uint256 quoteQuantity);
 
     /// @notice Cancel an order that still has resting quantity.
-    /// @dev The caller must be the order owner.
+    /// @dev The caller must be the order owner. If its escrow asset is insolvent, cancellation pays
+    /// the order's pro-rata share of the remaining user escrow rather than its nominal liability.
     function cancelOrder(bytes32 orderId) external;
+
+    /// @notice Close one quarantined order and release its remaining recoverable escrow.
+    /// @dev Only the order owner may select the receiver. Insolvent assets pay pro rata.
+    function closeQuarantinedOrder(bytes32 orderId, address receiver) external;
 
     /// @notice Withdraw quote-token trading fees accrued by this order book.
     /// @dev Only the immutable protocol fee recipient may call this function.
     function withdrawTradingFees(address asset, address recipient, uint256 amount) external;
 
-    /// @notice Synchronize a factory-admin fee update into this order book.
+    /// @notice Set the fee snapshot used by subsequently accepted orders.
+    /// @dev Existing orders retain the fee captured when they were accepted.
     function setTradingFeeBps(bytes32 poolId, uint16 tradingFeeBps) external;
 
     function accruedTradingFees(address asset) external view returns (uint256);
+
+    function totalEscrowLiability(address asset) external view returns (uint256);
 
     /// @notice Return wallet funds available to trade and funds escrowed by open orders.
     function balanceOf(address account, address asset)

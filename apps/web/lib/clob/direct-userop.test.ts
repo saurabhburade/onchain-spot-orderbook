@@ -46,7 +46,6 @@ function orderDataFor(trader: Address, clientOrderId = 0n) {
         side: 0,
         price: 1n,
         quantity: 1n,
-        expiry: 0n,
         clientOrderId,
       },
       1,

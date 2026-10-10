@@ -36,9 +36,10 @@ market, filled, partial-fill, and cancelled-order events; trades; opening and cl
 counts; and lot/base/quote volume. `Market` also keeps all-time totals, the current open-order count,
 and the latest trade price and timestamp.
 
-Every fill charges the taker 10 basis points in the quote token. `TradingFeeCharged` events update
-the all-time and interval `quoteFees` totals. Fees are rounded down to the quote token's smallest
-unit, so very small fills can have a zero-atom fee.
+Every fill charges both orders in the quote token at the fee each order captured when it was
+accepted. A maker and taker can therefore pay different rates after a market fee update.
+`TradingFeeCharged` events update the all-time and interval `quoteFees` totals. Fees are rounded
+down to the quote token's smallest unit, so very small fills can have a zero-atom fee.
 
 ## Requirements
 

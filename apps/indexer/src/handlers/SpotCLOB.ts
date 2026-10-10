@@ -120,7 +120,6 @@ indexer.onEvent(
       filledQuantity: 0n,
       remainingQuantity: event.params.quantity,
       quoteQuantity: 0n,
-      expiry: event.params.expiry,
       clientOrderId: event.params.clientOrderId,
       createdAt: event.block.timestamp,
       createdBlock: event.block.number,

@@ -111,7 +111,6 @@ export type OpenOrder = {
   remaining: string;
   status: "open" | "partially-filled" | "filled" | "cancelled";
   createdAt: bigint;
-  expiry: bigint;
   clientOrderId: bigint;
   transactionHash?: Hash;
 };
@@ -181,7 +180,6 @@ export type LimitOrderInput = {
   side: OrderSide;
   price: string;
   quantity: string;
-  expiry?: bigint;
   clientOrderId?: bigint;
   maxBookSteps?: bigint;
 };

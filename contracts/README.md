@@ -2,6 +2,9 @@
 
 Foundry package for the fully on-chain spot central limit order book (CLOB) on Monad.
 
+Security findings, remediation status, regression coverage, and residual risks are documented in
+the [initial audit and remediation report](docs/initial-audit-invariant.md).
+
 `SpotCLOB` is a fully on-chain matching engine with per-order escrow. New markets use a sparse
 16-level radix tree over the full `uint128` price domain. A doubly linked FIFO queue at each active
 price preserves price-time priority and supports O(1) cancellation. Legacy bitmap markets remain
@@ -18,6 +21,8 @@ Market creation can carry an owner-configurable native MON fee. It defaults to z
 wei in `marketCreationFee`, and every pair-creation overload requires the caller to send the exact
 configured amount. The owner can collect accrued MON with `withdrawMarketCreationFees`. This fee
 is separate from per-market trading fees, which continue to be assessed in the quote token.
+Each order snapshots the market fee when it is accepted. Later fee updates apply only to newly
+submitted orders, so a resting bid's reserved fee always remains sufficient for its fills.
 
 The default two-address creation path is supply agnostic: price is quote tokens per whole base
 token with 18 fixed decimals (`priceX18`), while quantity is raw base-token atoms. This provides a
@@ -44,16 +49,29 @@ explicit lot of `100_000e18` raw units for an 18-decimal base token lets a one-a
 
 Account abstraction, session keys, transaction sponsorship, and wallet UX remain outside the
 matching interface. Traders approve the pair contract as an ERC-20 spender; placing an order then
-pulls exactly the order's maximum input amount from the trader's wallet. Fills send output tokens
-directly to both traders, price improvement is returned immediately, and cancellation returns
-unused escrow directly to the order owner's wallet. There is no separate deposit or withdrawal.
+pulls the order's maximum input amount from the trader's wallet. Every limit-order entry point
+measures the received balance delta and reduces the stored order to the maximum funded quantity.
+This treats a recipient-side transfer tax as part of the token's economics; `OrderQuantityAdjusted`
+reports any difference between requested and accepted quantity. Fills send output tokens directly
+to both traders, price improvement is returned immediately, and cancellation returns unused escrow
+directly to the order owner's wallet. Before accepting or matching an order, the book verifies that
+both market assets cover aggregate escrow and fee liabilities. An insolvent market rejects trading
+with `MarketInsolvent`; order owners may still cancel, receiving the pro-rata recoverable value of
+their remaining escrow. If a resting maker cannot receive a payout,
+the fill attempt rolls back atomically, the order is marked quarantined and immediately unlinked
+from the FIFO queue, and matching continues at the next executable order. The owner can later
+release all remaining escrow with `closeQuarantinedOrder(orderId, receiver)`. A quarantined order
+remains stored only as an escrow-recovery record with `resting == false`; no separate book cleanup
+is required. There is no general-purpose deposit or withdrawal balance.
 
 Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
-raw base-token atoms. For a sell, it is raw quote-token atoms actually paid to the trader after
-per-fill taker fees. An unmet minimum reverts the entire operation. Setting `minReceive` to zero
-disables only that output check: the market order still requires at least one fill, observes the
-price limit and book-step cap, and may fill partially when `minFillQuantity` is also zero. Market
-orders never rest on the book. A zero price limit uses the configured pool boundary.
+raw base-token atoms actually received after any recipient-side transfer tax. For a sell, it is raw
+quote-token atoms actually received after per-fill taker fees and any recipient-side transfer tax.
+An unmet minimum reverts the entire operation. Setting `minReceive` to zero disables only that
+output check: the market order still requires at least one fill, observes the price limit and
+book-step cap, and may fill partially when `minFillQuantity` is also zero. Wallet-funded market
+inputs remain exact-transfer only so a short transfer can never consume another order's pooled
+escrow. Market orders never rest on the book. A zero price limit uses the configured pool boundary.
 
 The read interface exposes aggregated, sorted top-N price levels through `getOrderBook(poolId,
 depth)`, capped at 256 levels per side, as well as best-price and individual-level views. State
@@ -94,14 +112,17 @@ slots. Off-chain indexers may read raw slots through RPC, but those reads are st
   resting price or an earlier order at the same price.
 - Only the order owner can cancel an open resting order; cancelling a filled or already-cancelled
   order reverts and cannot resurrect quantity.
-- Only funds required by open orders remain in the contract, and contract token balances remain
-  solvent against all order escrow liabilities.
+- Aggregate escrow liabilities equal the sum of trader locked balances. Trading requires contract
+  balances to cover escrow and accrued-fee liabilities; an external balance reduction instead
+  enters proportional order-close recovery.
 - Settlement is atomic: base and quote movements and order-state updates either all succeed or all
   revert.
+- A failed maker payout quarantines only that maker order; failed taker receipts revert the taker's
+  transaction and cannot remove an innocent resting order.
 - Reentrancy, token transfer failures, fee-on-transfer behavior, and unsupported token behavior are
   handled explicitly before production deployment.
-- Market configuration, numeric precision, expiry, replay protection, and authorization checks are
-  validated on-chain and covered by invariant and fuzz testing.
+- Market configuration, numeric precision, GTC-only order policy, replay protection, and
+  authorization checks are validated on-chain and covered by invariant and fuzz testing.
 
 ## Development
 
@@ -115,6 +136,53 @@ forge coverage --no-match-contract SpotCLOBInvariantTest --skip script --ir-mini
 The current production sources report 97.19% line, 95.94% statement, 86.55% branch, and 98.72%
 function coverage. The stateful invariant suite is run separately because coverage instrumentation
 does not preserve the production optimizer configuration.
+
+### Property and invariant tests
+
+`PriceTreeTest` compares randomized insertion, deletion, membership, extrema, and successor /
+predecessor lookups against an independent set over the full `uint128` domain. `SpotPriceMathTest`
+checks rounding, minimum-quantity saturation, and supported / rejected decimal relationships.
+
+`AgnosticPropertiesTest` checks randomized price-time matching, cancellation, per-fill fees,
+market price / minimum-output protections, atomic rollback, GTC behavior, and fee withdrawals.
+`AgnosticInvariantTest` mixes limit and market orders in both directions, authorized and unauthorized
+cancellations, time advances, fee updates, and fee withdrawals across eight sparse prices from
+`1e7` to `type(uint128).max`. It checks wallet conservation, escrow liabilities derived from
+remaining orders, independently tracked snapshotted fee reserves and accrued maker/taker fees,
+monotonic fills, closed-order finality, FIFO links, and radix / price-level consistency. Unexpected
+handler reverts fail invariant campaigns.
+`ArithmeticBoundsTest` exercises full-width prices and quantities, checked price-level accumulation,
+atomic rollback on overflow, unfunded transfers, and the highest supported decimal denominator.
+
+Run a bounded campaign without changing the default fuzz run count:
+
+```sh
+FOUNDRY_INVARIANT_RUNS=32 FOUNDRY_INVARIANT_DEPTH=64 forge test
+```
+
+`forge test` uses Foundry's default campaign sizes (256 fuzz runs and 256 invariant sequences of
+depth 500). These are randomized checks, not formal proofs; no formal verification runner is wired
+into this repository.
+
+Known limitations reproduced by tests:
+
+- Agnostic markets accept every positive `priceX18`, so improving a bid by one price unit creates
+  a separate level and outranks an earlier bid even when both settle to the same quote atoms.
+- The current minimum is one quote-token atom: `0.000001 USDC` for a six-decimal quote token.
+  A one-USDC minimum notional and a relative tick grid are not currently enforced.
+
+### Immediate-unlink stress benchmark
+
+`testGasM02HundredBlockedOrdersAreUnlinkedDuringMatching` places 100 blocked makers ahead of one
+valid maker at the same price. The optimized local EVM measurement from 10 October 2026 is:
+
+| Action | Gas |
+| --- | ---: |
+| Unlink 100 blocked makers and fill the next valid order | 5,928,959 |
+| Match the next order after immediate unlinking | 325,394 |
+
+The stress match explicitly sets `maxBookSteps` to 101. The default remains 64; callers processing
+a larger blocked prefix must select a sufficient bound and pay the corresponding gas.
 
 ### Supply-agnostic gas benchmark
 
@@ -174,6 +242,7 @@ From a fresh terminal, start Anvil with the exact mnemonic used by the script:
 ```sh
 cd contracts
 anvil --host 127.0.0.1 --port 8545 \
+  --code-size-limit 131072 \
   --mnemonic 'test test test test test test test test test test test junk' \
   --accounts 5
 ```
@@ -291,9 +360,11 @@ The package has no external Solidity dependencies.
   production registry should use governance-approved tick parameters if configuration squatting
   is unacceptable. Lot precision is administrator-controlled and cannot be supplied by creators.
 - Quote-token removal only prevents future pair creation; existing books deliberately remain live.
-- Non-zero order expiry is cleaned lazily when an expired order reaches the head of a matched price
-  level; views can include expired liquidity until an on-chain operation cleans it.
-- Trading fees, self-trade prevention, native-token handling, upgradeability, and governance
-  transfer are intentionally not implemented.
-- The contracts reject fee-on-transfer order funding and require standard ERC-20 transfer behavior.
+- Limit orders are good-til-cancelled and the order ABI has no expiry field.
+- Self-trade prevention, native-token handling, upgradeability, and governance transfer are
+  intentionally not implemented.
+- Limit-order funding supports conventional recipient-tax tokens by measuring actual balance
+  deltas. Negative rebases are contained by a live solvency gate and proportional cancellation;
+  positive rebases are not assigned to order owners. Sender-surcharge, reflection/reward, and
+  otherwise mutable or malicious token accounting remain unsupported.
 - This is an unaudited reference implementation, not production-ready order escrow.

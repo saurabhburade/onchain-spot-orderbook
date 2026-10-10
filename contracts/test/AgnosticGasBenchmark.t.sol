@@ -61,7 +61,6 @@ contract AgnosticBenchmarkTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: clientOrderId
             }),
             64

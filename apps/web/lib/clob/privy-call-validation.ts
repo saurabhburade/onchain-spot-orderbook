@@ -8,7 +8,7 @@ const APPROVE_SELECTOR = "0x095ea7b3";
 const TRANSFER_SELECTOR = "0xa9059cbb";
 // Derived from the deployed CLOB ABI. Keeping this allowlist narrow prevents
 // the server-side sponsor route from becoming a generic contract-call proxy.
-const ORDER_SELECTORS = new Set(["0x4fd0d46e", "0xee71e6e4", "0x7489ec23"]);
+const ORDER_SELECTORS = new Set(["0xa58aa2e7", "0xee71e6e4", "0x7489ec23"]);
 const approveAbi = [
   {
     type: "function",

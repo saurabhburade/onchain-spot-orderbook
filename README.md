@@ -86,8 +86,8 @@ the order still needs liquidity and can fill partially.
 
 ## Monad gas benchmark
 
-Measured on the current `SpotCLOB` contract with `minReceive` support using
-`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 27 September 2026.
+Measured on the current `SpotCLOB` contract with quarantine support using
+`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 9 October 2026.
 The market-order scenarios use `minReceive = 0`. Fixture seeding is excluded from
 measured gas. These are gas deltas around the actor-to-book calls in the Foundry
 harness, not deployed transaction receipts.
@@ -97,14 +97,14 @@ harness, not deployed transaction receipts.
 
 | Action | Book before | Levels before | Matches | Total gas | Gas/match | Fee (MON) | Fee (USD) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create limit, new price level | 0 | 0 | 0 | 732,580 | — | 0.074723160 | $0.001994 |
-| Create limit, existing price level | 1 | 1 | 0 | 212,962 | — | 0.021722124 | $0.000580 |
-| Cancel one resting order | 1 | 1 | 0 | 49,487 | — | 0.005047674 | $0.000135 |
-| Fill one resting order, limit | 1 | 1 | 1 | 492,175 | 492,175 | 0.050201850 | $0.001339 |
-| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,161,878 | 91,618 | 0.934511556 | $0.024933 |
-| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,006,360 | 100,127 | 0.510648720 | $0.013624 |
-| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 9,701,470 | 97,014 | 0.989549940 | $0.026401 |
-| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 19,103,658 | 95,518 | 1.948573116 | $0.051988 |
+| Create limit, new price level | 0 | 0 | 0 | 755,076 | — | 0.077017752 | $0.002055 |
+| Create limit, existing price level | 1 | 1 | 0 | 213,300 | — | 0.021756600 | $0.000580 |
+| Cancel one resting order | 1 | 1 | 0 | 51,383 | — | 0.005241066 | $0.000140 |
+| Fill one resting order, limit | 1 | 1 | 1 | 498,373 | 498,373 | 0.050834046 | $0.001356 |
+| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,676,749 | 96,767 | 0.987028398 | $0.026334 |
+| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,294,701 | 105,894 | 0.540059502 | $0.014409 |
+| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 10,271,011 | 102,710 | 1.047643122 | $0.027951 |
+| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 20,215,352 | 101,076 | 2.061965904 | $0.055013 |
 
 ## Development
 

@@ -7,6 +7,16 @@ export const clobAbi = [
     inputs: [],
   },
   {
+    type: "error",
+    name: "MarketInsolvent",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "asset", type: "address" },
+      { name: "availableAssets", type: "uint256" },
+      { name: "liabilities", type: "uint256" },
+    ],
+  },
+  {
     type: "function",
     name: "balanceOf",
     stateMutability: "view",
@@ -19,6 +29,13 @@ export const clobAbi = [
       { name: "locked", type: "uint256" },
       { name: "total", type: "uint256" },
     ],
+  },
+  {
+    type: "function",
+    name: "totalEscrowLiability",
+    stateMutability: "view",
+    inputs: [{ name: "asset", type: "address" }],
+    outputs: [{ name: "amount", type: "uint256" }],
   },
   {
     type: "function",
@@ -77,7 +94,6 @@ export const clobAbi = [
           { name: "side", type: "uint8" },
           { name: "price", type: "uint128" },
           { name: "quantity", type: "uint128" },
-          { name: "expiry", type: "uint64" },
           { name: "clientOrderId", type: "uint64" },
         ],
       },
@@ -137,7 +153,6 @@ export const clobAbi = [
           { name: "side", type: "uint8" },
           { name: "price", type: "uint128" },
           { name: "quantity", type: "uint128" },
-          { name: "expiry", type: "uint64" },
           { name: "clientOrderId", type: "uint64" },
         ],
       },
@@ -182,6 +197,16 @@ export const clobAbi = [
   },
   {
     type: "event",
+    name: "InsolventOrderClosed",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "asset", type: "address", indexed: true },
+      { name: "nominalEscrow", type: "uint256", indexed: false },
+      { name: "payout", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "BookUpdated",
     inputs: [
       { name: "poolId", type: "bytes32", indexed: true },
@@ -216,8 +241,16 @@ export const clobAbi = [
       { name: "side", type: "uint8", indexed: false },
       { name: "price", type: "uint128", indexed: false },
       { name: "quantity", type: "uint128", indexed: false },
-      { name: "expiry", type: "uint64", indexed: false },
       { name: "clientOrderId", type: "uint64", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "OrderQuantityAdjusted",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "requestedQuantity", type: "uint128", indexed: false },
+      { name: "acceptedQuantity", type: "uint128", indexed: false },
     ],
   },
   {
@@ -281,7 +314,6 @@ export const clobLensAbi = [
               { name: "side", type: "uint8" },
               { name: "price", type: "uint128" },
               { name: "quantity", type: "uint128" },
-              { name: "expiry", type: "uint64" },
               { name: "clientOrderId", type: "uint64" },
             ],
           },

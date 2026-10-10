@@ -109,7 +109,6 @@ contract LotExtremesTest {
             side: ISpotCLOB.Side.Sell,
             price: 0,
             quantity: 1,
-            expiry: 0,
             clientOrderId: 1
         });
         (bool success,) = address(book).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (dustAsk)));
@@ -203,7 +202,6 @@ contract LotExtremesTest {
                 side: ISpotCLOB.Side.Sell,
                 price: price,
                 quantity: 1,
-                expiry: 0,
                 clientOrderId: 1
             })
         );

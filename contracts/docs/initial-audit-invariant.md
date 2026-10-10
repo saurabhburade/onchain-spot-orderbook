@@ -360,9 +360,9 @@ pnpm check
 
 ## Deployment and residual-risk notes
 
-- Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, and the transfer-tax
-  changes require a new implementation/factory deployment and migration; merging this branch does
-  not change already deployed books.
+- Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, and the
+  transfer-tax changes require a new implementation/factory deployment and migration; merging this
+  branch does not change already deployed books.
 - The optimized `SpotCLOB` runtime is 30,640 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.

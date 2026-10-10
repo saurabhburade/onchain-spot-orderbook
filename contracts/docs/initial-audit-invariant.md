@@ -336,7 +336,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **184 passed, 0 failed, 2 intentionally skipped**;
+- **183 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.

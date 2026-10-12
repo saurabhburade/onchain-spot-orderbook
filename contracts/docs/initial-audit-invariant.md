@@ -391,6 +391,34 @@ finality, quarantine isolation, FIFO predecessor links, price-level totals, and 
 membership. Expected external-token failures are contained inside the handler, allowing the
 campaign to require zero handler reverts.
 
+## Latest gas benchmark
+
+The benchmark snapshot was captured on 12 October 2026 from code revision `fe824dd` with Solidity
+0.8.24, optimizer enabled for 200 runs, and Foundry 1.7.1. Fixture seeding is excluded from the
+measured operation. These are local EVM gas deltas, not deployed transaction receipts.
+
+```sh
+forge test --match-contract '.*BenchmarkTest' -vv
+```
+
+The benchmark campaign completed 22 cases with no failures; two large synthetic-book cases remain
+intentionally skipped. Key order-action results:
+
+| Action | Book before | Levels before | Matches | Gas | Gas per match |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Create limit at new level | 0 | 0 | 0 | 775,252 | — |
+| Create limit at existing level | 1 | 1 | 0 | 201,044 | — |
+| Cancel one resting order | 1 | 1 | 0 | 52,622 | — |
+| Fill one resting order with a limit order | 1 | 1 | 1 | 503,624 | 503,624 |
+| Market fill 100 orders at one level | 100 | 1 | 100 | 9,952,244 | 99,522 |
+| Market fill 50 orders in a 1,000-level book | 2,000 | 1,000 | 50 | 5,417,105 | 108,342 |
+| Market fill 100 orders in a 1,000-level book | 2,000 | 1,000 | 100 | 10,541,542 | 105,415 |
+| Market fill 200 orders in a 1,000-level book | 2,000 | 1,000 | 200 | 20,782,135 | 103,910 |
+
+The complete transaction-style and direct-call tables are maintained in
+[`contracts/README.md`](../README.md). The repository-level table also includes illustrative MON
+and USD conversions in [`README.md`](../../README.md).
+
 ## Verification evidence
 
 The branch is configured with:

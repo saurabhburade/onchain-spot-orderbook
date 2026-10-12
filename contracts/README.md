@@ -196,20 +196,21 @@ Run the transaction-style benchmark with:
 forge test --match-path test/AgnosticGasBenchmark.t.sol --gas-report -vv
 ```
 
-The optimized local EVM snapshot from 27 September 2026 uses the current `SpotCLOB`
-with `minReceive` support. Market-order scenarios set `minReceive = 0`.
+The optimized local EVM snapshot from 12 October 2026 uses code revision `fe824dd` and
+Foundry 1.7.1. Market-order scenarios set `minReceive = 0`. The figures below come from
+the documented `--gas-report` command; fixture setup is excluded from each measured operation.
 
 | Scenario | Gas | Quotes consumed | Gas per quote |
 | --- | ---: | ---: | ---: |
-| Create agnostic market clone | 467,953 | 1 | 467,953 |
-| Place first order at a new price | 750,261 | 1 | 750,261 |
-| Place another order at the same price | 322,548 | 1 | 322,548 |
-| Cancel an order | 154,926 | 1 | 154,926 |
-| Market buy consuming one ask | 475,917 | 1 | 475,917 |
-| Market buy consuming 50 asks | 6,262,649 | 50 | 125,252 |
-| Market sell consuming 50 bids | 7,303,789 | 50 | 146,075 |
-| Read best prices from a 50-level book | 59,746 | 1 | 59,746 |
-| Read 50 levels per side | 1,624,997 | 50 | 32,499 |
+| Create agnostic market clone | 468,508 | 1 | 468,508 |
+| Place first order at a new price | 792,956 | 1 | 792,956 |
+| Place another order at the same price | 330,753 | 1 | 330,753 |
+| Cancel an order | 161,587 | 1 | 161,587 |
+| Market buy consuming one ask | 470,415 | 1 | 470,415 |
+| Market buy consuming 50 asks | 6,816,053 | 50 | 136,321 |
+| Market sell consuming 50 bids | 7,868,873 | 50 | 157,377 |
+| Read best prices from a 50-level book | 59,597 | 1 | 59,597 |
+| Read 50 levels per side | 1,619,469 | 50 | 32,389 |
 
 The same run reports direct contract-call gas as follows. Ranges reflect different book states used
 by the benchmark; view-call gas matters to RPC capacity even though an off-chain `eth_call` does not
@@ -218,16 +219,16 @@ charge the caller.
 | Function | Min | Median | Max |
 | --- | ---: | ---: | ---: |
 | `SpotCLOB.initialize` | 90,167 | 90,167 | 90,167 |
-| `SpotCLOB.activatePool` | 124,876 | 124,876 | 124,876 |
-| `SpotCLOB.placeLimitOrderWithMaxBookSteps` | 294,120 | 462,711 | 734,909 |
-| `SpotCLOB.cancelOrder` | 134,424 | 134,424 | 134,424 |
-| `SpotCLOB.executeMarketOrder` | 538,875 | 7,790,878 | 9,092,276 |
-| `SpotCLOB.getMarket` | 10,518 | 10,518 | 10,518 |
-| `SpotCLOB.getBestPrices` | 53,896 | 53,896 | 53,896 |
-| `SpotCLOB.getOrderBook(50)` | 1,594,009 | 1,594,009 | 1,594,009 |
-| `SpotCLOBFactory.createPair` | 467,357 | 467,357 | 467,357 |
-| `SpotCLOBLens.minimumOrderQuantity` | 19,336 | 19,336 | 19,336 |
-| `SpotCLOBLens.quoteAmount` | 19,347 | 19,347 | 19,347 |
+| `SpotCLOB.activatePool` | 124,912 | 124,912 | 124,912 |
+| `SpotCLOB.placeLimitOrderWithMaxBookSteps` | 302,455 | 488,436 | 781,217 |
+| `SpotCLOB.cancelOrder` | 141,085 | 141,085 | 141,085 |
+| `SpotCLOB.executeMarketOrder` | 542,973 | 8,482,633 | 9,798,631 |
+| `SpotCLOB.getMarket` | 10,605 | 10,605 | 10,605 |
+| `SpotCLOB.getBestPrices` | 53,899 | 53,899 | 53,899 |
+| `SpotCLOB.getOrderBook(50)` | 1,592,281 | 1,592,281 | 1,592,281 |
+| `SpotCLOBFactory.createPair` | 467,912 | 467,912 | 467,912 |
+| `SpotCLOBLens.minimumOrderQuantity` | 22,302 | 22,302 | 22,302 |
+| `SpotCLOBLens.quoteAmount` | 19,430 | 19,430 | 19,430 |
 
 These figures measure the requested operation after fixture setup; the 50-quote market-order rows do
 not include gas used to seed the 50 resting makers. They are comparative EVM gas measurements, not a

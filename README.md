@@ -86,25 +86,25 @@ the order still needs liquidity and can fill partially.
 
 ## Monad gas benchmark
 
-Measured on the current `SpotCLOB` contract with quarantine support using
-`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 9 October 2026.
+Measured on code revision `fe824dd` with quarantine support using
+`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 12 October 2026.
 The market-order scenarios use `minReceive = 0`. Fixture seeding is excluded from
 measured gas. These are gas deltas around the actor-to-book calls in the Foundry
 harness, not deployed transaction receipts.
 
-- Monad Testnet gas price at measurement: `102 Gwei` (`0.000000102 MON/gas`)
-- Illustrative USD conversion: `$0.02668/MON` ([CoinGecko](https://www.coingecko.com/en/coins/monad), 27 September 2026)
+Fee columns retain the earlier illustration assumptions: `102 Gwei`
+(`0.000000102 MON/gas`) and `$0.025196/MON`. They are not current price quotes.
 
 | Action | Book before | Levels before | Matches | Total gas | Gas/match | Fee (MON) | Fee (USD) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create limit, new price level | 0 | 0 | 0 | 755,076 | — | 0.077017752 | $0.002055 |
-| Create limit, existing price level | 1 | 1 | 0 | 213,300 | — | 0.021756600 | $0.000580 |
-| Cancel one resting order | 1 | 1 | 0 | 51,383 | — | 0.005241066 | $0.000140 |
-| Fill one resting order, limit | 1 | 1 | 1 | 498,373 | 498,373 | 0.050834046 | $0.001356 |
-| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,676,749 | 96,767 | 0.987028398 | $0.026334 |
-| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,294,701 | 105,894 | 0.540059502 | $0.014409 |
-| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 10,271,011 | 102,710 | 1.047643122 | $0.027951 |
-| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 20,215,352 | 101,076 | 2.061965904 | $0.055013 |
+| Create limit, new price level | 0 | 0 | 0 | 775,252 | — | 0.079075704 | $0.001992 |
+| Create limit, existing price level | 1 | 1 | 0 | 201,044 | — | 0.020506488 | $0.000517 |
+| Cancel one resting order | 1 | 1 | 0 | 52,622 | — | 0.005367444 | $0.000135 |
+| Fill one resting order, limit | 1 | 1 | 1 | 503,624 | 503,624 | 0.051369648 | $0.001294 |
+| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,952,244 | 99,522 | 1.015128888 | $0.025577 |
+| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,417,105 | 108,342 | 0.552544710 | $0.013922 |
+| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 10,541,542 | 105,415 | 1.075237284 | $0.027092 |
+| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 20,782,135 | 103,910 | 2.119777770 | $0.053410 |
 
 ## Development
 

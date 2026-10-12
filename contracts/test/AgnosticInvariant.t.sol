@@ -167,9 +167,9 @@ contract AgnosticInvariantHandler {
         uint256 bidIndex;
         uint256 askIndex;
         for (uint256 p; p < prices.length; ++p) {
-            (uint128 levelBidQuantity,,) =
+            (uint256 levelBidQuantity,,) =
                 book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, prices[prices.length - 1 - p]);
-            (uint128 levelAskQuantity,,) =
+            (uint256 levelAskQuantity,,) =
                 book.getPriceLevel(poolId, ISpotCLOB.Side.Sell, prices[p]);
             if (levelBidQuantity != 0) {
                 require(bidIndex < bids.length, "missing bid level");
@@ -194,10 +194,10 @@ contract AgnosticInvariantHandler {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = book.getBestPrices(poolId);
         require(
             bidExists == (bids.length != 0) && askExists == (asks.length != 0),
@@ -246,7 +246,12 @@ contract AgnosticInvariantHandler {
         uint128 quantity = 1;
         if (makers.length != 0) {
             uint128 minimum = uint128((1e30 + uint256(makers[0].price) - 1) / makers[0].price);
-            quantity = (seed >> 16) & 1 == 0 ? minimum : makers[0].quantity + minimum;
+            uint256 requested = makers[0].quantity + minimum;
+            // The explicit bound preserves the uint128 market-order interface.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            quantity = (seed >> 16) & 1 == 0 || requested > type(uint128).max
+                ? minimum
+                : uint128(requested);
         }
         address trader = traders[(seed >> 32) % traders.length];
         activeTakerFeeBps = currentFeeBps;
@@ -423,7 +428,7 @@ contract AgnosticInvariantHandler {
     }
 
     function _assertLevel(uint128 price, ISpotCLOB.Side side) private view {
-        uint128 expectedQuantity;
+        uint256 expectedQuantity;
         bytes32 first;
         bytes32 last;
         for (uint256 i; i < orderIds.length; ++i) {
@@ -460,7 +465,7 @@ contract AgnosticInvariantHandler {
             last = orderIds[i];
             expectedQuantity += remaining;
         }
-        (uint128 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
+        (uint256 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
         require(
             quantity == expectedQuantity && head == first && tail == last,
             "level differs from order model"

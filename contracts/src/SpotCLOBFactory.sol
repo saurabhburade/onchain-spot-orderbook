@@ -184,7 +184,7 @@ contract SpotCLOBFactory is ISpotCLOBFactory {
         return _createAgnosticPair(baseAsset, quoteAsset, defaultTradingFeeBps);
     }
 
-    /// @notice Deploy a supply-agnostic order book with an explicit taker trading fee.
+    /// @notice Deploy a supply-agnostic order book with an explicit per-side trading fee.
     function createPairWithFee(address baseAsset, address quoteAsset, uint16 tradingFeeBps)
         external
         payable

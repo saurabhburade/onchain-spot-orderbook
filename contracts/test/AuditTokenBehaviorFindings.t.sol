@@ -502,7 +502,7 @@ contract AuditTokenBehaviorFindingsTest {
         uint128 expectedQuantity
     ) private view {
         bytes32 id = book.marketId(base, quote);
-        (uint128 totalQuantity, bytes32 head,) = book.getPriceLevel(id, side, price);
+        (uint256 totalQuantity, bytes32 head,) = book.getPriceLevel(id, side, price);
         require(totalQuantity == expectedQuantity, "FIFO level quantity changed");
         require(head == expectedHead, "FIFO head changed");
     }

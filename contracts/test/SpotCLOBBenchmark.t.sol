@@ -404,10 +404,10 @@ contract SpotCLOBBenchmarkTest {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = exchange.getBestPrices(registry.pairId(address(base), address(quote)));
         checksum += bidExists ? uint256(bidPrice) + bidQuantity : 0;
         checksum += askExists ? uint256(askPrice) + askQuantity : 0;
@@ -455,10 +455,10 @@ contract SpotCLOBBenchmarkTest {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = exchange.getBestPrices(registry.pairId(address(base), address(quote)));
         require(bidExists == (expectedBidPrice != 0), "unexpected bid existence");
         require(askExists == (expectedAskPrice != 0), "unexpected ask existence");

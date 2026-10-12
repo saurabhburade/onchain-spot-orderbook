@@ -36,7 +36,7 @@ const entryPointAbi = parseAbi([
 
 const kernelAbi = parseAbi(["function execute(bytes32 execMode,bytes executionCalldata) payable"]);
 const clobAbi = parseAbi([
-  "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint128 bidQuantity,bool askExists,uint128 askPrice,uint128 askQuantity)",
+  "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint256 bidQuantity,bool askExists,uint128 askPrice,uint256 askQuantity)",
 ]);
 
 const monadTestnet = defineChain({

@@ -10,16 +10,17 @@ import { SpotPriceMath } from "./libraries/SpotPriceMath.sol";
 /// the book's stable view API, avoiding a dependency on its private storage layout.
 contract SpotCLOBLens {
     error InvalidMarket();
+    error MinimumQuantityUnrepresentable(uint128 price);
 
     struct MarketSnapshot {
         SpotCLOB.Market market;
         uint64 sequence;
         bool bidExists;
         uint128 bidPrice;
-        uint128 bidQuantity;
+        uint256 bidQuantity;
         bool askExists;
         uint128 askPrice;
-        uint128 askQuantity;
+        uint256 askQuantity;
         ISpotCLOB.PriceLevelView[] bids;
         ISpotCLOB.PriceLevelView[] asks;
     }
@@ -83,6 +84,11 @@ contract SpotCLOBLens {
         SpotCLOB.Market memory market = book.getMarket(baseAsset, quoteAsset);
         if (!market.enabled || price == 0) revert InvalidMarket();
         if (!market.agnosticPricing) return 1;
+        if (
+            SpotPriceMath.quoteAmount(
+                    price, type(uint128).max, market.baseDecimals, market.quoteDecimals
+                ) < SpotPriceMath.minimumQuoteAmount(market.quoteDecimals)
+        ) revert MinimumQuantityUnrepresentable(price);
         return SpotPriceMath.minimumBaseQuantity(price, market.baseDecimals, market.quoteDecimals);
     }
 

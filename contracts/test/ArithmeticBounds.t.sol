@@ -67,33 +67,25 @@ contract ArithmeticBoundsTest {
         _assertConservation(NORMAL_BALANCE);
     }
 
-    function testFuzz_PriceLevelQuantityOverflowRollsBack(uint128 offset, bool makerBuys) public {
-        // A minimum-notional order remains valid while the first level already holds uint128.max.
+    function testFuzz_PriceLevelAggregateExceedsUint128(uint128 offset, bool makerBuys) public {
         uint128 price = uint128(1e30 + uint256(offset % 1e29));
         uint128 minimum = SpotPriceMath.minimumBaseQuantity(price, 18, 6);
         ISpotCLOB.Side side = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
         bytes32 first = _limit(ALICE, side, price, type(uint128).max);
-        bytes32 before = _snapshot(first, price, side);
+        bytes32 second = _limit(CAROL, side, price, minimum);
 
-        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", uint256(0x11)));
-        _limit(CAROL, side, price, minimum);
+        (uint256 total, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
         require(
-            _snapshot(first, price, side) == before, "overflow kept partial escrow or book state"
-        );
-        (uint128 total, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
-        require(
-            total == type(uint128).max && head == first && tail == first,
-            "overflow corrupted the level"
+            total == uint256(type(uint128).max) + minimum && head == first && tail == second,
+            "wide level aggregate or FIFO links incorrect"
         );
 
         vm.prank(ALICE);
         book.cancelOrder(first);
-        bytes32 second = _limit(CAROL, side, price, minimum);
-        require(second == bytes32(uint256(2)), "reverted order consumed an id");
         (total, head, tail) = book.getPriceLevel(poolId, side, price);
         require(
             total == minimum && head == second && tail == second,
-            "level did not recover after overflow"
+            "wide level did not shrink after cancellation"
         );
         _assertConservation(NORMAL_BALANCE);
     }
@@ -213,51 +205,6 @@ contract ArithmeticBoundsTest {
         });
         vm.prank(trader);
         return book.placeLimitOrder(order);
-    }
-
-    function _snapshot(bytes32 orderId, uint128 price, ISpotCLOB.Side side)
-        private
-        view
-        returns (bytes32)
-    {
-        (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
-            book.getOrder(orderId);
-        (uint128 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
-        return keccak256(
-            abi.encode(
-                order,
-                state,
-                quantity,
-                head,
-                tail,
-                book.bookSequence(poolId),
-                _tokenSnapshot(),
-                _lockedSnapshot()
-            )
-        );
-    }
-
-    function _tokenSnapshot() private view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                base.balanceOf(ALICE),
-                base.balanceOf(CAROL),
-                base.balanceOf(address(book)),
-                quote.balanceOf(ALICE),
-                quote.balanceOf(CAROL),
-                quote.balanceOf(address(book))
-            )
-        );
-    }
-
-    function _lockedSnapshot() private view returns (bytes32) {
-        (, uint256 aliceBaseLocked,) = book.balanceOf(ALICE, address(base));
-        (, uint256 aliceQuoteLocked,) = book.balanceOf(ALICE, address(quote));
-        (, uint256 carolBaseLocked,) = book.balanceOf(CAROL, address(base));
-        (, uint256 carolQuoteLocked,) = book.balanceOf(CAROL, address(quote));
-        return keccak256(
-            abi.encode(aliceBaseLocked, aliceQuoteLocked, carolBaseLocked, carolQuoteLocked)
-        );
     }
 
     function _assertConservation(uint256 initialBase) private view {

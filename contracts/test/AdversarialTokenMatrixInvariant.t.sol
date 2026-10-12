@@ -373,7 +373,7 @@ contract AdversarialTokenMatrixHandler {
             expectedQuantity += state.quantity - state.filledQuantity;
         }
 
-        (uint128 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
+        (uint256 quantity, bytes32 head, bytes32 tail) = book.getPriceLevel(poolId, side, price);
         require(
             quantity == expectedQuantity && head == expectedHead && tail == expectedTail,
             "price level differs from tracked orders"

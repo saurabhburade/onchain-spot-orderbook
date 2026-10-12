@@ -98,7 +98,7 @@ contract AuditLivenessFindingsTest {
 
         _marketSell(SELLER, QUANTITY);
 
-        (uint128 quantityAfter, bytes32 headAfter, bytes32 tailAfter) =
+        (uint256 quantityAfter, bytes32 headAfter, bytes32 tailAfter) =
             book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, PRICE);
         require(
             quantityAfter == 0 && headAfter == bytes32(0) && tailAfter == bytes32(0),

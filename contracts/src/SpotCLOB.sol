@@ -92,7 +92,9 @@ contract SpotCLOB is ISpotCLOB {
         uint64 headOrderId;
         uint64 activeHeadOrderId;
         uint64 tailOrderId;
-        uint128 totalQuantity;
+        // At most uint64 order ids can each contribute a uint128 quantity, so uint256 cannot
+        // overflow.
+        uint256 totalQuantity;
     }
 
     struct SideBook {
@@ -562,10 +564,10 @@ contract SpotCLOB is ISpotCLOB {
         returns (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         )
     {
         Market storage market = _markets[id];
@@ -576,7 +578,7 @@ contract SpotCLOB is ISpotCLOB {
     function getPriceLevel(bytes32 id, Side side, uint128 price)
         external
         view
-        returns (uint128 totalQuantity, bytes32 headOrderId, bytes32 tailOrderId)
+        returns (uint256 totalQuantity, bytes32 headOrderId, bytes32 tailOrderId)
     {
         Market storage market = _markets[id];
         uint128 key = _priceToKey(market, price);
@@ -629,10 +631,10 @@ contract SpotCLOB is ISpotCLOB {
         returns (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         )
     {
         uint128 bidKey;

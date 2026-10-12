@@ -447,29 +447,49 @@ contract AuditPricingFindingsTest {
         );
     }
 
-    function testKnownIssue_I03_SaturatedMinimumQuantityCannotSettle() public {
+    function testI03_UnrepresentableMinimumRevertsExplicitly() public {
         (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
             _deployAgnostic(59, 0, 0);
         SpotCLOBLens lens = new SpotCLOBLens();
         AuditPricingActor seller = new AuditPricingActor();
 
-        uint128 minimum = lens.minimumOrderQuantity(book, address(base), address(quote), uint128(1));
-        require(minimum == MAX_UINT128, "minimum quantity did not saturate");
+        uint128 maximumPriceMinimum =
+            lens.minimumOrderQuantity(book, address(base), address(quote), type(uint128).max);
         require(
-            lens.quoteAmount(book, address(base), address(quote), 1, minimum) == 0,
-            "saturated minimum unexpectedly settled"
+            lens.quoteAmount(
+                book, address(base), address(quote), type(uint128).max, maximumPriceMinimum
+            ) >= 1,
+            "representable boundary was rejected"
         );
 
-        _fundBase(book, base, seller, minimum);
+        (bool success, bytes memory reason) = address(lens)
+            .staticcall(
+                abi.encodeCall(
+                    SpotCLOBLens.minimumOrderQuantity,
+                    (book, address(base), address(quote), uint128(1))
+                )
+            );
+        require(!success, "unrepresentable minimum was returned");
+        require(
+            keccak256(reason)
+                == keccak256(
+                    abi.encodeWithSelector(
+                        SpotCLOBLens.MinimumQuantityUnrepresentable.selector, uint128(1)
+                    )
+                ),
+            "wrong unrepresentable-minimum error"
+        );
+
+        _fundBase(book, base, seller, MAX_UINT128);
         require(
             !seller.attemptPlace(
-                book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, minimum
+                book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, MAX_UINT128
             ),
             "unrepresentable minimum quantity was accepted"
         );
     }
 
-    function testKnownIssue_I05_MaxQuantitySaturatesPriceLevel() public {
+    function testI05_MaxQuantityDoesNotSaturatePriceLevel() public {
         (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote, bytes32 poolId) =
             _deployAgnostic(18, 6, 0);
         AuditPricingActor firstSeller = new AuditPricingActor();
@@ -482,17 +502,17 @@ contract AuditPricingFindingsTest {
         bytes32 first = firstSeller.place(
             book, address(base), address(quote), ISpotCLOB.Side.Sell, price, MAX_UINT128
         );
-        require(
-            !secondSeller.attemptPlace(
-                book, address(base), address(quote), ISpotCLOB.Side.Sell, price, minimum
-            ),
-            "second order at saturated level succeeded"
+        bytes32 second = secondSeller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, price, minimum
         );
 
-        (uint128 levelQuantity, bytes32 head, bytes32 tail) =
+        (uint256 levelQuantity, bytes32 head, bytes32 tail) =
             book.getPriceLevel(poolId, ISpotCLOB.Side.Sell, price);
-        require(levelQuantity == MAX_UINT128, "saturated level quantity changed");
-        require(head == first && tail == first, "saturated level links changed");
+        require(
+            levelQuantity == uint256(MAX_UINT128) + minimum,
+            "price-level aggregate did not exceed uint128"
+        );
+        require(head == first && tail == second, "wide level broke FIFO links");
     }
 
     function _legacyFeeScenario(bool split) private returns (uint256 makerProceeds) {

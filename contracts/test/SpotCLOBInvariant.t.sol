@@ -196,10 +196,10 @@ contract SpotCLOBInvariantHandler {
         bool expectedAsk;
         uint128 expectedBidPrice;
         uint128 expectedAskPrice;
-        uint128 expectedBidQuantity;
-        uint128 expectedAskQuantity;
-        uint128[13] memory bidLiquidity;
-        uint128[13] memory askLiquidity;
+        uint256 expectedBidQuantity;
+        uint256 expectedAskQuantity;
+        uint256[13] memory bidLiquidity;
+        uint256[13] memory askLiquidity;
 
         for (uint256 i; i < orderIds.length; ++i) {
             (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
@@ -251,10 +251,10 @@ contract SpotCLOBInvariantHandler {
         (
             bool actualBid,
             uint128 actualBidPrice,
-            uint128 actualBidQuantity,
+            uint256 actualBidQuantity,
             bool actualAsk,
             uint128 actualAskPrice,
-            uint128 actualAskQuantity
+            uint256 actualAskQuantity
         ) = exchange.getBestPrices(registry.pairId(address(base), address(quote)));
         require(actualBid == expectedBid, "bid existence mismatch");
         require(actualAsk == expectedAsk, "ask existence mismatch");
@@ -268,12 +268,12 @@ contract SpotCLOBInvariantHandler {
         }
     }
 
-    function _assertLevelLiquidity(ISpotCLOB.Side side, uint128 price, uint128 expected)
+    function _assertLevelLiquidity(ISpotCLOB.Side side, uint128 price, uint256 expected)
         private
         view
     {
         bytes32 id = exchange.marketId(address(base), address(quote));
-        (uint128 actual,,) = exchange.getPriceLevel(id, side, price);
+        (uint256 actual,,) = exchange.getPriceLevel(id, side, price);
         require(actual == expected, "price-level sum mismatch");
         require(
             exchange.isPriceLevelActive(id, side, price) == (expected != 0),
@@ -443,18 +443,18 @@ contract SpotCLOBInvariantTest {
     function _assertBest(
         bool expectedBid,
         uint128 expectedBidPrice,
-        uint128 expectedBidQuantity,
+        uint256 expectedBidQuantity,
         bool expectedAsk,
         uint128 expectedAskPrice,
-        uint128 expectedAskQuantity
+        uint256 expectedAskQuantity
     ) private view {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = exchange.getBestPrices(registry.pairId(address(base), address(quote)));
         require(bidExists == expectedBid, "wrong bid existence");
         require(askExists == expectedAsk, "wrong ask existence");
@@ -475,11 +475,11 @@ contract SpotCLOBInvariantTest {
     function _assertLevel(
         uint128 price,
         ISpotCLOB.Side side,
-        uint128 expectedQuantity,
+        uint256 expectedQuantity,
         bytes32 expectedHead,
         bytes32 expectedTail
     ) private view {
-        (uint128 quantity, bytes32 head, bytes32 tail) =
+        (uint256 quantity, bytes32 head, bytes32 tail) =
             exchange.getPriceLevel(_poolId(), side, price);
         require(quantity == expectedQuantity, "wrong price level quantity");
         require(head == expectedHead, "wrong price level head");

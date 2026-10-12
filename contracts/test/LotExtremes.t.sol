@@ -138,7 +138,7 @@ contract LotExtremesTest {
 
         _placeAsk(base, quote, book, lotSize, lotPrice);
 
-        (,,, bool askExists, uint128 bestAsk, uint128 askQuantity) =
+        (,,, bool askExists, uint128 bestAsk, uint256 askQuantity) =
             book.getBestPrices(book.marketId(address(base), address(quote)));
         require(askExists, "fractional-lot ask missing");
         require(bestAsk == lotPrice && askQuantity == 1, "fractional-lot ask changed");
@@ -152,7 +152,7 @@ contract LotExtremesTest {
 
         _placeAsk(base, quote, book, lotSize, lotPrice);
 
-        (,,, bool askExists, uint128 bestAsk, uint128 askQuantity) =
+        (,,, bool askExists, uint128 bestAsk, uint256 askQuantity) =
             book.getBestPrices(book.marketId(address(base), address(quote)));
         require(askExists, "billion-token ask missing");
         require(bestAsk == lotPrice && askQuantity == 1, "billion-token ask changed");

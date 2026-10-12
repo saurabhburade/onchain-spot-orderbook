@@ -286,7 +286,7 @@ contract SpotCLOBTest {
         _assertOrder(askAt100, 1, ISpotCLOB.OrderStatus.PartiallyFilled);
         _assertOrder(buyAt100, 4, ISpotCLOB.OrderStatus.Filled);
 
-        (bool bidExists,,, bool askExists, uint128 askPrice, uint128 askQuantity) =
+        (bool bidExists,,, bool askExists, uint128 askPrice, uint256 askQuantity) =
             exchange.getBestPrices(poolId);
         require(!bidExists, "unexpected bid");
         require(askExists && askPrice == 100 && askQuantity == 1, "wrong best ask");
@@ -613,7 +613,7 @@ contract SpotCLOBTest {
         bytes32 buy = _place(buyer, ISpotCLOB.Side.Buy, 100, 5, 2);
 
         _assertOrder(buy, 2, ISpotCLOB.OrderStatus.PartiallyFilled);
-        (bool exists, uint128 price, uint128 quantity,,,) = exchange.getBestPrices(poolId);
+        (bool exists, uint128 price, uint256 quantity,,,) = exchange.getBestPrices(poolId);
         require(exists && price == 100 && quantity == 3, "remainder did not rest as best bid");
         _assertBalance(address(buyer), address(quote), 999_500, 300);
     }
@@ -648,7 +648,7 @@ contract SpotCLOBTest {
         require(asks[0].price == 400 && asks[0].quantity == 9, "wrong first ask");
         require(asks[1].price == 70_000 && asks[1].quantity == 6, "wrong second ask");
 
-        (uint128 total, bytes32 head, bytes32 tail) =
+        (uint256 total, bytes32 head, bytes32 tail) =
             exchange.getPriceLevel(poolId, ISpotCLOB.Side.Sell, 400);
         require(total == 9 && head == firstAsk && tail == secondAt400, "wrong level metadata");
     }
@@ -768,7 +768,7 @@ contract SpotCLOBTest {
         bytes32 tail = _place(sellerA, ISpotCLOB.Side.Sell, 500, 3, 3);
 
         sellerA.cancel(exchange, middle);
-        (uint128 total, bytes32 activeHead, bytes32 activeTail) =
+        (uint256 total, bytes32 activeHead, bytes32 activeTail) =
             exchange.getPriceLevel(poolId, ISpotCLOB.Side.Sell, 500);
         require(total == 4 && activeHead == head && activeTail == tail, "middle unlink failed");
         (, bytes32 headNext, bool headResting) = exchange.getOrderLinks(head);

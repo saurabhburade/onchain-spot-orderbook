@@ -67,7 +67,7 @@ interface ISpotCLOB {
 
     struct PriceLevelView {
         uint128 price;
-        uint128 quantity;
+        uint256 quantity;
     }
 
     struct UserOrderView {
@@ -253,16 +253,16 @@ interface ISpotCLOB {
         returns (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         );
 
     function getPriceLevel(bytes32 poolId, Side side, uint128 price)
         external
         view
-        returns (uint128 totalQuantity, bytes32 headOrderId, bytes32 tailOrderId);
+        returns (uint256 totalQuantity, bytes32 headOrderId, bytes32 tailOrderId);
 
     function getOrderLinks(bytes32 orderId)
         external

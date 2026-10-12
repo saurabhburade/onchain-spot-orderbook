@@ -95,8 +95,8 @@ contract AgnosticPropertiesTest {
     function testOnePriceUnitImprovementJumpsExistingBidQueue() public {
         bytes32 earlier = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18);
         bytes32 improved = _limit(BOB, ISpotCLOB.Side.Buy, 1e18 + 1, 1e18);
-        (uint128 firstQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18);
-        (uint128 secondQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18 + 1);
+        (uint256 firstQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18);
+        (uint256 secondQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18 + 1);
         require(firstQuantity == 1e18 && secondQuantity == 1e18, "adjacent prices aggregated");
         (, uint128 filled, uint256 gross) =
             _market(CAROL, ISpotCLOB.Side.Sell, 1e18, 0, 1e18, 0, 64);
@@ -173,7 +173,7 @@ contract AgnosticPropertiesTest {
         (,, bool resting) = book.getOrderLinks(maker);
         require(state.status == ISpotCLOB.OrderStatus.PartiallyFilled, "valid remainder was closed");
         require(resting, "valid remainder was unlinked");
-        (uint128 levelQuantity,,) = book.getPriceLevel(poolId, makerSide, 1e18);
+        (uint256 levelQuantity,,) = book.getPriceLevel(poolId, makerSide, 1e18);
         require(levelQuantity == remainder, "valid remainder left wrong level quantity");
         (, uint256 locked,) = book.balanceOf(ALICE, makerBuys ? address(quote) : address(base));
         require(locked != 0, "valid remainder lost escrow");

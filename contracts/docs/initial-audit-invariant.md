@@ -65,9 +65,9 @@ certificate or a guarantee that no other vulnerabilities exist.
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
 | I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Per-order fee carry plus a `0.1` quote-token new-order floor |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
-| I-03 | Informational | Saturated minimum quantity can still be unfillable | **Open** | Reproduced; the lens still returns `type(uint128).max` |
-| I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Open** | The affected NatSpec still requires correction |
-| I-05 | Informational | One maximum order can saturate a `uint128` price level | **Open** | Reproduced; the level aggregate remains `uint128` |
+| I-03 | Informational | Saturated minimum quantity can still be unfillable | **Fixed** | The lens explicitly reverts when no `uint128` quantity can meet the admission floor |
+| I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Fixed** | Both factory interfaces now document the fee as per-side |
+| I-05 | Informational | One maximum order can saturate a `uint128` price level | **Fixed** | Price-level aggregates and their view types are `uint256` |
 
 ## Detailed findings and remediation
 
@@ -302,36 +302,39 @@ Coverage: `testKnownIssue_I02_ManyPartialFillsPayLessQuoteThanOneFill` in
 ### I-03 — Saturated minimum quantity is unfillable
 
 **Severity:** Informational  
-**Status:** Open
+**Status:** Fixed
 
-When the mathematical minimum quantity exceeds `uint128`, `minimumBaseQuantity` returns
+When the mathematical minimum quantity exceeds `uint128`, `minimumBaseQuantity` saturates at
 `type(uint128).max`. At the affected decimal and price relationship, even that value settles zero
-quote and cannot be placed. The lens therefore presents a value that looks actionable but is not.
+quote and cannot be placed. The lens now checks this condition and reverts with
+`MinimumQuantityUnrepresentable(price)` instead of presenting a value that looks actionable.
 
-Coverage: `testKnownIssue_I03_SaturatedMinimumQuantityCannotSettle` in
+Coverage: `testI03_UnrepresentableMinimumRevertsExplicitly` in
 [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
 
 ### I-04 — Trading-fee NatSpec is inaccurate
 
 **Severity:** Informational  
-**Status:** Open
+**Status:** Fixed
 
 The `createPairWithFee` NatSpec in [`ISpotCLOBFactory`](../src/ISpotCLOBFactory.sol) and
-[`SpotCLOBFactory`](../src/SpotCLOBFactory.sol) calls `tradingFeeBps` a taker fee, while settlement
-charges the configured per-side rate to both maker and taker. The documentation should describe it
-as a per-side trading fee.
+[`SpotCLOBFactory`](../src/SpotCLOBFactory.sol) previously called `tradingFeeBps` a taker fee, while
+settlement charges the configured rate to both maker and taker. Both comments now describe it as a
+per-side trading fee.
 
 ### I-05 — Price-level quantity saturation
 
 **Severity:** Informational  
-**Status:** Open
+**Status:** Fixed
 
-`PriceLevel.totalQuantity` is `uint128`, so one maximum-size order saturates the aggregate and
-prevents another order from resting at that exact price. Adjacent prices remain usable, and the
-attack requires funding the full maximum quantity at the chosen price.
+`PriceLevel.totalQuantity` was `uint128`, so one maximum-size order saturated the aggregate and
+prevented another order from resting at that exact price. The aggregate and all corresponding view
+quantities are now `uint256`; individual orders remain bounded by `uint128`.
 
-Coverage: `testKnownIssue_I05_MaxQuantitySaturatesPriceLevel` in
-[`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
+Coverage: `testI05_MaxQuantityDoesNotSaturatePriceLevel` in
+[`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol) and the 256-case
+`testFuzz_PriceLevelAggregateExceedsUint128` property in
+[`ArithmeticBounds.t.sol`](../test/ArithmeticBounds.t.sol).
 
 ## Additional hardening completed
 
@@ -413,7 +416,7 @@ pnpm check
 - Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, I-01, and the
   transfer-tax changes require a new implementation/factory deployment and migration; merging this
   branch does not change already deployed books.
-- The optimized `SpotCLOB` runtime is 31,306 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 31,041 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
 - Limit orders are GTC-only and the order ABI has no expiry field.

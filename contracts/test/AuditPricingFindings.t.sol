@@ -299,13 +299,133 @@ contract AuditPricingFindingsTest {
         require(book.accruedTradingFees(address(quote)) == 0, "fee charged without a fill");
     }
 
-    function testKnownIssue_I01_SplittingSubThresholdFillsReducesFees() public {
-        uint256 singleFillFees = _legacyFeeScenario(false);
-        uint256 splitFillFees = _legacyFeeScenario(true);
+    function testI01_MakerOrderCarriesFeeAcrossSplitFills() public {
+        uint256 singleFillMakerProceeds = _legacyFeeScenario(false);
+        uint256 splitFillMakerProceeds = _legacyFeeScenario(true);
 
-        require(singleFillFees == 2, "single fill did not charge maker and taker fees");
-        require(splitFillFees == 0, "split fills unexpectedly charged full fees");
-        require(splitFillFees < singleFillFees, "splitting did not reduce accrued fees");
+        require(singleFillMakerProceeds == 9, "single fill maker fee changed");
+        require(
+            splitFillMakerProceeds == singleFillMakerProceeds,
+            "splitting reduced the maker order's fee"
+        );
+    }
+
+    function testI01_TakerOrderCarriesFeeAcrossMultipleMakers() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
+            _deployAgnostic(0, 0, 1_000);
+        AuditPricingActor sellerA = new AuditPricingActor();
+        AuditPricingActor sellerB = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+
+        _fundBase(book, base, sellerA, 5);
+        _fundBase(book, base, sellerB, 5);
+        _fundQuote(book, quote, buyer, 11);
+        sellerA.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+        );
+        sellerB.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+        );
+
+        bytes32 bid = buyer.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 10
+        );
+
+        require(book.accruedTradingFees(address(quote)) == 1, "taker fee was split by maker");
+        require(book.orderFeeRemainder(bid) == 0, "taker remainder not consumed");
+        require(quote.balanceOf(address(buyer)) == 0, "buyer did not pay aggregate taker fee");
+    }
+
+    function testI01_SubAtomFeeCarriesAcrossFillsOfSameOrder() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
+            _deployAgnostic(0, 0, 1_000);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+
+        _fundBase(book, base, seller, 10);
+        _fundQuote(book, quote, buyer, 10);
+
+        bytes32 ask = seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 10
+        );
+        buyer.marketBuy(book, address(base), address(quote), 5, ONE_USDC_PER_TOKEN);
+
+        require(book.accruedTradingFees(address(quote)) == 0, "sub-atom fee charged early");
+        require(book.orderFeeRemainder(ask) == 5_000, "maker remainder not carried");
+
+        buyer.marketBuy(book, address(base), address(quote), 5, ONE_USDC_PER_TOKEN);
+
+        require(book.accruedTradingFees(address(quote)) == 1, "carried maker fee not charged");
+        require(book.orderFeeRemainder(ask) == 0, "maker remainder not consumed");
+        require(quote.balanceOf(address(seller)) == 9, "seller net proceeds incorrect");
+        require(quote.balanceOf(address(buyer)) == 0, "buyer quote debit incorrect");
+    }
+
+    function testI01_CarriedFeeDoesNotUnderfundRestingBid() public {
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
+            _deployAgnostic(0, 0, 1_000);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+
+        _fundBase(book, base, seller, 10);
+        _fundQuote(book, quote, buyer, 11);
+        bytes32 bid = buyer.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 10
+        );
+
+        seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+        );
+        (, ISpotCLOB.OrderState memory partialState) = book.getOrder(bid);
+        require(
+            partialState.status == ISpotCLOB.OrderStatus.PartiallyFilled,
+            "bid did not partially fill"
+        );
+        (, uint256 lockedAfterFirst,) = book.balanceOf(address(buyer), address(quote));
+        require(lockedAfterFirst == 6, "bid released carried-fee reserve");
+
+        seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+        );
+        (, ISpotCLOB.OrderState memory filled) = book.getOrder(bid);
+        require(filled.status == ISpotCLOB.OrderStatus.Filled, "carried fee froze resting bid");
+        (, uint256 lockedAfterSecond,) = book.balanceOf(address(buyer), address(quote));
+        require(lockedAfterSecond == 0, "filled bid retained reserve");
+        require(book.accruedTradingFees(address(quote)) == 1, "resting-bid fees incorrect");
+        require(book.orderFeeRemainder(bid) == 0, "resting-bid remainder not consumed");
+    }
+
+    function testFuzz_I01MakerFeeIsInvariantToFillPartition(uint16 totalSeed, uint16 splitSeed)
+        public
+    {
+        uint128 total = uint128(2 + totalSeed % 999);
+        uint128 first = uint128(1 + splitSeed % (total - 1));
+        uint128 second = total - first;
+        (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
+            _deployAgnostic(0, 0, 1_000);
+        AuditPricingActor seller = new AuditPricingActor();
+        AuditPricingActor buyer = new AuditPricingActor();
+
+        _fundBase(book, base, seller, total);
+        _fundQuote(book, quote, buyer, uint256(total) + uint256(total) / 10 + 1);
+        bytes32 ask = seller.place(
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, total
+        );
+        buyer.marketBuy(book, address(base), address(quote), first, ONE_USDC_PER_TOKEN);
+        buyer.marketBuy(book, address(base), address(quote), second, ONE_USDC_PER_TOKEN);
+
+        uint256 expectedMakerFee = uint256(total) / 10;
+        uint256 expectedTakerFees = uint256(first) / 10 + uint256(second) / 10;
+        uint16 expectedRemainder = uint16((uint256(total) % 10) * 1_000);
+        require(
+            book.accruedTradingFees(address(quote)) == expectedMakerFee + expectedTakerFees,
+            "partition changed aggregate fee"
+        );
+        require(book.orderFeeRemainder(ask) == expectedRemainder, "maker remainder mismatch");
+        require(
+            quote.balanceOf(address(seller)) == uint256(total) - expectedMakerFee,
+            "maker proceeds depend on partition"
+        );
     }
 
     function testKnownIssue_I02_ManyPartialFillsPayLessQuoteThanOneFill() public {
@@ -367,7 +487,7 @@ contract AuditPricingFindingsTest {
         require(head == first && tail == first, "saturated level links changed");
     }
 
-    function _legacyFeeScenario(bool split) private returns (uint256) {
+    function _legacyFeeScenario(bool split) private returns (uint256 makerProceeds) {
         SpotCLOBFactory factory = new SpotCLOBFactory();
         AuditPricingToken base = new AuditPricingToken(0);
         AuditPricingToken quote = new AuditPricingToken(0);
@@ -378,21 +498,18 @@ contract AuditPricingFindingsTest {
         );
         SpotCLOB book = SpotCLOB(deployed);
         AuditPricingActor sellerA = new AuditPricingActor();
-        AuditPricingActor sellerB = new AuditPricingActor();
         AuditPricingActor buyer = new AuditPricingActor();
-        _fundBase(book, base, sellerA, 5);
-        _fundBase(book, base, sellerB, 5);
+        _fundBase(book, base, sellerA, 10);
         _fundQuote(book, quote, buyer, 11);
 
+        sellerA.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, 10);
         if (split) {
-            sellerA.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, 5);
-            sellerB.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, 5);
+            buyer.marketBuy(book, address(base), address(quote), 5, 1);
+            buyer.marketBuy(book, address(base), address(quote), 5, 1);
         } else {
-            _fundBase(book, base, sellerA, 5);
-            sellerA.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, 1, 10);
+            buyer.marketBuy(book, address(base), address(quote), 10, 1);
         }
-        buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 1, 10);
-        return book.accruedTradingFees(address(quote));
+        return quote.balanceOf(address(sellerA));
     }
 
     function _partialAskScenario(bool fragmented) private returns (uint256) {

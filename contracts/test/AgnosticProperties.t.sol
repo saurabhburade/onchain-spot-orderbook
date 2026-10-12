@@ -137,7 +137,7 @@ contract AgnosticPropertiesTest {
         makers[cancelled].cancelled = true;
         total -= makers[cancelled].quantity;
         uint128 requested = uint128(1 + (seed >> 8) % (total / 1e15)) * 1e15;
-        (uint256 expectedQuote, uint256 expectedFees) =
+        (uint256 expectedQuote, uint256 expectedTakerFee, uint256 expectedMakerFees) =
             _referenceMatching(makers, requested, makerBuys);
         (, uint128 filled, uint256 gross) = _market(
             BOB,
@@ -150,7 +150,8 @@ contract AgnosticPropertiesTest {
         );
         require(filled == requested && gross == expectedQuote, "market result differs from model");
         require(
-            book.accruedTradingFees(address(quote)) == expectedFees * 2, "per-fill fee mismatch"
+            book.accruedTradingFees(address(quote)) == expectedTakerFee + expectedMakerFees,
+            "per-order fee mismatch"
         );
         for (uint256 i; i < makers.length; ++i) {
             (, ISpotCLOB.OrderState memory state) = book.getOrder(makers[i].id);
@@ -162,8 +163,8 @@ contract AgnosticPropertiesTest {
         require(
             quote.balanceOf(BOB)
                 == (makerBuys
-                        ? INITIAL + expectedQuote - expectedFees
-                        : INITIAL - expectedQuote - expectedFees),
+                        ? INITIAL + expectedQuote - expectedTakerFee
+                        : INITIAL - expectedQuote - expectedTakerFee),
             "wrong taker fee or wallet settlement"
         );
         _assertSolvent();
@@ -232,7 +233,7 @@ contract AgnosticPropertiesTest {
     function _referenceMatching(Maker[8] memory makers, uint128 remaining, bool makerBuys)
         private
         pure
-        returns (uint256 gross, uint256 fees)
+        returns (uint256 gross, uint256 takerFee, uint256 makerFees)
     {
         while (remaining != 0) {
             uint256 best = makers.length;
@@ -252,7 +253,11 @@ contract AgnosticPropertiesTest {
             remaining -= fill;
             uint256 quoteFilled = uint256(makers[best].price) * fill / 1e30;
             gross += quoteFilled;
-            fees += quoteFilled * FEE_BPS / 10_000;
+        }
+        takerFee = gross * FEE_BPS / 10_000;
+        for (uint256 i; i < makers.length; ++i) {
+            uint256 makerGross = uint256(makers[i].price) * makers[i].expectedFill / 1e30;
+            makerFees += makerGross * FEE_BPS / 10_000;
         }
     }
 

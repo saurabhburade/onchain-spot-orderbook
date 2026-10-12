@@ -590,10 +590,10 @@ contract SpotCLOBTest {
             "minimum accepted more than the actual per-fill output"
         );
         (uint128 filled, uint256 grossQuote) = sellerA.marketWithMinReceive(
-            exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 999, 1_998
+            exchange, address(base), address(quote), ISpotCLOB.Side.Sell, 2, 999, 1_997
         );
         require(filled == 2 && grossQuote == 1_998, "wrong multi-fill result");
-        _assertBalance(address(sellerA), address(quote), 1_998, 0);
+        _assertBalance(address(sellerA), address(quote), 1_997, 0);
     }
 
     function testMarketOrderOnEmptyBookRevertsAtomically() public {

@@ -31,8 +31,10 @@ contract AgnosticInvariantHandler {
     mapping(bytes32 id => ISpotCLOB.OrderStatus status) private priorStatus;
     mapping(bytes32 id => uint256 amount) private feeReserves;
     mapping(bytes32 id => uint16 feeBps) private orderFeeBps;
+    mapping(bytes32 id => uint16 remainder) private expectedFeeRemainder;
     uint16 private currentFeeBps = INITIAL_FEE_BPS;
     uint256 private expectedFees;
+    uint16 private activeTakerFeeBps;
 
     uint256 public placements;
     uint256 public marketFills;
@@ -122,6 +124,12 @@ contract AgnosticInvariantHandler {
             baseWallets += base.balanceOf(traders[i]);
             quoteWallets += quote.balanceOf(traders[i]);
         }
+        for (uint256 i; i < orderIds.length; ++i) {
+            require(
+                book.orderFeeRemainder(orderIds[i]) == expectedFeeRemainder[orderIds[i]],
+                "fee remainder differs from model"
+            );
+        }
         require(book.accruedTradingFees(address(quote)) == expectedFees, "ghost fee mismatch");
         require(book.accruedTradingFees(address(base)) == 0, "base fees accrued");
         require(
@@ -209,6 +217,7 @@ contract AgnosticInvariantHandler {
         uint128 multiplier = (seed >> 24) & 1 == 0 ? 1 : 10_000;
         uint128 quantity = minimum * uint128(1 + (seed >> 16) % 4) * multiplier;
         address trader = traders[(seed >> 32) % traders.length];
+        activeTakerFeeBps = currentFeeBps;
         ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
             trader: trader,
             baseAsset: address(base),
@@ -234,6 +243,7 @@ contract AgnosticInvariantHandler {
             quantity = (seed >> 16) & 1 == 0 ? minimum : makers[0].quantity + minimum;
         }
         address trader = traders[(seed >> 32) % traders.length];
+        activeTakerFeeBps = currentFeeBps;
         ISpotCLOB.MarketOrder memory order = ISpotCLOB.MarketOrder({
             trader: trader,
             baseAsset: address(base),
@@ -284,6 +294,7 @@ contract AgnosticInvariantHandler {
     }
 
     function _observeExistingOrders() private {
+        uint256 takerQuote;
         for (uint256 i; i < orderIds.length; ++i) {
             bytes32 id = orderIds[i];
             (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) =
@@ -302,14 +313,17 @@ contract AgnosticInvariantHandler {
                     "closed order resurrected"
                 );
             }
-            // Each existing maker can fill at most once per incoming order. Count maker deltas
-            // only, so the incoming taker's cumulative quote does not double-count or hide
-            // rounding.
             uint256 quoteDelta = state.filledQuoteQuantity - priorQuoteFilled[id];
-            uint256 makerFee = quoteDelta * orderFeeBps[id] / 10_000;
-            uint256 takerFee = quoteDelta * currentFeeBps / 10_000;
-            expectedFees += makerFee + takerFee;
+            uint256 makerFee = _consumeExpectedFee(id, orderFeeBps[id], quoteDelta);
+            expectedFees += makerFee;
+            takerQuote += quoteDelta;
             if (order.side == ISpotCLOB.Side.Buy) feeReserves[id] -= makerFee;
+        }
+        expectedFees += _fee(takerQuote, activeTakerFeeBps);
+
+        for (uint256 i; i < orderIds.length; ++i) {
+            bytes32 id = orderIds[i];
+            (, ISpotCLOB.OrderState memory state) = book.getOrder(id);
             (,, bool resting) = book.getOrderLinks(id);
             if (!resting) feeReserves[id] = 0;
             _remember(id, state);
@@ -322,10 +336,15 @@ contract AgnosticInvariantHandler {
         }
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) = book.getOrder(id);
         orderFeeBps[id] = currentFeeBps;
+        expectedFeeRemainder[id] =
+            uint16(((state.filledQuoteQuantity % 10_000) * currentFeeBps) % 10_000);
         (,, bool resting) = book.getOrderLinks(id);
         if (resting && order.side == ISpotCLOB.Side.Buy) {
-            feeReserves[id] =
-                _quote(order.price, state.quantity - state.filledQuantity) * currentFeeBps / 10_000;
+            feeReserves[id] = _previewFee(
+                _quote(order.price, state.quantity - state.filledQuantity),
+                currentFeeBps,
+                expectedFeeRemainder[id]
+            );
         }
         _remember(id, state);
         orderIds.push(id);
@@ -392,6 +411,28 @@ contract AgnosticInvariantHandler {
 
     function _quote(uint128 price, uint128 quantity) private pure returns (uint256) {
         return uint256(price) * quantity / 1e30;
+    }
+
+    function _consumeExpectedFee(bytes32 id, uint16 feeBps, uint256 quoteAmount)
+        private
+        returns (uint256 fee)
+    {
+        uint256 numerator = (quoteAmount % 10_000) * feeBps + expectedFeeRemainder[id];
+        fee = (quoteAmount / 10_000) * feeBps + numerator / 10_000;
+        expectedFeeRemainder[id] = uint16(numerator % 10_000);
+    }
+
+    function _previewFee(uint256 quoteAmount, uint16 feeBps, uint16 priorRemainder)
+        private
+        pure
+        returns (uint256 fee)
+    {
+        uint256 numerator = (quoteAmount % 10_000) * feeBps + priorRemainder;
+        fee = (quoteAmount / 10_000) * feeBps + numerator / 10_000;
+    }
+
+    function _fee(uint256 quoteAmount, uint16 feeBps) private pure returns (uint256) {
+        return (quoteAmount / 10_000) * feeBps + ((quoteAmount % 10_000) * feeBps) / 10_000;
     }
 }
 

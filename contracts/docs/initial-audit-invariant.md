@@ -16,8 +16,8 @@
 
 The initial review reported eleven findings: one high-severity, three medium-severity, two
 low-severity, and five informational findings. This branch fixes the high-severity finding, all
-three medium-severity findings, and both low-severity findings. The five informational findings
-remain open with regression tests preserving each known behavior.
+three medium-severity findings, both low-severity findings, and one informational finding. The
+remaining four informational findings have regression tests preserving each known behavior.
 
 The remediation also adds support for conventional recipient-tax tokens, aggregate escrow
 liability accounting, adversarial token-behavior tests, and three stateful invariant campaigns.
@@ -27,8 +27,8 @@ liability accounting, adversarial token-behavior tests, and three stateful invar
 | High | 1 | 1 | 0 |
 | Medium | 3 | 3 | 0 |
 | Low | 2 | 2 | 0 |
-| Informational | 5 | 0 | 5 |
-| **Total** | **11** | **6** | **5** |
+| Informational | 5 | 1 | 4 |
+| **Total** | **11** | **7** | **4** |
 
 ### Status definitions
 
@@ -63,7 +63,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
 | L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
-| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Open** | Reproduced; cumulative fee accounting is not implemented |
+| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Each order carries its fractional BPS fee numerator across fills |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
 | I-03 | Informational | Saturated minimum quantity can still be unfillable | **Open** | Reproduced; the lens still returns `type(uint128).max` |
 | I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Open** | The affected NatSpec still requires correction |
@@ -243,14 +243,31 @@ unsupported mutable-token behavior because ERC-20 exposes no reliable on-chain p
 ### I-01 — Per-fill fee flooring
 
 **Severity:** Informational  
-**Status:** Open
+**Status:** Fixed
 
-Fees are rounded down independently for every fill. Splitting volume into sub-threshold fills can
-therefore reduce the aggregate fee, although the loss is less than one quote atom per side per fill
-and the transaction cost makes deliberate exploitation uneconomic in the tested environment.
+Each order now carries its fractional BPS fee numerator across fills. Once the accumulated
+remainder reaches the 10,000 BPS denominator, one quote-token atom is charged. Splitting one order
+across many fills therefore produces the same maker fee and proceeds as filling that order once.
+Resting bid reserves preview the carried remainder, so accumulating a fee cannot underfund or
+freeze the bid.
 
-Coverage: `testKnownIssue_I01_SplittingSubThresholdFillsReducesFees` in
-[`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
+The accumulator is deliberately order-local. A completed or cancelled order can retain a final
+fraction smaller than one quote atom, and separate orders do not share that fraction. A
+trader-wide accumulator was rejected because unrelated orders could replenish the accumulator and
+make an older resting bid's finite fee reserve insufficient.
+
+Regression coverage:
+
+- `testI01_MakerOrderCarriesFeeAcrossSplitFills`;
+- `testI01_TakerOrderCarriesFeeAcrossMultipleMakers`;
+- `testI01_SubAtomFeeCarriesAcrossFillsOfSameOrder`;
+- `testI01_CarriedFeeDoesNotUnderfundRestingBid`; and
+- `testFuzz_I01MakerFeeIsInvariantToFillPartition` in
+  [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
+
+The wide-price stateful invariant independently models each order's fee remainder and verifies it
+against the contract after mixed placement, matching, fee-update, cancellation, and withdrawal
+actions.
 
 ### I-02 — Fragmented quote rounding
 
@@ -351,7 +368,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **184 passed, 0 failed, 2 intentionally skipped**;
+- **188 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.
@@ -375,23 +392,24 @@ pnpm check
 
 ## Deployment and residual-risk notes
 
-- Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, and the
+- Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, I-01, and the
   transfer-tax changes require a new implementation/factory deployment and migration; merging this
   branch does not change already deployed books.
-- The optimized `SpotCLOB` runtime is 30,889 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 31,196 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
 - Limit orders are GTC-only and the order ABI has no expiry field.
 - Positive rebase surplus is not distributed to order owners.
 - Direction-dependent fees, reflection/reward, and malicious mutable-token accounting remain
   unsupported.
-- The open informational findings should remain visible in release notes and integration
+- The four open informational findings should remain visible in release notes and integration
   documentation until they are fixed.
 
 ## Conclusion
 
-The branch removes the reported high-severity liveness failure and fixes all three medium-severity
-and both low-severity findings with explicit regression and invariant coverage. The remaining five
-findings concern rounding, representability, or documentation. They are not silently suppressed:
-each executable behavior is reproduced by a named test, and the mixed adversarial invariant
-continuously checks its interaction with the remediated accounting and matching paths.
+The branch removes the reported high-severity liveness failure and fixes all three medium-severity,
+both low-severity, and one informational finding with explicit regression and invariant coverage.
+The remaining four findings concern rounding, representability, or documentation. They are not
+silently suppressed: each executable behavior is reproduced by a named test, and the mixed
+adversarial invariant continuously checks its interaction with the remediated accounting and
+matching paths.

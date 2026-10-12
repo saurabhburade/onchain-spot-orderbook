@@ -117,6 +117,7 @@ contract SpotCLOB is ISpotCLOB {
         uint64 nextOrderId;
         uint64 nextUserOrderId;
         uint16 feeBps;
+        uint16 feeRemainder;
         Side side;
         OrderStatus status;
         OrderKind kind;
@@ -437,6 +438,12 @@ contract SpotCLOB is ISpotCLOB {
         StoredOrder storage stored = _orders[uint64(rawOrderId)];
         if (stored.trader == address(0)) return (order, state);
         return _readOrder(stored);
+    }
+
+    function orderFeeRemainder(bytes32 externalOrderId) external view override returns (uint16) {
+        uint256 rawOrderId = uint256(externalOrderId);
+        if (rawOrderId == 0 || rawOrderId > type(uint64).max) return 0;
+        return _orders[uint64(rawOrderId)].feeRemainder;
     }
 
     function getUserOrderIds(
@@ -1016,8 +1023,8 @@ contract SpotCLOB is ISpotCLOB {
     ) private returns (FeeAmounts memory fees) {
         uint256 tradedQuote = _quoteAmount(market, executionPrice, quantity);
         uint256 tradedBase = _baseAmount(market, quantity);
-        fees.taker = _tradingFee(tradedQuote, taker.feeBps);
-        fees.maker = _tradingFee(tradedQuote, maker.feeBps);
+        fees.taker = _consumeTradingFee(taker, tradedQuote);
+        fees.maker = _consumeTradingFee(maker, tradedQuote);
 
         if (taker.side == Side.Buy) {
             uint256 reservedQuote = _consumeBuyEscrow(taker, market, quantity);
@@ -1061,8 +1068,8 @@ contract SpotCLOB is ISpotCLOB {
     ) private returns (FeeAmounts memory fees) {
         uint256 tradedQuote = _quoteAmount(market, executionPrice, quantity);
         uint256 tradedBase = _baseAmount(market, quantity);
-        fees.taker = _tradingFee(tradedQuote, taker.feeBps);
-        fees.maker = _tradingFee(tradedQuote, maker.feeBps);
+        fees.taker = _consumeTradingFee(taker, tradedQuote);
+        fees.maker = _consumeTradingFee(maker, tradedQuote);
 
         if (taker.side == Side.Buy) {
             _decreaseLocked(maker.trader, market.baseAsset, tradedBase);
@@ -1101,7 +1108,9 @@ contract SpotCLOB is ISpotCLOB {
 
     function _releaseFeeReserve(StoredOrder storage order, Market storage market) private {
         uint256 target = order.side == Side.Buy
-            ? _tradingFee(_quoteAmount(market, order.price, order.remaining), order.feeBps)
+            ? _previewTradingFee(
+                _quoteAmount(market, order.price, order.remaining), order.feeBps, order.feeRemainder
+            )
             : 0;
         uint256 amount = order.feeReserve - target;
         if (amount == 0) return;
@@ -1115,7 +1124,9 @@ contract SpotCLOB is ISpotCLOB {
         private
     {
         uint256 target = order.side == Side.Buy
-            ? _tradingFee(_quoteAmount(market, order.price, order.remaining), order.feeBps)
+            ? _previewTradingFee(
+                _quoteAmount(market, order.price, order.remaining), order.feeBps, order.feeRemainder
+            )
             : 0;
         uint256 amount = order.feeReserve - target;
         if (amount == 0) return;
@@ -1167,6 +1178,28 @@ contract SpotCLOB is ISpotCLOB {
         uint256 whole = quoteQuantity / BPS_DENOMINATOR;
         uint256 remainder = quoteQuantity % BPS_DENOMINATOR;
         return whole * tradingFeeBps + (remainder * tradingFeeBps) / BPS_DENOMINATOR;
+    }
+
+    function _previewTradingFee(uint256 quoteQuantity, uint16 tradingFeeBps, uint16 priorRemainder)
+        private
+        pure
+        returns (uint256 fee)
+    {
+        uint256 numerator = (quoteQuantity % BPS_DENOMINATOR) * tradingFeeBps + priorRemainder;
+        fee = (quoteQuantity / BPS_DENOMINATOR) * tradingFeeBps + numerator / BPS_DENOMINATOR;
+    }
+
+    /// @dev Carries the sub-atom BPS numerator across fills of one order. The quotient split keeps
+    /// the multiplication bounded for full-width quote amounts, while order locality ensures a
+    /// resting bid's snapshotted fee reserve always covers its future fills.
+    function _consumeTradingFee(StoredOrder storage order, uint256 quoteQuantity)
+        private
+        returns (uint256 fee)
+    {
+        uint256 numerator =
+            (quoteQuantity % BPS_DENOMINATOR) * order.feeBps + order.feeRemainder;
+        fee = (quoteQuantity / BPS_DENOMINATOR) * order.feeBps + numerator / BPS_DENOMINATOR;
+        order.feeRemainder = uint16(numerator % BPS_DENOMINATOR);
     }
 
     function _appendOrder(bytes32 id, uint128 priceKey, uint64 orderId_, StoredOrder storage order)
@@ -1501,6 +1534,7 @@ contract SpotCLOB is ISpotCLOB {
         private
         returns (uint256 received)
     {
+        if (amount == 0) return 0;
         uint256 contractBalanceBefore = IERC20Minimal(asset).balanceOf(address(this));
         if (contractBalanceBefore < amount) revert UnsupportedTokenBehavior();
         uint256 recipientBalanceBefore = IERC20Minimal(asset).balanceOf(to);

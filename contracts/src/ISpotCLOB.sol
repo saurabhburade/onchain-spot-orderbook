@@ -211,6 +211,11 @@ interface ISpotCLOB {
 
     function accruedTradingFees(address asset) external view returns (uint256);
 
+    /// @notice Fractional fee numerator carried by an order.
+    /// @dev The value is always less than 10,000 and becomes one quote-token atom when it reaches
+    /// that denominator through later fills.
+    function orderFeeRemainder(bytes32 orderId) external view returns (uint16);
+
     function totalEscrowLiability(address asset) external view returns (uint256);
 
     /// @notice Return wallet funds available to trade and funds escrowed by open orders.

@@ -63,7 +63,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
 | L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
-| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Each order carries its fractional BPS fee numerator across fills |
+| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Per-order fee carry plus a `0.1` quote-token new-order floor |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
 | I-03 | Informational | Saturated minimum quantity can still be unfillable | **Open** | Reproduced; the lens still returns `type(uint128).max` |
 | I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Open** | The affected NatSpec still requires correction |
@@ -203,8 +203,8 @@ Regression matrix:
 - [`testL01_MakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) and
   [`testL01_TakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) cover both
   sides of partial-fill dust cleanup;
-- [`testL01_ExactQuoteAtomBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects the
-  valid one-atom boundary; and
+- [`testL01_ExactMinimumNotionalBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects
+  the exact `0.1` quote-token admission boundary; and
 - [`testL01_ZeroQuoteRefundIncludesFeeReserve`](../test/AuditPricingFindings.t.sol) verifies complete
   escrow and fee-reserve recovery without charging a fee.
 
@@ -251,6 +251,17 @@ across many fills therefore produces the same maker fee and proceeds as filling 
 Resting bid reserves preview the carried remainder, so accumulating a fee cannot underfund or
 freeze the bid.
 
+New supply-agnostic limit orders must also be worth at least one tenth of a quote token at their
+limit price. For six-decimal USDC this is `100,000` atoms (`0.1 USDC`). The check runs before
+funding and again after recipient-side transfer tax adjusts the accepted quantity, so a taxed order
+cannot enter below the floor. The lens reports the corresponding minimum base quantity for each
+price. Legacy markets retain their historical one-atom floor.
+
+This is intentionally an admission rule, not a minimum fill size. A valid order may be partially
+filled below `0.1` quote token and continue matching. If its remaining quantity has zero quote-atom
+settlement value, the existing L-01 cleanup unlinks it and returns its actual escrow. A theoretical
+fraction of an ERC-20 atom is never held and therefore cannot be transferred or refunded.
+
 The accumulator is deliberately order-local. A completed or cancelled order can retain a final
 fraction smaller than one quote atom, and separate orders do not share that fraction. A
 trader-wide accumulator was rejected because unrelated orders could replenish the accumulator and
@@ -263,7 +274,9 @@ Regression coverage:
 - `testI01_SubAtomFeeCarriesAcrossFillsOfSameOrder`;
 - `testI01_CarriedFeeDoesNotUnderfundRestingBid`; and
 - `testFuzz_I01MakerFeeIsInvariantToFillPartition` in
-  [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
+  [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol);
+- `testMinimumNewOrderNotionalIsOneTenthUsdc`; and
+- `testAgnosticFeeOnTransferCannotReduceOrderBelowAdmissionFloor`.
 
 The wide-price stateful invariant independently models each order's fee remainder and verifies it
 against the contract after mixed placement, matching, fee-update, cancellation, and withdrawal
@@ -368,7 +381,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **188 passed, 0 failed, 2 intentionally skipped**;
+- **191 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.
@@ -395,7 +408,7 @@ pnpm check
 - Existing pair contracts are non-upgradeable clones. H-01, M-01, M-02, M-03, L-01, I-01, and the
   transfer-tax changes require a new implementation/factory deployment and migration; merging this
   branch does not change already deployed books.
-- The optimized `SpotCLOB` runtime is 31,196 bytes. It fits Monad's documented 128 KiB runtime
+- The optimized `SpotCLOB` runtime is 31,306 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
 - Limit orders are GTC-only and the order ABI has no expiry field.

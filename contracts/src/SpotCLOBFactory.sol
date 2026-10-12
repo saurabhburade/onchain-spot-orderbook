@@ -324,6 +324,7 @@ contract SpotCLOBFactory is ISpotCLOBFactory {
             // Fail during creation instead of leaving a market whose decimal relationship can
             // never be converted safely by the matching engine.
             SpotPriceMath.quoteDenominator(baseDecimals, quoteDecimals);
+            SpotPriceMath.minimumQuoteAmount(quoteDecimals);
         }
 
         // Snapshot the effective precision so later default updates cannot alter pair metadata.

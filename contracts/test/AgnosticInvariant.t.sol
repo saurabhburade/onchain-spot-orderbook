@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { ISpotCLOB } from "../src/ISpotCLOB.sol";
 import { SpotCLOB } from "../src/SpotCLOB.sol";
 import { SpotCLOBFactory } from "../src/SpotCLOBFactory.sol";
+import { SpotPriceMath } from "../src/libraries/SpotPriceMath.sol";
 import { AgnosticToken } from "./AgnosticPricing.t.sol";
 import { PropertyVm } from "./AgnosticProperties.t.sol";
 
@@ -212,8 +213,8 @@ contract AgnosticInvariantHandler {
 
     function _place(uint256 seed, ISpotCLOB.Side side) private returns (bytes32) {
         uint128 price = prices[(seed >> 8) % prices.length];
-        uint128 minimum = uint128((1e30 + uint256(price) - 1) / price);
-        // Mix near-atom quantities with sizes that generate nonzero fees at all price magnitudes.
+        uint128 minimum = SpotPriceMath.minimumBaseQuantity(price, 18, 6);
+        // Mix near-admission-floor quantities with larger sizes at all price magnitudes.
         uint128 multiplier = (seed >> 24) & 1 == 0 ? 1 : 10_000;
         uint128 quantity = minimum * uint128(1 + (seed >> 16) % 4) * multiplier;
         address trader = traders[(seed >> 32) % traders.length];

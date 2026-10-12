@@ -27,8 +27,10 @@ submitted orders, so a resting bid's reserved fee always remains sufficient for 
 The default two-address creation path is supply agnostic: price is quote tokens per whole base
 token with 18 fixed decimals (`priceX18`), while quantity is raw base-token atoms. This provides a
 single price range from `1e-18` to approximately `3.402823669e20` quote tokens per base token.
-The minimum quantity changes with price so every accepted order settles at least one quote-token
-atom. For six-decimal USDC, that minimum order value is `0.000001 USDC`.
+The minimum quantity changes with price so every newly accepted limit order is worth at least one
+tenth of a quote token at its limit price. For six-decimal USDC, that admission floor is `100,000`
+atoms, or `0.1 USDC`. Recipient-tax funding is accepted only when the adjusted order still meets
+the same floor.
 
 Legacy creation overloads can derive a pair's base lot from administrator-controlled decimal precision or accept
 an explicit `uint128` raw lot size at pair creation. The explicit form supports multi-token lots,
@@ -43,9 +45,9 @@ with a `0.001 WETH` lot and USDC as quote token expresses a `$2,500/WETH` order 
 `2_500_000` USDC atoms per lot and a quantity of `1_000` lots for one WETH. `tickSize` constrains
 valid prices, while `lotSize` converts filled quantities into raw base-token amounts.
 
-For a six-decimal quote token, the minimum settled quote amount is one atom (`0.000001` USDC). An
-explicit lot of `100_000e18` raw units for an 18-decimal base token lets a one-atom lot price express
-`0.00000000001` USDC per base token; the minimum order at that floor trades 100,000 base tokens.
+Legacy markets retain a one-quote-atom minimum. For a six-decimal quote token, that is `0.000001`
+USDC. An explicit lot of `100_000e18` raw units for an 18-decimal base token lets a one-atom lot
+price express `0.00000000001` USDC per base token.
 
 Account abstraction, session keys, transaction sponsorship, and wallet UX remain outside the
 matching interface. Traders approve the pair contract as an ERC-20 spender; placing an order then
@@ -168,8 +170,10 @@ Known limitations reproduced by tests:
 
 - Agnostic markets accept every positive `priceX18`, so improving a bid by one price unit creates
   a separate level and outranks an earlier bid even when both settle to the same quote atoms.
-- The current minimum is one quote-token atom: `0.000001 USDC` for a six-decimal quote token.
-  A one-USDC minimum notional and a relative tick grid are not currently enforced.
+- The `0.1` quote-token floor is an admission rule for new supply-agnostic limit orders, not a
+  minimum execution size. A partial remainder remains matchable while it settles at least one
+  quote atom; only a zero-settlement remainder is cancelled and refunded. Market orders do not
+  rest and rely on their explicit `minFillQuantity` and `minReceive` protections.
 
 ### Immediate-unlink stress benchmark
 

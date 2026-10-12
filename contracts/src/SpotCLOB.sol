@@ -39,6 +39,7 @@ contract SpotCLOB is ISpotCLOB {
     error InvalidOrder();
     error InvalidTick();
     error InvalidLotQuantity();
+    error MinimumOrderNotionalNotMet(uint256 minimumQuoteAmount, uint256 actualQuoteAmount);
     error OrderNotOpen();
     error MatchLimitExceeded();
     error NoLiquidity();
@@ -695,15 +696,11 @@ contract SpotCLOB is ISpotCLOB {
         ) revert InvalidMarket();
         _requireMarketSolvent(id, market);
         uint128 priceKey = _priceToKey(market, request.price);
-        if (market.agnosticPricing && _quoteAmount(market, request.price, request.quantity) == 0) {
-            revert InvalidLotQuantity();
-        }
+        _requireMinimumOrderNotional(market, request.price, request.quantity);
         uint16 feeBps = market.tradingFeeBps;
         (uint128 acceptedQuantity, uint256 feeReserve, uint256 escrowAmount) =
             _escrowOrderFunds(request, market, feeBps);
-        if (market.agnosticPricing && _quoteAmount(market, request.price, acceptedQuantity) == 0) {
-            revert InvalidLotQuantity();
-        }
+        _requireMinimumOrderNotional(market, request.price, acceptedQuantity);
 
         uint64 orderId_ = _nextOrderId++;
         StoredOrder storage incoming = _orders[orderId_];
@@ -1368,6 +1365,27 @@ contract SpotCLOB is ISpotCLOB {
     {
         if (!market.agnosticPricing) return uint256(price) * quantity;
         return SpotPriceMath.quoteAmount(price, quantity, market.baseDecimals, market.quoteDecimals);
+    }
+
+    /// @dev Legacy markets retain their historical one-atom floor. Supply-agnostic markets use a
+    /// human-scale floor of one tenth of a quote token (100,000 atoms for six-decimal USDC).
+    function _minimumOrderQuoteAmount(Market storage market) private view returns (uint256) {
+        if (!market.agnosticPricing) return 1;
+        return SpotPriceMath.minimumQuoteAmount(market.quoteDecimals);
+    }
+
+    function _requireMinimumOrderNotional(Market storage market, uint128 price, uint128 quantity)
+        private
+        view
+    {
+        _requireMinimumOrderQuote(market, _quoteAmount(market, price, quantity));
+    }
+
+    function _requireMinimumOrderQuote(Market storage market, uint256 actualQuote) private view {
+        uint256 minimumQuote = _minimumOrderQuoteAmount(market);
+        if (actualQuote < minimumQuote) {
+            revert MinimumOrderNotionalNotMet(minimumQuote, actualQuote);
+        }
     }
 
     function _baseAmount(Market storage market, uint128 quantity) private view returns (uint256) {

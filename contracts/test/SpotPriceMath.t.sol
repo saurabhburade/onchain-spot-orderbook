@@ -4,6 +4,10 @@ pragma solidity ^0.8.24;
 import { SpotPriceMath } from "../src/libraries/SpotPriceMath.sol";
 
 contract SpotPriceMathHarness {
+    function minimumQuoteAmount(uint8 quoteDecimals) external pure returns (uint256) {
+        return SpotPriceMath.minimumQuoteAmount(quoteDecimals);
+    }
+
     function quoteAmount(
         uint128 priceX18,
         uint128 baseQuantity,
@@ -30,11 +34,17 @@ contract SpotPriceMathTest {
     }
 
     function testSupplyAgnosticMinimumQuantityRegression() public view {
-        _assertMinimum(1e7, 100_000e18); // 0.00000000001 USDC/token.
-        _assertMinimum(1e12, 1e18); // 0.000001 USDC/token.
-        _assertMinimum(1e18, 1e12); // 1 USDC/token.
-        _assertMinimum(10e18, 1e11); // 10 USDC/token.
-        _assertMinimum(1e24, 1e6); // 1,000,000 USDC/token.
+        _assertMinimum(1e7, 10_000_000_000e18); // 0.00000000001 USDC/token.
+        _assertMinimum(1e12, 100_000e18); // 0.000001 USDC/token.
+        _assertMinimum(1e18, 1e17); // 1 USDC/token.
+        _assertMinimum(10e18, 1e16); // 10 USDC/token.
+        _assertMinimum(1e24, 1e11); // 1,000,000 USDC/token.
+    }
+
+    function testMinimumQuoteAmountIsOneTenthOfToken() public view {
+        require(math.minimumQuoteAmount(6) == 100_000, "wrong USDC floor");
+        require(math.minimumQuoteAmount(18) == 1e17, "wrong 18-decimal floor");
+        require(math.minimumQuoteAmount(0) == 1, "zero-decimal floor is not one atom");
     }
 
     function testTrillionTokenSupplyDoesNotLimitPriceRepresentation() public view {
@@ -58,18 +68,19 @@ contract SpotPriceMathTest {
         // Choose decimals that exercise every supported denominator, including 10**77.
         uint8 baseDecimals = exponent >= 18 ? exponent - 18 : 0;
         uint8 quoteDecimals = exponent >= 18 ? 0 : 18 - exponent;
-        uint256 denominator = 10 ** uint256(exponent);
         uint128 quantity = math.minimumBaseQuantity(price, baseDecimals, quoteDecimals);
-        uint256 maximumProduct = uint256(price) * type(uint128).max;
-        if (maximumProduct < denominator) {
+        uint256 target = math.minimumQuoteAmount(quoteDecimals);
+        if (math.quoteAmount(price, type(uint128).max, baseDecimals, quoteDecimals) < target) {
             require(quantity == type(uint128).max, "unreachable minimum was not saturated");
-            require(
-                math.quoteAmount(price, quantity, baseDecimals, quoteDecimals) == 0,
-                "unreachable minimum settles"
-            );
         } else {
-            require(uint256(price) * quantity >= denominator, "minimum cannot settle");
-            require(uint256(price) * (quantity - 1) < denominator, "minimum is not minimal");
+            require(
+                math.quoteAmount(price, quantity, baseDecimals, quoteDecimals) >= target,
+                "minimum cannot settle"
+            );
+            require(
+                math.quoteAmount(price, quantity - 1, baseDecimals, quoteDecimals) < target,
+                "minimum is not minimal"
+            );
         }
     }
 
@@ -126,11 +137,11 @@ contract SpotPriceMathTest {
     function _assertMinimum(uint128 priceX18, uint128 expectedQuantity) private view {
         uint128 quantity = math.minimumBaseQuantity(priceX18, 18, 6);
         require(quantity == expectedQuantity, "minimum quantity changed");
-        require(math.quoteAmount(priceX18, quantity, 18, 6) == 1, "minimum is not one atom");
+        require(math.quoteAmount(priceX18, quantity, 18, 6) == 100_000, "minimum is not 0.1 USDC");
         if (quantity > 1) {
             require(
-                math.quoteAmount(priceX18, quantity - 1, 18, 6) == 0,
-                "smaller quantity unexpectedly settles"
+                math.quoteAmount(priceX18, quantity - 1, 18, 6) < 100_000,
+                "smaller quantity meets admission floor"
             );
         }
     }

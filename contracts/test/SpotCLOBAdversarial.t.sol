@@ -141,6 +141,29 @@ contract SpotCLOBAdversarialTest {
     address private constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
     StorageVm private constant vm = StorageVm(VM_ADDRESS);
 
+    function testAgnosticFeeOnTransferCannotReduceOrderBelowAdmissionFloor() public {
+        (SpotCLOB book, AdversarialToken base, AdversarialToken quote) = _deployAgnosticBook();
+        AdversarialTrader seller = new AdversarialTrader();
+        uint128 minimumQuantity = 1e17;
+        base.mint(address(seller), minimumQuantity);
+        seller.approve(base, book);
+        base.setMode(base.FEE_TRANSFER_FROM());
+
+        require(
+            !seller.attemptPlace(
+                book,
+                address(base),
+                address(quote),
+                ISpotCLOB.Side.Sell,
+                uint128(1e18),
+                minimumQuantity
+            ),
+            "tax-adjusted sub-minimum order accepted"
+        );
+        require(base.balanceOf(address(seller)) == minimumQuantity, "failed order charged seller");
+        require(base.balanceOf(address(book)) == 0, "failed order retained escrow");
+    }
+
     function testRejectsFalseReturnOnOutgoingTransfer() public {
         (SpotCLOB book, AdversarialToken base, AdversarialToken quote) = _deployBook();
         AdversarialTrader seller = new AdversarialTrader();
@@ -151,6 +174,18 @@ contract SpotCLOBAdversarialTest {
 
         base.setMode(base.FALSE_TRANSFER());
         require(!seller.attemptCancel(book, orderId), "false-return transfer accepted");
+    }
+
+    function _deployAgnosticBook()
+        private
+        returns (SpotCLOB book, AdversarialToken base, AdversarialToken quote)
+    {
+        SpotCLOBFactory factory = new SpotCLOBFactory();
+        base = new AdversarialToken();
+        quote = new AdversarialToken();
+        factory.setQuoteToken(address(quote), true);
+        (, address deployed) = factory.createPair(address(base), address(quote));
+        book = SpotCLOB(deployed);
     }
 
     function testStandardEntryPointUsesFeeOnTransferBalanceDelta() public {

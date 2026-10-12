@@ -109,14 +109,18 @@ contract AgnosticPropertiesTest {
         _assertSolvent();
     }
 
-    function testMinimumTradeIsOneUsdcAtomRatherThanOneUsdc() public {
-        vm.expectRevert(SpotCLOB.InvalidLotQuantity.selector);
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12 - 1);
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e12);
-        (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Buy, 1e12, 0, 1e12, 0, 64);
-        require(filled == 1e12 && gross == 1, "one-atom trade rejected");
-        require(quote.balanceOf(ALICE) == INITIAL + 1, "wrong minimum trade proceeds");
-        require(book.accruedTradingFees(address(quote)) == 0, "one-atom trade charged fees");
+    function testMinimumNewOrderNotionalIsOneTenthUsdc() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                SpotCLOB.MinimumOrderNotionalNotMet.selector, uint256(100_000), uint256(99_999)
+            )
+        );
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e17 - 1);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e17);
+        (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Buy, 1e17, 0, 1e17, 0, 64);
+        require(filled == 1e17 && gross == 100_000, "minimum trade rejected");
+        require(quote.balanceOf(ALICE) == INITIAL + 99_630, "wrong minimum trade proceeds");
+        require(book.accruedTradingFees(address(quote)) == 740, "minimum trade fee changed");
         _assertSolvent();
     }
 
@@ -127,7 +131,7 @@ contract AgnosticPropertiesTest {
         for (uint256 i; i < makers.length; ++i) {
             uint256 draw = uint256(keccak256(abi.encode(seed, i)));
             uint128 price = uint128(1 + draw % 3) * 1e18;
-            uint128 quantity = uint128(1 + (draw >> 8) % 4) * 1e15;
+            uint128 quantity = uint128(1 + (draw >> 8) % 4) * 1e17;
             makers[i] = Maker(_limit(ALICE, makerSide, price, quantity), price, quantity, 0, false);
             total += quantity;
         }
@@ -136,7 +140,7 @@ contract AgnosticPropertiesTest {
         book.cancelOrder(makers[cancelled].id);
         makers[cancelled].cancelled = true;
         total -= makers[cancelled].quantity;
-        uint128 requested = uint128(1 + (seed >> 8) % (total / 1e15)) * 1e15;
+        uint128 requested = uint128(1 + (seed >> 8) % (total / 1e17)) * 1e17;
         (uint256 expectedQuote, uint256 expectedTakerFee, uint256 expectedMakerFees) =
             _referenceMatching(makers, requested, makerBuys);
         (, uint128 filled, uint256 gross) = _market(
@@ -171,14 +175,14 @@ contract AgnosticPropertiesTest {
     }
 
     function testFuzz_MarketProtectionsRevertAtomically(uint256 seed, bool makerBuys) public {
-        uint128 quantity = uint128(1 + seed % 4) * 1e15;
+        uint128 quantity = uint128(1 + seed % 4) * 1e17;
         uint128 price = uint128(1 + (seed >> 8) % 4) * 1e18;
         bytes32 maker =
             _limit(ALICE, makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell, price, quantity);
         ISpotCLOB.Side side = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
         bytes32 before = _snapshot(maker);
         vm.expectRevert(SpotCLOB.MinimumFillNotMet.selector);
-        _market(BOB, side, quantity + 1e15, price, quantity + 1e15, 0, 64);
+        _market(BOB, side, quantity + 1e17, price, quantity + 1e17, 0, 64);
         require(_snapshot(maker) == before, "min-fill failure changed state");
 
         uint256 gross = uint256(price) * quantity / 1e30;

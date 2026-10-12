@@ -174,9 +174,11 @@ interface ISpotCLOB {
 
     /// @notice Place a limit order and match it against the resting book.
     /// @dev The implementation must reject invalid pairs, zero values, and insufficient available
-    /// balance before mutating the book. `order.quantity` is the requested maximum: recipient-side
-    /// transfer tax reduces the accepted quantity to what the received escrow can fund. Accepted
-    /// orders are good-til-cancelled and remain open until filled or cancelled by their owner.
+    /// balance before mutating the book. Supply-agnostic orders must be worth at least one tenth of
+    /// a quote token at their limit price, both before and after any recipient-side transfer tax.
+    /// `order.quantity` is the requested maximum: recipient-side transfer tax reduces the accepted
+    /// quantity to what the received escrow can fund. Accepted orders are good-til-cancelled and
+    /// remain open until filled or cancelled by their owner.
     /// Funding must debit the trader by exactly the requested transfer amount; sender-surcharge
     /// and otherwise mutable sender accounting are unsupported and revert atomically.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);

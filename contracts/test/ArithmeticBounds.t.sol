@@ -68,14 +68,15 @@ contract ArithmeticBoundsTest {
     }
 
     function testFuzz_PriceLevelQuantityOverflowRollsBack(uint128 offset, bool makerBuys) public {
-        // The one-atom order remains valid while the first level already holds uint128.max.
+        // A minimum-notional order remains valid while the first level already holds uint128.max.
         uint128 price = uint128(1e30 + uint256(offset % 1e29));
+        uint128 minimum = SpotPriceMath.minimumBaseQuantity(price, 18, 6);
         ISpotCLOB.Side side = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
         bytes32 first = _limit(ALICE, side, price, type(uint128).max);
         bytes32 before = _snapshot(first, price, side);
 
         vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", uint256(0x11)));
-        _limit(CAROL, side, price, 1);
+        _limit(CAROL, side, price, minimum);
         require(
             _snapshot(first, price, side) == before, "overflow kept partial escrow or book state"
         );
@@ -87,11 +88,12 @@ contract ArithmeticBoundsTest {
 
         vm.prank(ALICE);
         book.cancelOrder(first);
-        bytes32 second = _limit(CAROL, side, price, 1);
+        bytes32 second = _limit(CAROL, side, price, minimum);
         require(second == bytes32(uint256(2)), "reverted order consumed an id");
         (total, head, tail) = book.getPriceLevel(poolId, side, price);
         require(
-            total == 1 && head == second && tail == second, "level did not recover after overflow"
+            total == minimum && head == second && tail == second,
+            "level did not recover after overflow"
         );
         _assertConservation(NORMAL_BALANCE);
     }
@@ -99,7 +101,8 @@ contract ArithmeticBoundsTest {
     function testFuzz_UnfundedOrderCannotUnderflowTokenBalances(uint128 quantitySeed, bool buy)
         public
     {
-        uint128 quantity = quantitySeed == 0 ? 1 : quantitySeed;
+        uint128 minimum = SpotPriceMath.minimumBaseQuantity(1e30, 18, 6);
+        uint128 quantity = quantitySeed < minimum ? minimum : quantitySeed;
         vm.prank(UNFUNDED);
         base.approve(address(book), type(uint256).max);
         vm.prank(UNFUNDED);
@@ -156,6 +159,18 @@ contract ArithmeticBoundsTest {
         );
         factory.createPair(address(unsupportedBase), address(zeroDecimalQuote));
         bytes32 failedId = factory.pairId(address(unsupportedBase), address(zeroDecimalQuote));
+        require(!factory.getPool(failedId).exists, "failed pair retained registry state");
+    }
+
+    function testUnsupportedQuoteDecimalsCannotCreatePartiallyInitializedPair() public {
+        AgnosticToken highDecimalBase = new AgnosticToken(79);
+        AgnosticToken highDecimalQuote = new AgnosticToken(79);
+        factory.setQuoteToken(address(highDecimalQuote), true);
+        vm.expectRevert(
+            abi.encodeWithSelector(SpotPriceMath.UnsupportedQuoteDecimals.selector, uint8(79))
+        );
+        factory.createPair(address(highDecimalBase), address(highDecimalQuote));
+        bytes32 failedId = factory.pairId(address(highDecimalBase), address(highDecimalQuote));
         require(!factory.getPool(failedId).exists, "failed pair retained registry state");
     }
 

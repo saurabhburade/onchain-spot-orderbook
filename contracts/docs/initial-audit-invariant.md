@@ -203,6 +203,9 @@ Regression matrix:
 - [`testL01_MakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) and
   [`testL01_TakerRemainderDustIsRefundedAndUnlinked`](../test/AuditPricingFindings.t.sol) cover both
   sides of partial-fill dust cleanup;
+- `testFuzz_ZeroQuoteMakerRemainderIsRefunded` and
+  `testFuzz_SettlingSubFloorRemainderStaysMatchable` cover both maker sides across randomized
+  remainder sizes, checking that cleanup applies only at zero quote atoms;
 - [`testL01_ExactMinimumNotionalBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects
   the exact `0.1` quote-token admission boundary; and
 - [`testL01_ZeroQuoteRefundIncludesFeeReserve`](../test/AuditPricingFindings.t.sol) verifies complete
@@ -280,7 +283,9 @@ Regression coverage:
 
 The wide-price stateful invariant independently models each order's fee remainder and verifies it
 against the contract after mixed placement, matching, fee-update, cancellation, and withdrawal
-actions.
+actions. It also injects sub-minimum buy and sell placements, requires atomic rejection without
+token or book changes, and rejects any observed increase in filled base quantity without a
+corresponding positive quote fill.
 
 ### I-02 — Fragmented quote rounding
 
@@ -381,7 +386,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **191 passed, 0 failed, 2 intentionally skipped**;
+- **193 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.

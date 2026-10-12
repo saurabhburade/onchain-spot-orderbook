@@ -43,6 +43,7 @@ contract AgnosticInvariantHandler {
     uint256 public timeAdvances;
     uint256 public withdrawals;
     uint256 public feeUpdates;
+    uint256 public rejectedPlacements;
 
     constructor() {
         factory = new SpotCLOBFactory();
@@ -64,7 +65,7 @@ contract AgnosticInvariantHandler {
     }
 
     function act(uint256 seed) external {
-        uint256 operation = uint8(seed) % 9;
+        uint256 operation = uint8(seed) % 10;
         bytes32 newId;
         if (operation <= 1) {
             newId = _place(seed, operation == 0 ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell);
@@ -85,10 +86,12 @@ contract AgnosticInvariantHandler {
                 expectedFees -= amount;
                 ++withdrawals;
             }
-        } else {
+        } else if (operation == 8) {
             currentFeeBps = uint16((seed >> 8) % 1_001);
             factory.setPairTradingFeeBps(address(base), address(quote), currentFeeBps);
             ++feeUpdates;
+        } else {
+            _rejectSubMinimum(seed);
         }
         _observeExistingOrders();
         if (newId != bytes32(0)) _trackNewOrder(newId);
@@ -126,10 +129,12 @@ contract AgnosticInvariantHandler {
             quoteWallets += quote.balanceOf(traders[i]);
         }
         for (uint256 i; i < orderIds.length; ++i) {
+            uint16 actualRemainder = book.orderFeeRemainder(orderIds[i]);
             require(
-                book.orderFeeRemainder(orderIds[i]) == expectedFeeRemainder[orderIds[i]],
+                actualRemainder == expectedFeeRemainder[orderIds[i]],
                 "fee remainder differs from model"
             );
+            require(actualRemainder < 10_000, "fee remainder reached one atom");
         }
         require(book.accruedTradingFees(address(quote)) == expectedFees, "ghost fee mismatch");
         require(book.accruedTradingFees(address(base)) == 0, "base fees accrued");
@@ -294,6 +299,56 @@ contract AgnosticInvariantHandler {
         }
     }
 
+    function _rejectSubMinimum(uint256 seed) private {
+        address trader = traders[(seed >> 32) % traders.length];
+        uint256 traderBaseBefore = base.balanceOf(trader);
+        uint256 traderQuoteBefore = quote.balanceOf(trader);
+        uint256 bookBaseBefore = base.balanceOf(address(book));
+        uint256 bookQuoteBefore = quote.balanceOf(address(book));
+        uint256 baseLiabilityBefore = book.totalEscrowLiability(address(base));
+        uint256 quoteLiabilityBefore = book.totalEscrowLiability(address(quote));
+        uint64 sequenceBefore = book.bookSequence(poolId);
+        ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
+            trader: trader,
+            baseAsset: address(base),
+            quoteAsset: address(quote),
+            side: (seed >> 8) & 1 == 0 ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell,
+            price: 1e18,
+            quantity: 1e17 - 1,
+            clientOrderId: 0
+        });
+
+        vm.prank(trader);
+        (bool success, bytes memory reason) = address(book)
+            .call(abi.encodeCall(SpotCLOB.placeLimitOrderWithMaxBookSteps, (order, uint32(1_024))));
+        require(!success, "sub-minimum placement succeeded");
+        require(
+            keccak256(reason)
+                == keccak256(
+                    abi.encodeWithSelector(
+                        SpotCLOB.MinimumOrderNotionalNotMet.selector,
+                        uint256(100_000),
+                        uint256(99_999)
+                    )
+                ),
+            "wrong sub-minimum rejection"
+        );
+        require(
+            base.balanceOf(trader) == traderBaseBefore
+                && quote.balanceOf(trader) == traderQuoteBefore
+                && base.balanceOf(address(book)) == bookBaseBefore
+                && quote.balanceOf(address(book)) == bookQuoteBefore,
+            "rejected placement moved tokens"
+        );
+        require(
+            book.totalEscrowLiability(address(base)) == baseLiabilityBefore
+                && book.totalEscrowLiability(address(quote)) == quoteLiabilityBefore
+                && book.bookSequence(poolId) == sequenceBefore,
+            "rejected placement changed book state"
+        );
+        ++rejectedPlacements;
+    }
+
     function _observeExistingOrders() private {
         uint256 takerQuote;
         for (uint256 i; i < orderIds.length; ++i) {
@@ -305,6 +360,10 @@ contract AgnosticInvariantHandler {
                 "fill is not monotonic and bounded"
             );
             require(state.filledQuoteQuantity >= priorQuoteFilled[id], "quote fill decreased");
+            uint128 fillDelta = state.filledQuantity - priorFilled[id];
+            uint256 quoteDelta = state.filledQuoteQuantity - priorQuoteFilled[id];
+            require(fillDelta == 0 || quoteDelta != 0, "zero-quote fill recorded");
+            require(quoteDelta == 0 || fillDelta != 0, "quote fill lacks base fill");
             if (
                 priorStatus[id] == ISpotCLOB.OrderStatus.Filled
                     || priorStatus[id] == ISpotCLOB.OrderStatus.Cancelled
@@ -314,7 +373,6 @@ contract AgnosticInvariantHandler {
                     "closed order resurrected"
                 );
             }
-            uint256 quoteDelta = state.filledQuoteQuantity - priorQuoteFilled[id];
             uint256 makerFee = _consumeExpectedFee(id, orderFeeBps[id], quoteDelta);
             expectedFees += makerFee;
             takerQuote += quoteDelta;
@@ -336,6 +394,13 @@ contract AgnosticInvariantHandler {
             require(orderIds[i] != id, "duplicate order id");
         }
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) = book.getOrder(id);
+        if (state.kind == ISpotCLOB.OrderKind.Limit) {
+            require(_quote(order.price, state.quantity) >= 100_000, "sub-minimum order admitted");
+        }
+        require(
+            state.filledQuantity == 0 || state.filledQuoteQuantity != 0,
+            "new order contains zero-quote fill"
+        );
         orderFeeBps[id] = currentFeeBps;
         expectedFeeRemainder[id] =
             uint16(((state.filledQuoteQuantity % 10_000) * currentFeeBps) % 10_000);
@@ -485,6 +550,7 @@ contract AgnosticInvariantTest {
         handler.act(5 | (4 << 8)); // Unauthorized cancellation must revert.
         handler.act(6); // Advance time; the GTC ask remains open.
         handler.act(4 | (4 << 8)); // Its owner can cancel and recover escrow.
+        handler.act(9); // A sub-minimum order must revert without changing state.
         handler.assertAccounting();
         handler.assertBook();
         require(handler.placements() == 3 && handler.marketFills() == 2, "trades not exercised");
@@ -494,6 +560,7 @@ contract AgnosticInvariantTest {
         );
         require(handler.timeAdvances() == 1, "time advance not exercised");
         require(handler.feeUpdates() == 1, "fee update not exercised");
+        require(handler.rejectedPlacements() == 1, "admission rejection not exercised");
     }
 
     function testRegression_ZeroEscrowDustCleanupDoesNotQuarantine() public {

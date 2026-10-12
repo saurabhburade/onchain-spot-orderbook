@@ -124,6 +124,62 @@ contract AgnosticPropertiesTest {
         _assertSolvent();
     }
 
+    function testFuzz_ZeroQuoteMakerRemainderIsRefunded(uint96 dustSeed, bool makerBuys) public {
+        uint128 minimumQuantity = 1e17;
+        uint128 dust = uint128(1 + uint256(dustSeed) % (1e12 - 1));
+        ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, minimumQuantity + dust);
+
+        _market(
+            BOB,
+            makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy,
+            minimumQuantity,
+            0,
+            minimumQuantity,
+            0,
+            64
+        );
+
+        (, ISpotCLOB.OrderState memory state) = book.getOrder(maker);
+        (,, bool resting) = book.getOrderLinks(maker);
+        require(state.filledQuantity == minimumQuantity, "dust cleanup changed fill");
+        require(state.status == ISpotCLOB.OrderStatus.Cancelled, "zero-quote dust remained open");
+        require(!resting, "zero-quote dust remained linked");
+        (, uint256 locked,) = book.balanceOf(ALICE, makerBuys ? address(quote) : address(base));
+        require(locked == 0, "dust escrow was not refunded");
+        _assertSolvent();
+    }
+
+    function testFuzz_SettlingSubFloorRemainderStaysMatchable(uint96 remainderSeed, bool makerBuys)
+        public
+    {
+        uint128 minimumQuantity = 1e17;
+        uint128 remainder =
+            uint128(1e12 + uint256(remainderSeed) % (uint256(minimumQuantity) - 1e12));
+        ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, minimumQuantity + remainder);
+
+        _market(
+            BOB,
+            makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy,
+            minimumQuantity,
+            0,
+            minimumQuantity,
+            0,
+            64
+        );
+
+        (, ISpotCLOB.OrderState memory state) = book.getOrder(maker);
+        (,, bool resting) = book.getOrderLinks(maker);
+        require(state.status == ISpotCLOB.OrderStatus.PartiallyFilled, "valid remainder was closed");
+        require(resting, "valid remainder was unlinked");
+        (uint128 levelQuantity,,) = book.getPriceLevel(poolId, makerSide, 1e18);
+        require(levelQuantity == remainder, "valid remainder left wrong level quantity");
+        (, uint256 locked,) = book.balanceOf(ALICE, makerBuys ? address(quote) : address(base));
+        require(locked != 0, "valid remainder lost escrow");
+        _assertSolvent();
+    }
+
     function testFuzz_MarketMatchingUsesPriceThenFIFO(uint256 seed, bool makerBuys) public {
         Maker[8] memory makers;
         uint128 total;

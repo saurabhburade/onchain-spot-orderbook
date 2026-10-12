@@ -64,7 +64,7 @@ certificate or a guarantee that no other vulnerabilities exist.
 | L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
 | I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Per-order fee carry plus a `0.1` quote-token new-order floor |
-| I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Open** | Reproduced; cumulative quote-remainder accounting is not implemented |
+| I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Accepted** | Per-fill quote flooring is retained and its maximum loss is property-tested |
 | I-03 | Informational | Saturated minimum quantity can still be unfillable | **Fixed** | The lens explicitly reverts when no `uint128` quantity can meet the admission floor |
 | I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Fixed** | Both factory interfaces now document the fee as per-side |
 | I-05 | Informational | One maximum order can saturate a `uint128` price level | **Fixed** | Price-level aggregates and their view types are `uint256` |
@@ -206,6 +206,10 @@ Regression matrix:
 - `testFuzz_ZeroQuoteMakerRemainderIsRefunded` and
   `testFuzz_SettlingSubFloorRemainderStaysMatchable` cover both maker sides across randomized
   remainder sizes, checking that cleanup applies only at zero quote atoms;
+- `testFuzz_ZeroQuoteMarketSliceRevertsWithoutChangingMaker` proves that a zero-settlement market
+  attempt is atomic on both sides;
+- `testFuzz_OneQuoteAtomMarketSliceFillsAndAccountsFeeDust` protects the exact boundary between an
+  untradeable fractional quote atom and a valid one-atom fill;
 - [`testL01_ExactMinimumNotionalBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects
   the exact `0.1` quote-token admission boundary; and
 - [`testL01_ZeroQuoteRefundIncludesFeeReserve`](../test/AuditPricingFindings.t.sol) verifies complete
@@ -278,6 +282,8 @@ Regression coverage:
 - `testI01_CarriedFeeDoesNotUnderfundRestingBid`; and
 - `testFuzz_I01MakerFeeIsInvariantToFillPartition` in
   [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol);
+- `testFuzz_FeeCarryIsPartitionInvariantOnBothSides` covers buy and sell makers, randomized
+  two-to-eight-part fills, final sub-atom fee remainders, escrow release, and wallet settlement;
 - `testMinimumNewOrderNotionalIsOneTenthUsdc`; and
 - `testAgnosticFeeOnTransferCannotReduceOrderBelowAdmissionFloor`.
 
@@ -290,14 +296,19 @@ corresponding positive quote fill.
 ### I-02 — Fragmented quote rounding
 
 **Severity:** Informational  
-**Status:** Open
+**Status:** Accepted
 
 Quote is rounded down per fill without carrying a per-order remainder. A maker filled in many
 pieces can receive slightly less than if the same quantity were filled once. The discrepancy is
-less than one quote atom per fill.
+less than one quote atom per fill. This branch intentionally retains that simple, deterministic
+settlement rule instead of adding quote-remainder state solely to recover fractional token atoms.
 
-Coverage: `testKnownIssue_I02_ManyPartialFillsPayLessQuoteThanOneFill` in
-[`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol).
+Coverage includes the concrete `testAccepted_I02_ManyPartialFillsPayLessQuoteThanOneFill`
+regression in [`AuditPricingFindings.t.sol`](../test/AuditPricingFindings.t.sol), plus
+`testFuzz_QuoteRoundingAcrossDecimals` and `testFuzz_QuoteSettlementZeroAndOneAtomBoundaries` in
+[`SpotPriceMath.t.sol`](../test/SpotPriceMath.t.sol). The fuzz properties exercise up to 16
+partitions across every supported decimal exponent, prove that settlement never rounds up, and
+bound fragmentation loss below the partition count.
 
 ### I-03 — Saturated minimum quantity is unfillable
 
@@ -389,7 +400,7 @@ FOUNDRY_INVARIANT_DEPTH=64
 
 The latest verified run completed:
 
-- **193 passed, 0 failed, 2 intentionally skipped**;
+- **197 passed, 0 failed, 2 intentionally skipped**;
 - three stateful invariant campaigns, each at 10 runs × 64 calls with zero handler reverts;
 - repository checks for contracts, indexer, and web; and
 - automated PR reporting from the `github-actions` bot.
@@ -423,14 +434,14 @@ pnpm check
 - Positive rebase surplus is not distributed to order owners.
 - Direction-dependent fees, reflection/reward, and malicious mutable-token accounting remain
   unsupported.
-- The four open informational findings should remain visible in release notes and integration
-  documentation until they are fixed.
+- I-02's accepted per-fill quote-flooring behavior should remain visible in integration
+  documentation.
 
 ## Conclusion
 
 The branch removes the reported high-severity liveness failure and fixes all three medium-severity,
-both low-severity, and one informational finding with explicit regression and invariant coverage.
-The remaining four findings concern rounding, representability, or documentation. They are not
-silently suppressed: each executable behavior is reproduced by a named test, and the mixed
-adversarial invariant continuously checks its interaction with the remediated accounting and
+both low-severity, and four informational findings with explicit regression and invariant
+coverage. The remaining informational quote-rounding behavior is explicitly accepted, bounded by
+fuzz properties, and documented rather than silently suppressed. The mixed adversarial invariant
+continuously checks its interaction with the remediated accounting and
 matching paths.

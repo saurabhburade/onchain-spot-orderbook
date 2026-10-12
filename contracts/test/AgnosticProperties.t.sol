@@ -126,7 +126,7 @@ contract AgnosticPropertiesTest {
 
     function testFuzz_ZeroQuoteMakerRemainderIsRefunded(uint96 dustSeed, bool makerBuys) public {
         uint128 minimumQuantity = 1e17;
-        uint128 dust = uint128(1 + uint256(dustSeed) % (1e12 - 1));
+        uint128 dust = 1 + uint128(dustSeed % (1e12 - 1));
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
         bytes32 maker = _limit(ALICE, makerSide, 1e18, minimumQuantity + dust);
 
@@ -178,6 +178,115 @@ contract AgnosticPropertiesTest {
         (, uint256 locked,) = book.balanceOf(ALICE, makerBuys ? address(quote) : address(base));
         require(locked != 0, "valid remainder lost escrow");
         _assertSolvent();
+    }
+
+    function testFuzz_ZeroQuoteMarketSliceRevertsWithoutChangingMaker(
+        uint96 dustSeed,
+        bool makerBuys
+    ) public {
+        uint128 dust = uint128(1 + uint256(dustSeed) % (1e12 - 1));
+        ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e17);
+        bytes32 before = _snapshot(maker);
+
+        vm.expectRevert(SpotCLOB.NoLiquidity.selector);
+        _market(BOB, makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy, dust, 0, 0, 0, 64);
+
+        require(_snapshot(maker) == before, "zero-quote market attempt changed state");
+    }
+
+    function testFuzz_OneQuoteAtomMarketSliceFillsAndAccountsFeeDust(
+        uint96 quantitySeed,
+        bool makerBuys
+    ) public {
+        uint128 quantity = 1e12 + uint128(quantitySeed % 1e12);
+        ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e17);
+
+        (bytes32 taker, uint128 filled, uint256 gross) = _market(
+            BOB, makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy, quantity, 0, quantity, 0, 64
+        );
+
+        require(filled == quantity && gross == 1, "one-atom slice did not settle");
+        (, ISpotCLOB.OrderState memory takerState) = book.getOrder(taker);
+        require(takerState.status == ISpotCLOB.OrderStatus.Filled, "one-atom taker not filled");
+        (, ISpotCLOB.OrderState memory makerState) = book.getOrder(maker);
+        (,, bool makerResting) = book.getOrderLinks(maker);
+        require(
+            makerState.status == ISpotCLOB.OrderStatus.PartiallyFilled, "one-atom fill closed maker"
+        );
+        require(makerResting, "one-atom fill unlinked maker");
+        require(book.accruedTradingFees(address(quote)) == 0, "fractional fee charged early");
+        require(book.orderFeeRemainder(maker) == FEE_BPS, "maker fee dust mismatch");
+        require(book.orderFeeRemainder(taker) == FEE_BPS, "taker fee dust mismatch");
+        _assertSolvent();
+    }
+
+    function testFuzz_FeeCarryIsPartitionInvariantOnBothSides(
+        uint32 totalSeed,
+        uint32 splitSeed,
+        bool makerBuys
+    ) public {
+        uint128 totalQuote = 100_000 + uint128(totalSeed % 900_001);
+        uint128 totalQuantity = totalQuote * 1e12;
+        ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, totalQuantity);
+        ISpotCLOB.Side takerSide = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
+        uint32 partitionCount = 2 + (splitSeed >> 24) % 7;
+
+        uint256 expectedTakerFees =
+            _fillFeePartitions(takerSide, totalQuote, splitSeed, partitionCount);
+
+        _assertPartitionedFeeSettlement(maker, makerBuys, totalQuote, expectedTakerFees);
+        _assertSolvent();
+    }
+
+    function _fillFeePartitions(
+        ISpotCLOB.Side takerSide,
+        uint128 totalQuote,
+        uint32 splitSeed,
+        uint32 partitionCount
+    ) private returns (uint256 expectedTakerFees) {
+        uint128 remaining = totalQuote;
+        for (uint32 i; i < partitionCount; ++i) {
+            uint32 partitionsLeft = partitionCount - i;
+            uint128 part = remaining;
+            if (partitionsLeft != 1) {
+                uint128 available = remaining - (partitionsLeft - 1);
+                uint128 draw = uint128(splitSeed) + uint128(i) * 7_919;
+                part = 1 + draw % available;
+            }
+            remaining -= part;
+            uint128 quantity = part * 1e12;
+            _market(i % 2 == 0 ? BOB : CAROL, takerSide, quantity, 0, quantity, 0, 64);
+            expectedTakerFees += part * FEE_BPS / 10_000;
+        }
+    }
+
+    function _assertPartitionedFeeSettlement(
+        bytes32 maker,
+        bool makerBuys,
+        uint128 totalQuote,
+        uint256 expectedTakerFees
+    ) private view {
+        uint256 expectedMakerFee = totalQuote * FEE_BPS / 10_000;
+        uint256 expectedRemainder = totalQuote * FEE_BPS % 10_000;
+        (, ISpotCLOB.OrderState memory makerState) = book.getOrder(maker);
+        (, uint256 locked,) = book.balanceOf(ALICE, makerBuys ? address(quote) : address(base));
+        require(makerState.status == ISpotCLOB.OrderStatus.Filled, "partitioned maker not filled");
+        require(locked == 0, "partitioned maker retained escrow");
+        require(book.orderFeeRemainder(maker) == expectedRemainder, "maker fee carry mismatch");
+        require(
+            book.accruedTradingFees(address(quote)) == expectedMakerFee + expectedTakerFees,
+            "partition changed collected fees"
+        );
+        require(
+            quote.balanceOf(ALICE)
+                == (makerBuys
+                        ? INITIAL - totalQuote - expectedMakerFee
+                        : INITIAL + totalQuote - expectedMakerFee),
+            "partition changed maker settlement"
+        );
     }
 
     function testFuzz_MarketMatchingUsesPriceThenFIFO(uint256 seed, bool makerBuys) public {

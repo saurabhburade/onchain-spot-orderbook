@@ -435,7 +435,7 @@ contract AuditPricingFindingsTest {
         );
     }
 
-    function testKnownIssue_I02_ManyPartialFillsPayLessQuoteThanOneFill() public {
+    function testAccepted_I02_ManyPartialFillsPayLessQuoteThanOneFill() public {
         uint256 singleFillProceeds = _partialAskScenario(false);
         uint256 fragmentedProceeds = _partialAskScenario(true);
 

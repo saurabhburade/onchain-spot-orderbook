@@ -87,7 +87,8 @@ contract SpotPriceMathTest {
     function testFuzz_QuoteRoundingAcrossDecimals(
         uint128 price,
         uint128 quantity,
-        uint8 exponentSeed
+        uint8 exponentSeed,
+        uint8 partitionSeed
     ) public view {
         uint8 exponent = exponentSeed % 78;
         uint8 baseDecimals = exponent >= 18 ? exponent - 18 : 0;
@@ -98,10 +99,32 @@ contract SpotPriceMathTest {
         require(settled * denominator <= product, "quote rounded up");
         require(product - settled * denominator < denominator, "quote lost a whole atom");
 
-        uint128 first = quantity / 2;
-        uint256 split = math.quoteAmount(price, first, baseDecimals, quoteDecimals)
-            + math.quoteAmount(price, quantity - first, baseDecimals, quoteDecimals);
-        require(settled >= split && settled - split <= 1, "split rounding exceeds one atom");
+        uint8 partitionCount = 1 + partitionSeed % 16;
+        uint256 fragmented =
+            _fragmentedQuote(price, quantity, baseDecimals, quoteDecimals, partitionCount);
+        require(settled >= fragmented, "fragmentation increased quote settlement");
+        require(
+            settled - fragmented < partitionCount, "fragmented rounding lost too many quote atoms"
+        );
+    }
+
+    function testFuzz_QuoteSettlementZeroAndOneAtomBoundaries(
+        uint128 price,
+        uint128 quantity,
+        uint8 exponentSeed
+    ) public view {
+        uint8 exponent = exponentSeed % 78;
+        uint8 baseDecimals = exponent >= 18 ? exponent - 18 : 0;
+        uint8 quoteDecimals = exponent >= 18 ? 0 : 18 - exponent;
+        uint256 denominator = 10 ** uint256(exponent);
+        uint256 product = uint256(price) * quantity;
+        uint256 settled = math.quoteAmount(price, quantity, baseDecimals, quoteDecimals);
+
+        require((settled == 0) == (product < denominator), "zero-atom boundary changed");
+        require(
+            (settled == 1) == (product >= denominator && product - denominator < denominator),
+            "one-atom boundary changed"
+        );
     }
 
     function testFuzz_RejectsUnsupportedDecimalRelationships(uint8 seed, bool excessiveExponent)
@@ -143,6 +166,21 @@ contract SpotPriceMathTest {
                 math.quoteAmount(priceX18, quantity - 1, 18, 6) < 100_000,
                 "smaller quantity meets admission floor"
             );
+        }
+    }
+
+    function _fragmentedQuote(
+        uint128 price,
+        uint128 quantity,
+        uint8 baseDecimals,
+        uint8 quoteDecimals,
+        uint8 partitionCount
+    ) private view returns (uint256 fragmented) {
+        uint128 quotient = quantity / partitionCount;
+        uint128 remainder = quantity % partitionCount;
+        for (uint128 i; i < partitionCount; ++i) {
+            uint128 part = quotient + (i < remainder ? 1 : 0);
+            fragmented += math.quoteAmount(price, part, baseDecimals, quoteDecimals);
         }
     }
 }

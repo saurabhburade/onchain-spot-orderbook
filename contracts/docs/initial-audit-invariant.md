@@ -9,32 +9,34 @@
 | Original reviewer | [@0x3b33](https://github.com/0x3b33) |
 | Remediation branch | [`initial-audit-invariant`](https://github.com/saurabhburade/onchain-spot-orderbook/tree/initial-audit-invariant) |
 | Remediation PR | [#2 — Initial audit invariants and liveness fixes](https://github.com/saurabhburade/onchain-spot-orderbook/pull/2) |
-| Report date | 10 October 2026 |
+| Report revision | 12 October 2026 |
+| Verified code revision | [`fe824dd`](https://github.com/saurabhburade/onchain-spot-orderbook/commit/fe824dd) |
+| Verification workflow | [GitHub Actions run 38285571890](https://github.com/saurabhburade/onchain-spot-orderbook/actions/runs/38285571890) |
 | Solidity version | 0.8.24 |
 
 ## Executive summary
 
 The initial review reported eleven findings: one high-severity, three medium-severity, two
-low-severity, and five informational findings. This branch fixes the high-severity finding, all
-three medium-severity findings, both low-severity findings, and one informational finding. The
-remaining four informational findings have regression tests preserving each known behavior.
+low-severity, and five informational findings. This branch fixes ten findings. The remaining
+informational finding, I-02, is accepted as a documented settlement policy and bounded by fuzz
+tests.
 
 The remediation also adds support for conventional recipient-tax tokens, aggregate escrow
 liability accounting, adversarial token-behavior tests, and three stateful invariant campaigns.
 
-| Severity | Reported | Fixed | Open or acknowledged |
-| --- | ---: | ---: | ---: |
-| High | 1 | 1 | 0 |
-| Medium | 3 | 3 | 0 |
-| Low | 2 | 2 | 0 |
-| Informational | 5 | 1 | 4 |
-| **Total** | **11** | **7** | **4** |
+| Severity | Reported | Fixed | Accepted | Open |
+| --- | ---: | ---: | ---: | ---: |
+| High | 1 | 1 | 0 | 0 |
+| Medium | 3 | 3 | 0 | 0 |
+| Low | 2 | 2 | 0 | 0 |
+| Informational | 5 | 4 | 1 | 0 |
+| **Total** | **11** | **10** | **1** | **0** |
 
 ### Status definitions
 
 - **Fixed** — runtime remediation is implemented and covered by a regression test.
-- **Acknowledged** — the behavior is deliberately unsupported or accepted and is documented and
-  reproduced by a test.
+- **Accepted** — the behavior is retained as an explicit design policy, documented, and bounded by
+  regression or property tests.
 - **Open** — the reported behavior remains and requires a future code or documentation change.
 
 ## Scope and methodology
@@ -407,6 +409,9 @@ The latest verified run completed:
 
 The continuously updated test table and invariant results are available in the
 [Forge verification comment](https://github.com/saurabhburade/onchain-spot-orderbook/pull/2#issuecomment-6085539906).
+The recorded 197-test result comes from
+[GitHub Actions run 38285571890](https://github.com/saurabhburade/onchain-spot-orderbook/actions/runs/38285571890),
+which passed against code revision `fe824dd` on 12 October 2026.
 
 Useful local commands:
 
@@ -436,12 +441,3 @@ pnpm check
   unsupported.
 - I-02's accepted per-fill quote-flooring behavior should remain visible in integration
   documentation.
-
-## Conclusion
-
-The branch removes the reported high-severity liveness failure and fixes all three medium-severity,
-both low-severity, and four informational findings with explicit regression and invariant
-coverage. The remaining informational quote-rounding behavior is explicitly accepted, bounded by
-fuzz properties, and documented rather than silently suppressed. The mixed adversarial invariant
-continuously checks its interaction with the remediated accounting and
-matching paths.

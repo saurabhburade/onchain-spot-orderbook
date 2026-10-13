@@ -255,6 +255,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
       pool && indexedMatchesBook
         ? indexed.data.candles.map((candle) => ({
             timestamp: candle.startTimestamp,
+            intervalSeconds: candle.intervalSeconds,
             open: Number(formatPrice(BigInt(candle.open), pool)),
             high: Number(formatPrice(BigInt(candle.high), pool)),
             low: Number(formatPrice(BigInt(candle.low), pool)),

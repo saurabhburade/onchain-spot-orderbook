@@ -11,7 +11,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import {
   DEFAULT_MARKET_SLIPPAGE_PERCENT,
+  DEFAULT_MAX_BOOK_STEPS,
   marketOrderTerms,
+  parseMaxBookSteps,
   parseSlippageBps,
   requiresSlippageRiskAcceptance,
 } from "@/lib/clob/market-order-protection";
@@ -22,7 +24,7 @@ import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback 
 import { formatCurrencyAmount } from "@/lib/trading/market-details-formatting";
 import { deriveAllocationPercentage } from "@/lib/trading/trade-ticket-allocation";
 import { formatTradingFeeRate } from "@/lib/trading/trade-ticket-fee";
-import { sanitizeDecimalInput } from "@/lib/utils";
+import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
 
 function clean(value: string) {
   return value.replaceAll(",", "").trim();
@@ -102,12 +104,13 @@ type TradeTicketProps = {
   marketPrice: string | null;
   marketPriceRaw: bigint | null;
   selectedOrder: { price: string; size: string } | null;
-  onLimitOrder: (input: { side: OrderSide; price: string; quantity: string }) => Promise<void>;
+  onLimitOrder: (input: { side: OrderSide; price: string; quantity: string; maxBookSteps: bigint }) => Promise<void>;
   onMarketOrder: (input: {
     side: OrderSide;
     quantity: string;
     minReceive: string;
     slippagePercent: string;
+    maxBookSteps: bigint;
   }) => Promise<void>;
   onSideChange: (side: OrderSide) => void;
   onConnect?: () => void;
@@ -139,14 +142,25 @@ export function TradeTicket({
   const [amount, setAmount] = useState("");
   const [allocation, setAllocation] = useState(0);
   const [slippagePercent, setSlippagePercent] = useState(DEFAULT_MARKET_SLIPPAGE_PERCENT);
+  const [maxBookStepsInput, setMaxBookStepsInput] = useState(DEFAULT_MAX_BOOK_STEPS.toString());
   const [highSlippageAccepted, setHighSlippageAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const transactionToastId = useRef<string | null>(null);
   const completedTransaction = useRef<string | null>(null);
   const isBuy = side === "buy";
   const balance = isBuy ? quoteBalance : baseBalance;
+  const bookSteps = useMemo<{ value: bigint | null; error: string | null }>(() => {
+    try {
+      return { value: parseMaxBookSteps(maxBookStepsInput), error: null };
+    } catch (error) {
+      return {
+        value: null,
+        error: error instanceof Error ? error.message : "Maximum book steps are invalid.",
+      };
+    }
+  }, [maxBookStepsInput]);
   const marketPreview = useMemo(() => {
-    if (!amount || !pool || marketPriceRaw === null) return null;
+    if (!amount || !pool || marketPriceRaw === null || bookSteps.value === null) return null;
     try {
       return marketOrderTerms({
         pool,
@@ -154,16 +168,18 @@ export function TradeTicket({
         quantity: amount,
         referencePriceRaw: marketPriceRaw,
         slippagePercent,
+        maxBookSteps: bookSteps.value,
       });
     } catch {
       return null;
     }
-  }, [amount, marketPriceRaw, pool, side, slippagePercent]);
+  }, [amount, bookSteps.value, marketPriceRaw, pool, side, slippagePercent]);
   const marketProtectionError = useMemo(() => {
     if (orderType !== "market") return null;
     try {
       parseSlippageBps(slippagePercent);
       if (!amount) return null;
+      if (bookSteps.value === null) return null;
       if (!pool || marketPriceRaw === null) return "Market price is unavailable.";
       marketOrderTerms({
         pool,
@@ -171,12 +187,13 @@ export function TradeTicket({
         quantity: amount,
         referencePriceRaw: marketPriceRaw,
         slippagePercent,
+        maxBookSteps: bookSteps.value,
       });
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Market order protection is invalid.";
     }
-  }, [amount, marketPriceRaw, orderType, pool, side, slippagePercent]);
+  }, [amount, bookSteps.value, marketPriceRaw, orderType, pool, side, slippagePercent]);
   const highSlippage = useMemo(() => {
     try {
       return requiresSlippageRiskAcceptance(slippagePercent);
@@ -228,6 +245,7 @@ export function TradeTicket({
         Boolean(amount) &&
         (orderType === "market" || Boolean(price)) &&
         !balanceError &&
+        !bookSteps.error &&
         !marketProtectionError &&
         (orderType !== "market" || !highSlippage || highSlippageAccepted)));
 
@@ -357,6 +375,9 @@ export function TradeTicket({
     if (!connected) return setFormError("Connect your wallet to trade.");
     if (!balance) return setFormError("Balance data is unavailable.");
     if (!amount || (orderType === "limit" && !price)) return setFormError("Enter a price and amount.");
+    if (bookSteps.error || bookSteps.value === null) {
+      return setFormError(bookSteps.error ?? "Maximum book steps are invalid.");
+    }
     if (orderType === "market" && marketProtectionError) return setFormError(marketProtectionError);
     if (orderType === "market" && highSlippage && !highSlippageAccepted) {
       return setFormError("Accept the high-slippage risk before placing this order.");
@@ -378,8 +399,9 @@ export function TradeTicket({
           quantity: amount,
           minReceive: marketPreview.suggestedMinReceive,
           slippagePercent,
+          maxBookSteps: bookSteps.value,
         });
-      } else await onLimitOrder({ side, price, quantity: amount });
+      } else await onLimitOrder({ side, price, quantity: amount, maxBookSteps: bookSteps.value });
       setAmount("");
       setHighSlippageAccepted(false);
     } catch (error) {
@@ -568,6 +590,23 @@ export function TradeTicket({
               {tradingFeeBps === null ? "Fee unavailable" : formatTradingFeeRate(tradingFeeBps)}
             </span>
           </div>
+          <div className="flex items-center justify-between gap-3 text-muted-foreground">
+            <label
+              htmlFor="max-book-steps"
+              title="Maximum resting orders inspected before this transaction stops matching"
+            >
+              Max book steps
+            </label>
+            <Input
+              aria-invalid={Boolean(bookSteps.error)}
+              className="h-8 w-24 rounded-lg border-input bg-background text-right font-mono text-xs tabular-nums md:text-xs"
+              id="max-book-steps"
+              inputMode="numeric"
+              onChange={(event) => setMaxBookStepsInput(sanitizeIntegerInput(event.target.value))}
+              spellCheck={false}
+              value={maxBookStepsInput}
+            />
+          </div>
           {orderType === "market" ? (
             <>
               <div className="flex items-center justify-between gap-3 text-muted-foreground">
@@ -633,6 +672,11 @@ export function TradeTicket({
         {marketProtectionError && amount ? (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {marketProtectionError}
+          </p>
+        ) : null}
+        {bookSteps.error ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {bookSteps.error}
           </p>
         ) : null}
         {formError && formError !== transaction.message ? (

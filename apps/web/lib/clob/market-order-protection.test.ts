@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 
 import type { PoolMetadata } from "./types";
 
 const require = createRequire(import.meta.url);
-const { DEFAULT_MAX_BOOK_STEPS, marketOrderTerms, marketPriceLimit, parseSlippageBps, requiresSlippageRiskAcceptance } =
-  require("./market-order-protection.ts") as typeof import("./market-order-protection");
+const {
+  DEFAULT_MAX_BOOK_STEPS,
+  marketOrderTerms,
+  marketPriceLimit,
+  parseMaxBookSteps,
+  parseSlippageBps,
+  requiresSlippageRiskAcceptance,
+} = require("./market-order-protection.ts") as typeof import("./market-order-protection");
+const tradeTicketSource = readFileSync(
+  new URL("../../views/trading/components/trade-ticket.tsx", import.meta.url),
+  "utf8",
+);
 
 const pool: PoolMetadata = {
   poolId: "0x0000000000000000000000000000000000000000000000000000000000000001",
@@ -38,6 +49,23 @@ describe("market order protection", () => {
         maxBookSteps: 100_000n,
       }),
     );
+  });
+
+  it("parses a caller-selected non-zero uint32 book-step limit", () => {
+    assert.equal(parseMaxBookSteps("64"), 64n);
+    assert.equal(parseMaxBookSteps("10000"), 10_000n);
+    assert.equal(parseMaxBookSteps("4294967295"), 4_294_967_295n);
+    assert.throws(() => parseMaxBookSteps(""), /whole number/);
+    assert.throws(() => parseMaxBookSteps("1.5"), /whole number/);
+    assert.throws(() => parseMaxBookSteps("0"), /between 1/);
+    assert.throws(() => parseMaxBookSteps("4294967296"), /between 1/);
+  });
+
+  it("lets traders set the book-step bound in the trade ticket", () => {
+    assert.match(tradeTicketSource, /htmlFor="max-book-steps"/);
+    assert.match(tradeTicketSource, /parseMaxBookSteps\(maxBookStepsInput\)/);
+    assert.match(tradeTicketSource, /onMarketOrder\([\s\S]*maxBookSteps: bookSteps\.value/);
+    assert.match(tradeTicketSource, /onLimitOrder\([\s\S]*maxBookSteps: bookSteps\.value/);
   });
 
   it("rounds slippage outward to valid ticks and converts base size to quote total", () => {

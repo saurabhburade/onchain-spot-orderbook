@@ -327,7 +327,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
             : undefined),
     hash: clob.transaction.hash,
   };
-  const runLimit = async (input: { side: "buy" | "sell"; price: string; quantity: string }) => {
+  const runLimit = async (input: { side: "buy" | "sell"; price: string; quantity: string; maxBookSteps: bigint }) => {
     await clob.placeLimit({ ...input });
   };
   const runMarket = async (input: {
@@ -335,6 +335,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
     quantity: string;
     minReceive: string;
     slippagePercent: string;
+    maxBookSteps: bigint;
   }) => {
     const referencePriceRaw =
       input.side === "buy" ? clob.bestPrices.data?.ask?.priceRaw : clob.bestPrices.data?.bid?.priceRaw;

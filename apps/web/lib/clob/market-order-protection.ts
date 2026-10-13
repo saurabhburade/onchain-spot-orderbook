@@ -5,7 +5,7 @@ import { formatQuantity, formatQuote, parseQuantityToLots, quoteAmountRaw } from
 
 const BPS = 10_000n;
 const MAX_UINT128 = (1n << 128n) - 1n;
-const MAX_UINT32 = (1n << 32n) - 1n;
+export const MAX_BOOK_STEPS = (1n << 32n) - 1n;
 export const DEFAULT_MARKET_SLIPPAGE_PERCENT = "1";
 export const DEFAULT_MAX_BOOK_STEPS = 10_000n;
 export const HIGH_SLIPPAGE_THRESHOLD_BPS = 2_000n;
@@ -26,6 +26,18 @@ export function parseSlippageBps(value: string) {
 
 export function requiresSlippageRiskAcceptance(value: string) {
   return parseSlippageBps(value) > HIGH_SLIPPAGE_THRESHOLD_BPS;
+}
+
+export function parseMaxBookSteps(value: string) {
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error("Enter maximum book steps as a whole number.");
+  }
+  const steps = BigInt(normalized);
+  if (steps < 1n || steps > MAX_BOOK_STEPS) {
+    throw new Error("Maximum book steps must be between 1 and 4,294,967,295.");
+  }
+  return steps;
 }
 
 export function marketPriceLimit(pool: PoolMetadata, side: OrderSide, referencePriceRaw: bigint, slippageBps: bigint) {
@@ -78,7 +90,7 @@ export function marketOrderTerms(input: {
   const quantity = parseQuantityToLots(input.quantity, pool);
   if (quantity > MAX_UINT128) throw new Error("Order quantity exceeds the supported range.");
   const maxBookSteps = input.maxBookSteps ?? DEFAULT_MAX_BOOK_STEPS;
-  if (maxBookSteps < 1n || maxBookSteps > MAX_UINT32) {
+  if (maxBookSteps < 1n || maxBookSteps > MAX_BOOK_STEPS) {
     throw new Error("Order book steps must fit in a non-zero uint32.");
   }
   const priceLimit = marketPriceLimit(pool, side, input.referencePriceRaw, parseSlippageBps(input.slippagePercent));

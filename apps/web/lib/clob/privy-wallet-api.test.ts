@@ -94,6 +94,49 @@ test("accepts a single CLOB cancellation call", () => {
   assert.deepEqual(validatePrivyOrderBatch(body, 10143), body);
 });
 
+test("accepts a sponsored market order using the current deployed selector", () => {
+  const body = buildPrivySendCallsBody(10143, [
+    {
+      to: book,
+      data: encodeFunctionData({
+        abi: clobAbi,
+        functionName: "executeMarketOrder",
+        args: [
+          {
+            trader,
+            baseAsset: "0x891874554c69a1006914a8fe6b733304e73cbdb5",
+            quoteAsset: token,
+            side: 0,
+            quantity: 1n,
+            priceLimit: 1n,
+            minFillQuantity: 0n,
+            minReceive: 0n,
+            clientOrderId: 0n,
+          },
+          64,
+        ],
+      }),
+    },
+  ]);
+
+  assert.deepEqual(validatePrivyOrderBatch(body, 10143), body);
+});
+
+test("accepts sponsored quarantined-order recovery", () => {
+  const body = buildPrivySendCallsBody(10143, [
+    {
+      to: book,
+      data: encodeFunctionData({
+        abi: clobAbi,
+        functionName: "closeQuarantinedOrder",
+        args: [`0x${"22".repeat(32)}`, trader],
+      }),
+    },
+  ]);
+
+  assert.deepEqual(validatePrivyOrderBatch(body, 10143), body);
+});
+
 test("allows only an allowlisted faucet claim in the sponsored proxy", () => {
   const claimData = encodeFunctionData({
     abi: [

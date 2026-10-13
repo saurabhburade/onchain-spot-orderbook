@@ -46,6 +46,32 @@ test("lens ABI exposes best prices and both book sides", () => {
   );
 });
 
+test("direct and lens market depth quantities use uint256", () => {
+  const getOrderBook = clobAbi.find((item) => item.name === "getOrderBook");
+  assert(getOrderBook && "outputs" in getOrderBook);
+  for (const side of getOrderBook.outputs) {
+    assert.equal(side.type, "tuple[]");
+    assert.equal(side.components.find((component) => component.name === "quantity")?.type, "uint256");
+  }
+
+  const getBestPrices = clobAbi.find((item) => item.name === "getBestPrices");
+  assert(getBestPrices && "outputs" in getBestPrices);
+  assert.equal(getBestPrices.outputs.find((output) => output.name === "bidQuantity")?.type, "uint256");
+  assert.equal(getBestPrices.outputs.find((output) => output.name === "askQuantity")?.type, "uint256");
+
+  const snapshotFunction = clobLensAbi.find((item) => item.name === "getMarketSnapshot");
+  assert(snapshotFunction && "outputs" in snapshotFunction);
+  const snapshot = snapshotFunction.outputs[0];
+  assert.equal(snapshot.type, "tuple");
+  assert.equal(snapshot.components.find((component) => component.name === "bidQuantity")?.type, "uint256");
+  assert.equal(snapshot.components.find((component) => component.name === "askQuantity")?.type, "uint256");
+  for (const name of ["bids", "asks"] as const) {
+    const side = snapshot.components.find((component) => component.name === name);
+    assert(side?.type === "tuple[]");
+    assert.equal(side.components.find((component) => component.name === "quantity")?.type, "uint256");
+  }
+});
+
 test("direct and lens order reads expose the complete OrderState", () => {
   const getOrder = clobAbi.find((item) => item.name === "getOrder");
   assert(getOrder && "outputs" in getOrder);

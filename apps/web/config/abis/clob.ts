@@ -56,7 +56,7 @@ export const clobAbi = [
         type: "tuple[]",
         components: [
           { name: "price", type: "uint128" },
-          { name: "quantity", type: "uint128" },
+          { name: "quantity", type: "uint256" },
         ],
       },
       {
@@ -64,7 +64,7 @@ export const clobAbi = [
         type: "tuple[]",
         components: [
           { name: "price", type: "uint128" },
-          { name: "quantity", type: "uint128" },
+          { name: "quantity", type: "uint256" },
         ],
       },
     ],
@@ -77,10 +77,10 @@ export const clobAbi = [
     outputs: [
       { name: "bidExists", type: "bool" },
       { name: "bidPrice", type: "uint128" },
-      { name: "bidQuantity", type: "uint128" },
+      { name: "bidQuantity", type: "uint256" },
       { name: "askExists", type: "bool" },
       { name: "askPrice", type: "uint128" },
-      { name: "askQuantity", type: "uint128" },
+      { name: "askQuantity", type: "uint256" },
     ],
   },
   {
@@ -405,16 +405,16 @@ export const clobLensAbi = [
           { name: "sequence", type: "uint64" },
           { name: "bidExists", type: "bool" },
           { name: "bidPrice", type: "uint128" },
-          { name: "bidQuantity", type: "uint128" },
+          { name: "bidQuantity", type: "uint256" },
           { name: "askExists", type: "bool" },
           { name: "askPrice", type: "uint128" },
-          { name: "askQuantity", type: "uint128" },
+          { name: "askQuantity", type: "uint256" },
           {
             name: "bids",
             type: "tuple[]",
             components: [
               { name: "price", type: "uint128" },
-              { name: "quantity", type: "uint128" },
+              { name: "quantity", type: "uint256" },
             ],
           },
           {
@@ -422,7 +422,7 @@ export const clobLensAbi = [
             type: "tuple[]",
             components: [
               { name: "price", type: "uint128" },
-              { name: "quantity", type: "uint128" },
+              { name: "quantity", type: "uint256" },
             ],
           },
         ],

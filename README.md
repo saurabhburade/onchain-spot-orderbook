@@ -71,9 +71,9 @@ the user's wallet or session private key.
 
 | Contract | Address |
 | --- | --- |
-| SpotCLOBFactory | [`0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB`](https://testnet.monadscan.com/address/0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB) |
-| SpotCLOBLens | [`0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402`](https://testnet.monadscan.com/address/0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402) |
-| Default USDT/USDC book | [`0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3`](https://testnet.monadscan.com/address/0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3) |
+| SpotCLOBFactory | [`0xC15149BB40F1c69a110b9EE09EA5961250f22406`](https://testnet.monadscan.com/address/0xC15149BB40F1c69a110b9EE09EA5961250f22406) |
+| SpotCLOBLens | [`0x517a087B090c213726aA1255C9Ac5dCB268Fd633`](https://testnet.monadscan.com/address/0x517a087B090c213726aA1255C9Ac5dCB268Fd633) |
+| Default USDT/USDC book | [`0xa8C0038ac677c669e143bcB6F73038f645e41032`](https://testnet.monadscan.com/address/0xa8C0038ac677c669e143bcB6F73038f645e41032) |
 | ERC20TokenFactory | [`0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc`](https://testnet.monadscan.com/address/0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc) |
 | TokenFaucet | [`0xB8d1b7f2a722A0b5315eaF0840F652A95a758598`](https://testnet.monadscan.com/address/0xB8d1b7f2a722A0b5315eaF0840F652A95a758598) |
 

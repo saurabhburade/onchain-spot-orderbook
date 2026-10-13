@@ -61,7 +61,9 @@ describe("market order protection", () => {
     assert.throws(() => parseMaxBookSteps("4294967296"), /between 1/);
   });
 
-  it("lets traders set the book-step bound in the trade ticket", () => {
+  it("lets traders set the book-step bound from order settings", () => {
+    assert.match(tradeTicketSource, /aria-label="Order settings"/);
+    assert.match(tradeTicketSource, /<Popover\.Root>/);
     assert.match(tradeTicketSource, /htmlFor="max-book-steps"/);
     assert.match(tradeTicketSource, /parseMaxBookSteps\(maxBookStepsInput\)/);
     assert.match(tradeTicketSource, /onMarketOrder\([\s\S]*maxBookSteps: bookSteps\.value/);

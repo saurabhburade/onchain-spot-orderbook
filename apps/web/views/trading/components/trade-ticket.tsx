@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, LoaderCircle } from "lucide-react";
+import { Popover } from "@base-ui/react/popover";
+import { ExternalLink, LoaderCircle, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RangeSlider } from "@/components/motion/range-slider";
 import { Button } from "@/components/ui/button";
@@ -416,27 +417,68 @@ export function TradeTicket({
       }`}
     >
       <CardHeader className="px-0 pt-0 !pb-0">
-        <Tabs className="gap-0" onValueChange={(value) => selectOrderType(value as OrderType)} value={orderType}>
-          <TabsList
-            aria-label="Order type"
-            className={`w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border bg-transparent p-0 ${
-              mobileCompact ? "h-10! lg:h-12!" : "h-12!"
-            }`}
-            indicatorClassName="rounded-none border-0 bg-transparent after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:content-[''] dark:bg-transparent"
+        <div className="flex border-b border-border">
+          <Tabs
+            className="min-w-0 flex-1 gap-0"
+            onValueChange={(value) => selectOrderType(value as OrderType)}
+            value={orderType}
           >
-            {(["market", "limit"] as const).map((type) => (
-              <TabsTrigger
-                className={`h-full flex-none shrink-0 rounded-none text-xs capitalize data-active:text-foreground ${
-                  mobileCompact ? "px-2 lg:px-4" : "px-4"
-                }`}
-                key={type}
-                value={type}
-              >
-                {type}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+            <TabsList
+              aria-label="Order type"
+              className={`w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0 ${
+                mobileCompact ? "h-10! lg:h-12!" : "h-12!"
+              }`}
+              indicatorClassName="rounded-none border-0 bg-transparent after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:content-[''] dark:bg-transparent"
+            >
+              {(["market", "limit"] as const).map((type) => (
+                <TabsTrigger
+                  className={`h-full flex-none shrink-0 rounded-none text-xs capitalize data-active:text-foreground ${
+                    mobileCompact ? "px-2 lg:px-4" : "px-4"
+                  }`}
+                  key={type}
+                  value={type}
+                >
+                  {type}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Popover.Root>
+            <Popover.Trigger
+              aria-invalid={Boolean(bookSteps.error)}
+              aria-label="Order settings"
+              className={`group grid shrink-0 place-items-center border-l border-border outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30 data-popup-open:bg-muted ${
+                mobileCompact ? "size-10 lg:size-12" : "size-12"
+              } ${bookSteps.error ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+              title="Order settings"
+            >
+              <Settings2 aria-hidden="true" className="size-4" strokeWidth={1.5} />
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Positioner align="end" className="z-50 max-w-[calc(100vw-1.5rem)]" side="bottom" sideOffset={8}>
+                <Popover.Popup className="w-72 origin-(--transform-origin) rounded-xl bg-background p-3 text-foreground ring-1 ring-border transition-[opacity,scale,transform] duration-150 ease-out data-ending-style:-translate-y-1 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:-translate-y-1 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
+                  <Popover.Title className="text-sm font-medium">Order settings</Popover.Title>
+                  <Popover.Description className="mt-1 text-xs text-pretty text-muted-foreground">
+                    Limit how many resting orders this transaction can inspect.
+                  </Popover.Description>
+                  <label className="mt-3 block text-xs font-medium text-muted-foreground" htmlFor="max-book-steps">
+                    Max book steps
+                  </label>
+                  <Input
+                    aria-invalid={Boolean(bookSteps.error)}
+                    className="mt-1.5 h-9 rounded-lg border-input bg-background text-right font-mono text-xs tabular-nums md:text-xs"
+                    id="max-book-steps"
+                    inputMode="numeric"
+                    onChange={(event) => setMaxBookStepsInput(sanitizeIntegerInput(event.target.value))}
+                    spellCheck={false}
+                    value={maxBookStepsInput}
+                  />
+                  {bookSteps.error ? <p className="mt-1.5 text-xs text-destructive">{bookSteps.error}</p> : null}
+                </Popover.Popup>
+              </Popover.Positioner>
+            </Popover.Portal>
+          </Popover.Root>
+        </div>
       </CardHeader>
       <CardContent
         className={`flex flex-1 flex-col ${
@@ -589,23 +631,6 @@ export function TradeTicket({
             <span className="font-mono tabular-nums">
               {tradingFeeBps === null ? "Fee unavailable" : formatTradingFeeRate(tradingFeeBps)}
             </span>
-          </div>
-          <div className="flex items-center justify-between gap-3 text-muted-foreground">
-            <label
-              htmlFor="max-book-steps"
-              title="Maximum resting orders inspected before this transaction stops matching"
-            >
-              Max book steps
-            </label>
-            <Input
-              aria-invalid={Boolean(bookSteps.error)}
-              className="h-8 w-24 rounded-lg border-input bg-background text-right font-mono text-xs tabular-nums md:text-xs"
-              id="max-book-steps"
-              inputMode="numeric"
-              onChange={(event) => setMaxBookStepsInput(sanitizeIntegerInput(event.target.value))}
-              spellCheck={false}
-              value={maxBookStepsInput}
-            />
           </div>
           {orderType === "market" ? (
             <>

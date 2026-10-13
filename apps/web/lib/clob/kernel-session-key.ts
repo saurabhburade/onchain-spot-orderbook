@@ -272,7 +272,12 @@ export function createClobSessionCallPermissions(markets: readonly ClobSessionMa
   const permissions: KernelCallPermission[] = [];
   for (const market of markets) {
     const book = assertAddress(market.book, "market.book");
-    for (const name of ["placeLimitOrderWithMaxBookSteps", "executeMarketOrder", "cancelOrder"]) {
+    for (const name of [
+      "placeLimitOrderWithMaxBookSteps",
+      "executeMarketOrder",
+      "cancelOrder",
+      "closeQuarantinedOrder",
+    ]) {
       permissions.push({
         callType: "0x00",
         target: book,
@@ -317,6 +322,7 @@ export function createAppSessionCallPermissions(): KernelCallPermission[] {
     ...selectorsForAbi(clobAbi, "placeLimitOrderWithMaxBookSteps"),
     ...selectorsForAbi(clobAbi, "executeMarketOrder"),
     ...selectorsForAbi(clobAbi, "cancelOrder"),
+    ...selectorsForAbi(clobAbi, "closeQuarantinedOrder"),
     ...selectorsForAbi(erc20Abi, "approve"),
     ...selectorsForAbi(erc20Abi, "transfer"),
     ...selectorsForAbi(tokenFaucetAbi, "claim"),

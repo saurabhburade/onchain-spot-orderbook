@@ -119,9 +119,9 @@ contract AuditPricingActor {
 contract AuditPricingFindingsTest {
     uint128 private constant ONE_USDC_PER_TOKEN = 1e18;
     uint128 private constant DUST_PRICE = 1e7;
-    uint128 private constant DUST_MINIMUM = 10_000_000_000 ether;
-    uint128 private constant MINIMUM_AT_ONE_USDC = 1e17;
-    uint256 private constant MINIMUM_QUOTE = 100_000;
+    uint128 private constant DUST_MINIMUM = 1_000_000_000_000 ether;
+    uint128 private constant MINIMUM_AT_ONE_USDC = 10 ether;
+    uint256 private constant MINIMUM_QUOTE = 10_000_000;
     uint128 private constant MAX_UINT128 = type(uint128).max;
 
     /// @dev I-04 is NatSpec-only and is intentionally omitted: its assertion is documentation
@@ -152,7 +152,7 @@ contract AuditPricingFindingsTest {
         // The buy is valid at its own price, but this taker slice is too small to produce one
         // quote atom at DUST_PRICE. It must be refunded without deleting the valid maker.
         bytes32 rejectedRemainder =
-            buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 2e18, 5e16);
+            buyer.place(book, address(base), address(quote), ISpotCLOB.Side.Buy, 2e18, 5 ether);
         {
             (, ISpotCLOB.OrderState memory buyState) = book.getOrder(rejectedRemainder);
             require(buyState.filledQuantity == 0, "dust ask unexpectedly filled the buy");
@@ -284,8 +284,8 @@ contract AuditPricingFindingsTest {
             _deployAgnostic(18, 6, 100);
         AuditPricingActor seller = new AuditPricingActor();
         AuditPricingActor buyer = new AuditPricingActor();
-        uint128 takerQuantity = 1 ether;
-        uint256 buyerFunding = 2_020_000;
+        uint128 takerQuantity = 5 ether;
+        uint256 buyerFunding = 10_100_000;
 
         _fundBase(book, base, seller, DUST_MINIMUM);
         _fundQuote(book, quote, buyer, buyerFunding);
@@ -324,21 +324,21 @@ contract AuditPricingFindingsTest {
         AuditPricingActor sellerB = new AuditPricingActor();
         AuditPricingActor buyer = new AuditPricingActor();
 
-        _fundBase(book, base, sellerA, 5);
-        _fundBase(book, base, sellerB, 5);
-        _fundQuote(book, quote, buyer, 11);
+        _fundBase(book, base, sellerA, 10);
+        _fundBase(book, base, sellerB, 10);
+        _fundQuote(book, quote, buyer, 22);
         sellerA.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 10
         );
         sellerB.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 10
         );
 
         bytes32 bid = buyer.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 10
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 20
         );
 
-        require(book.accruedTradingFees(address(quote)) == 1, "taker fee was split by maker");
+        require(book.accruedTradingFees(address(quote)) == 4, "taker fee was split by maker");
         require(book.orderFeeRemainder(bid) == 0, "taker remainder not consumed");
         require(quote.balanceOf(address(buyer)) == 0, "buyer did not pay aggregate taker fee");
     }
@@ -374,14 +374,14 @@ contract AuditPricingFindingsTest {
         AuditPricingActor seller = new AuditPricingActor();
         AuditPricingActor buyer = new AuditPricingActor();
 
-        _fundBase(book, base, seller, 10);
-        _fundQuote(book, quote, buyer, 11);
+        _fundBase(book, base, seller, 20);
+        _fundQuote(book, quote, buyer, 22);
         bytes32 bid = buyer.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 10
+            book, address(base), address(quote), ISpotCLOB.Side.Buy, ONE_USDC_PER_TOKEN, 20
         );
 
         seller.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 10
         );
         (, ISpotCLOB.OrderState memory partialState) = book.getOrder(bid);
         require(
@@ -389,23 +389,23 @@ contract AuditPricingFindingsTest {
             "bid did not partially fill"
         );
         (, uint256 lockedAfterFirst,) = book.balanceOf(address(buyer), address(quote));
-        require(lockedAfterFirst == 6, "bid released carried-fee reserve");
+        require(lockedAfterFirst == 11, "bid released carried-fee reserve");
 
         seller.place(
-            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 5
+            book, address(base), address(quote), ISpotCLOB.Side.Sell, ONE_USDC_PER_TOKEN, 10
         );
         (, ISpotCLOB.OrderState memory filled) = book.getOrder(bid);
         require(filled.status == ISpotCLOB.OrderStatus.Filled, "carried fee froze resting bid");
         (, uint256 lockedAfterSecond,) = book.balanceOf(address(buyer), address(quote));
         require(lockedAfterSecond == 0, "filled bid retained reserve");
-        require(book.accruedTradingFees(address(quote)) == 1, "resting-bid fees incorrect");
+        require(book.accruedTradingFees(address(quote)) == 4, "resting-bid fees incorrect");
         require(book.orderFeeRemainder(bid) == 0, "resting-bid remainder not consumed");
     }
 
     function testFuzz_I01MakerFeeIsInvariantToFillPartition(uint16 totalSeed, uint16 splitSeed)
         public
     {
-        uint128 total = uint128(2 + totalSeed % 999);
+        uint128 total = uint128(10 + totalSeed % 991);
         uint128 first = uint128(1 + splitSeed % (total - 1));
         uint128 second = total - first;
         (SpotCLOB book, AuditPricingToken base, AuditPricingToken quote,) =
@@ -439,8 +439,8 @@ contract AuditPricingFindingsTest {
         uint256 singleFillProceeds = _partialAskScenario(false);
         uint256 fragmentedProceeds = _partialAskScenario(true);
 
-        require(singleFillProceeds == 100_001, "single fill quote changed");
-        require(fragmentedProceeds == 100_000, "partial-fill rounding was not reproduced");
+        require(singleFillProceeds == 10_000_001, "single fill quote changed");
+        require(fragmentedProceeds == 10_000_000, "partial-fill rounding was not reproduced");
         require(
             fragmentedProceeds < singleFillProceeds,
             "many fills did not pay less quote than one fill"
@@ -453,20 +453,11 @@ contract AuditPricingFindingsTest {
         SpotCLOBLens lens = new SpotCLOBLens();
         AuditPricingActor seller = new AuditPricingActor();
 
-        uint128 maximumPriceMinimum =
-            lens.minimumOrderQuantity(book, address(base), address(quote), type(uint128).max);
-        require(
-            lens.quoteAmount(
-                book, address(base), address(quote), type(uint128).max, maximumPriceMinimum
-            ) >= 1,
-            "representable boundary was rejected"
-        );
-
         (bool success, bytes memory reason) = address(lens)
             .staticcall(
                 abi.encodeCall(
                     SpotCLOBLens.minimumOrderQuantity,
-                    (book, address(base), address(quote), uint128(1))
+                    (book, address(base), address(quote), type(uint128).max)
                 )
             );
         require(!success, "unrepresentable minimum was returned");
@@ -474,7 +465,7 @@ contract AuditPricingFindingsTest {
             keccak256(reason)
                 == keccak256(
                     abi.encodeWithSelector(
-                        SpotCLOBLens.MinimumQuantityUnrepresentable.selector, uint128(1)
+                        SpotCLOBLens.MinimumQuantityUnrepresentable.selector, type(uint128).max
                     )
                 ),
             "wrong unrepresentable-minimum error"
@@ -497,7 +488,7 @@ contract AuditPricingFindingsTest {
         uint128 price = 1e30;
 
         _fundBase(book, base, firstSeller, MAX_UINT128);
-        uint128 minimum = 100_000;
+        uint128 minimum = 10_000_000;
         _fundBase(book, base, secondSeller, minimum);
         bytes32 first = firstSeller.place(
             book, address(base), address(quote), ISpotCLOB.Side.Sell, price, MAX_UINT128
@@ -546,13 +537,13 @@ contract AuditPricingFindingsTest {
         AuditPricingActor seller = new AuditPricingActor();
         AuditPricingActor firstBuyer = new AuditPricingActor();
         AuditPricingActor secondBuyer = new AuditPricingActor();
-        uint128 totalQuantity = 100_001e12;
+        uint128 totalQuantity = 10_000_001e12;
         uint128 partialQuantity = totalQuantity / 2;
         uint128 price = ONE_USDC_PER_TOKEN;
 
         _fundBase(book, base, seller, totalQuantity);
-        _fundQuote(book, quote, firstBuyer, 100_001);
-        _fundQuote(book, quote, secondBuyer, 100_001);
+        _fundQuote(book, quote, firstBuyer, 10_000_001);
+        _fundQuote(book, quote, secondBuyer, 10_000_001);
         seller.place(book, address(base), address(quote), ISpotCLOB.Side.Sell, price, totalQuantity);
 
         if (fragmented) {

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 /// @notice The matching boundary for a fully on-chain spot central limit order book.
 /// @dev Implementations must perform price-time matching and settlement on-chain.
 interface ISpotCLOB {
+    error InvalidMaxBookSteps();
     error MarketInsolvent(
         bytes32 marketId, address asset, uint256 availableAssets, uint256 liabilities
     );
@@ -174,22 +175,27 @@ interface ISpotCLOB {
 
     /// @notice Place a limit order and match it against the resting book.
     /// @dev The implementation must reject invalid pairs, zero values, and insufficient available
-    /// balance before mutating the book. Supply-agnostic orders must be worth at least one tenth of
-    /// a quote token at their limit price, both before and after any recipient-side transfer tax.
+    /// balance before mutating the book. Supply-agnostic orders must be worth at least ten whole
+    /// quote tokens at their limit price, both before and after any recipient-side transfer tax.
     /// `order.quantity` is the requested maximum: recipient-side transfer tax reduces the accepted
-    /// quantity to what the received escrow can fund. Accepted orders are good-til-cancelled and
-    /// remain open until filled or cancelled by their owner.
+    /// quantity to what the received escrow can fund. A remainder that safely rests has no expiry
+    /// and remains open until filled or cancelled by its owner. A dust or still-crossed incoming
+    /// remainder is automatically cancelled and refunded instead of resting.
     /// Funding must debit the trader by exactly the requested transfer amount; sender-surcharge
     /// and otherwise mutable sender accounting are unsupported and revert atomically.
     function placeLimitOrder(LimitOrder calldata order) external returns (bytes32 orderId);
 
+    /// @dev `maxBookSteps` is a caller-selected non-zero transaction work bound.
     function placeLimitOrderWithMaxBookSteps(LimitOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId);
 
     /// @notice Execute immediately against resting liquidity without placing a remainder on-book.
-    /// @dev Reverts when no quantity can execute. A zero minimum permits a partial fill, not a zero
-    /// fill. Wallet funding must debit the trader by exactly the requested input amount.
+    /// @dev Reverts when no quantity can execute unless matching quarantined at least one maker.
+    /// That cleanup-only case returns a zero fill so the quarantine is not rolled back. A zero
+    /// minimum otherwise permits a partial fill, not a zero fill. Wallet funding must debit the
+    /// trader by exactly the requested input amount.
+    /// @dev `maxBookSteps` is a caller-selected non-zero transaction work bound.
     function executeMarketOrder(MarketOrder calldata order, uint32 maxBookSteps)
         external
         returns (bytes32 orderId, uint128 filledQuantity, uint256 quoteQuantity);

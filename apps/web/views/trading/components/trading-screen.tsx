@@ -457,6 +457,9 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
         onCancel={async (orderId) => {
           await clob.cancel(orderId);
         }}
+        onCloseQuarantined={async (orderId, receiver) => {
+          await clob.closeQuarantined(orderId, receiver);
+        }}
         onRecentTradesPageChange={updateIndexerRoute}
         orderHistory={orderHistory}
         orderHistoryError={clob.orderHistory.error?.message ?? marketError}

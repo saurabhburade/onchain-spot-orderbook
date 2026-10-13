@@ -174,6 +174,30 @@ contract FindingTrader {
             address(book).call(abi.encodeCall(SpotCLOB.executeMarketOrder, (order, uint32(64))));
     }
 
+    function executeMarketBuy(
+        SpotCLOB book,
+        address base,
+        address quote,
+        uint128 quantity,
+        uint128 priceLimit,
+        uint32 maxBookSteps
+    ) external returns (bytes32 orderId, uint128 filledQuantity, uint256 quoteQuantity) {
+        return book.executeMarketOrder(
+            ISpotCLOB.MarketOrder({
+                trader: address(this),
+                baseAsset: base,
+                quoteAsset: quote,
+                side: ISpotCLOB.Side.Buy,
+                quantity: quantity,
+                priceLimit: priceLimit,
+                minFillQuantity: quantity,
+                minReceive: uint256(quantity) * 1 ether,
+                clientOrderId: 0
+            }),
+            maxBookSteps
+        );
+    }
+
     function closeQuarantined(SpotCLOB book, bytes32 orderId, address receiver) external {
         book.closeQuarantinedOrder(orderId, receiver);
     }
@@ -190,6 +214,15 @@ contract FindingTrader {
 contract AuditTokenBehaviorFindingsTest {
     uint256 private constant ONE = 1 ether;
     uint256 private constant BLOCKED_ORDER_COUNT = 100;
+
+    struct StepLimitScenario {
+        ReceiverBlocklistToken quote;
+        FindingERC20 base;
+        SpotCLOB book;
+        FindingTrader buyer;
+        bytes32[3] blockedOrders;
+        bytes32 validAsk;
+    }
 
     event log_named_uint(string key, uint256 value);
 
@@ -359,6 +392,44 @@ contract AuditTokenBehaviorFindingsTest {
         _assertOrderStatus(book, secondValid, ISpotCLOB.OrderStatus.Filled, 1);
     }
 
+    function testM02StepLimitCommitsQuarantinesAndNextCallReachesValidLiquidity() public {
+        StepLimitScenario memory scenario = _stepLimitScenario();
+
+        (bytes32 cleanupOrder, uint128 firstFill, uint256 firstQuote) = scenario.buyer
+            .executeMarketBuy(
+                scenario.book, address(scenario.base), address(scenario.quote), 1, 100, 2
+            );
+
+        require(firstFill == 0 && firstQuote == 0, "cleanup call unexpectedly filled");
+        _assertOrderStatus(scenario.book, cleanupOrder, ISpotCLOB.OrderStatus.Cancelled, 0);
+        _assertOrderStatus(
+            scenario.book, scenario.blockedOrders[0], ISpotCLOB.OrderStatus.Quarantined, 0
+        );
+        _assertOrderStatus(
+            scenario.book, scenario.blockedOrders[1], ISpotCLOB.OrderStatus.Quarantined, 0
+        );
+        _assertOrderStatus(scenario.book, scenario.blockedOrders[2], ISpotCLOB.OrderStatus.Open, 0);
+        _assertOrderStatus(scenario.book, scenario.validAsk, ISpotCLOB.OrderStatus.Open, 0);
+        require(
+            scenario.quote.balanceOf(address(scenario.buyer)) == 1_000, "cleanup call charged buyer"
+        );
+
+        (, uint128 secondFill, uint256 secondQuote) = scenario.buyer
+            .executeMarketBuy(
+                scenario.book, address(scenario.base), address(scenario.quote), 1, 100, 2
+            );
+
+        require(secondFill == 1 && secondQuote == 100, "next call did not reach valid liquidity");
+        _assertOrderStatus(
+            scenario.book, scenario.blockedOrders[2], ISpotCLOB.OrderStatus.Quarantined, 0
+        );
+        _assertOrderStatus(scenario.book, scenario.validAsk, ISpotCLOB.OrderStatus.Filled, 1);
+        require(
+            scenario.base.balanceOf(address(scenario.buyer)) == ONE,
+            "buyer did not receive valid fill"
+        );
+    }
+
     function testM03NegativeRebaseBlocksTradingAndCancelsProRata() public {
         NegativeRebaseToken base = new NegativeRebaseToken();
         FindingERC20 quote = new FindingERC20();
@@ -490,6 +561,42 @@ contract AuditTokenBehaviorFindingsTest {
         address deployed;
         (id, deployed) = factory.createPair(base, quote, 1, 1, 100_000);
         book = SpotCLOB(deployed);
+    }
+
+    function _stepLimitScenario() private returns (StepLimitScenario memory scenario) {
+        scenario.quote = new ReceiverBlocklistToken();
+        scenario.base = new FindingERC20();
+        (scenario.book,) = _deployPair(address(scenario.base), address(scenario.quote));
+        FindingTrader blockedMaker = new FindingTrader();
+        FindingTrader validMaker = new FindingTrader();
+        scenario.buyer = new FindingTrader();
+
+        scenario.base.mint(address(blockedMaker), 3 * ONE);
+        scenario.base.mint(address(validMaker), ONE);
+        scenario.quote.mint(address(scenario.buyer), 1_000);
+        blockedMaker.approve(scenario.base, scenario.book);
+        validMaker.approve(scenario.base, scenario.book);
+        scenario.buyer.approve(scenario.quote, scenario.book);
+
+        for (uint256 i; i < scenario.blockedOrders.length; ++i) {
+            scenario.blockedOrders[i] = blockedMaker.place(
+                scenario.book,
+                address(scenario.base),
+                address(scenario.quote),
+                ISpotCLOB.Side.Sell,
+                100,
+                1
+            );
+        }
+        scenario.validAsk = validMaker.place(
+            scenario.book,
+            address(scenario.base),
+            address(scenario.quote),
+            ISpotCLOB.Side.Sell,
+            100,
+            1
+        );
+        scenario.quote.setBlacklisted(address(blockedMaker), true);
     }
 
     function _assertHead(

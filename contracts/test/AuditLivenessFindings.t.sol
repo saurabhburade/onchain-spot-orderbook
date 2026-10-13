@@ -48,7 +48,7 @@ contract AuditLivenessFindingsTest {
         AuditLivenessVm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     uint128 private constant PRICE = 1e18;
-    uint128 private constant QUANTITY = 1e18;
+    uint128 private constant QUANTITY = 10e18;
     address private constant MAKER = address(0xA11CE);
     address private constant BIDDER = address(0xB0B);
     address private constant SELLER = address(0xCA401);
@@ -73,7 +73,7 @@ contract AuditLivenessFindingsTest {
     /// matchable regardless of elapsed time.
     function testGtcOrderRemainsMatchableAfterTimePasses() public {
         base.mint(MAKER, QUANTITY);
-        quote.mint(BIDDER, 2e6);
+        quote.mint(BIDDER, 20e6);
         _approve(MAKER, base);
         _approve(BIDDER, quote);
         bytes32 ask = _placeDefault(MAKER, ISpotCLOB.Side.Sell, PRICE, QUANTITY);
@@ -89,7 +89,7 @@ contract AuditLivenessFindingsTest {
     /// current fee, so raising the market fee cannot strand an older bid at the head of the book.
     function testFeeIncreaseDoesNotBlockRestingBidFromMarketSell() public {
         base.mint(SELLER, QUANTITY);
-        quote.mint(BIDDER, 2e6);
+        quote.mint(BIDDER, 20e6);
         _approve(SELLER, base);
         _approve(BIDDER, quote);
 
@@ -109,10 +109,10 @@ contract AuditLivenessFindingsTest {
             bidAfter.status == ISpotCLOB.OrderStatus.Filled && bidAfter.filledQuantity == QUANTITY,
             "old bid did not fill"
         );
-        require(quote.balanceOf(SELLER) == 998_000, "taker did not pay the current fee");
+        require(quote.balanceOf(SELLER) == 9_980_000, "taker did not pay the current fee");
         require(base.balanceOf(BIDDER) == QUANTITY, "maker did not receive base");
         require(
-            book.accruedTradingFees(address(quote)) == 3_000,
+            book.accruedTradingFees(address(quote)) == 30_000,
             "maker and taker fees used the wrong rates"
         );
     }

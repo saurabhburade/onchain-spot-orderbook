@@ -113,31 +113,18 @@ contract ArithmeticBoundsTest {
         require(baseLocked == 0 && quoteLocked == 0, "unfunded order acquired liabilities");
     }
 
-    function testHighestSupportedDecimalExponentSettlesFullWidthProduct() public {
+    function testHighestSupportedDecimalExponentCannotMeetTenTokenMinimum() public {
         _deploy(true); // 18 + 59 - 0 = 77, the largest supported denominator exponent.
         uint128 maximum = type(uint128).max;
         require(
             SpotPriceMath.quoteAmount(maximum, maximum, 59, 0) == 1, "unexpected boundary quote"
         );
-        bytes32 ask = _limit(ALICE, ISpotCLOB.Side.Sell, maximum, maximum);
-        bytes32 bid = _limit(BOB, ISpotCLOB.Side.Buy, maximum, maximum);
-        (, ISpotCLOB.OrderState memory askState) = book.getOrder(ask);
-        (, ISpotCLOB.OrderState memory bidState) = book.getOrder(bid);
-        require(
-            askState.filledQuoteQuantity == 1 && bidState.filledQuoteQuantity == 1,
-            "77-decimal conversion overflowed"
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                SpotCLOB.MinimumOrderNotionalNotMet.selector, uint256(10), uint256(1)
+            )
         );
-        require(
-            askState.status == ISpotCLOB.OrderStatus.Filled
-                && bidState.status == ISpotCLOB.OrderStatus.Filled,
-            "boundary orders did not fill"
-        );
-        require(book.accruedTradingFees(address(quote)) == 0, "one-atom fee failed to round down");
-        require(
-            quote.balanceOf(ALICE) == 11 && quote.balanceOf(BOB) == 9,
-            "boundary quote settlement incorrect"
-        );
-        _assertConservation(maximum);
+        _limit(ALICE, ISpotCLOB.Side.Sell, maximum, maximum);
     }
 
     function testUnsupportedDenominatorCannotCreatePartiallyInitializedPair() public {

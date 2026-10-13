@@ -83,13 +83,14 @@ contract TraderActor {
         );
     }
 
-    function attemptPlaceWithZeroSteps(
+    function attemptPlaceWithMaxBookSteps(
         SpotCLOB exchange,
         address baseAsset,
         address quoteAsset,
         ISpotCLOB.Side side,
         uint128 price,
-        uint128 quantity
+        uint128 quantity,
+        uint32 maxBookSteps
     ) external returns (bool success) {
         ISpotCLOB.LimitOrder memory order = ISpotCLOB.LimitOrder({
             trader: address(this),
@@ -101,7 +102,7 @@ contract TraderActor {
             clientOrderId: 0
         });
         (success,) = address(exchange)
-            .call(abi.encodeCall(SpotCLOB.placeLimitOrderWithMaxBookSteps, (order, uint32(0))));
+            .call(abi.encodeCall(SpotCLOB.placeLimitOrderWithMaxBookSteps, (order, maxBookSteps)));
     }
 
     function attemptPlace(
@@ -277,6 +278,10 @@ contract SpotCLOBTest {
         buyer.approve(quote, exchange);
     }
 
+    function testDefaultBookStepLimitIsTenThousand() public view {
+        require(exchange.DEFAULT_MAX_BOOK_STEPS() == 10_000, "unexpected default book-step limit");
+    }
+
     function testMatchesBestAskAndRefundsBuyPriceImprovement() public {
         bytes32 askAt100 = _place(sellerA, ISpotCLOB.Side.Sell, 100, 2, 1);
         bytes32 askAt90 = _place(sellerB, ISpotCLOB.Side.Sell, 90, 3, 2);
@@ -343,11 +348,11 @@ contract SpotCLOBTest {
         require(!bidExists, "bid bitmap did not empty");
     }
 
-    function testBookStepLimitRevertsAtomically() public {
+    function testZeroBookStepLimitRevertsAtomically() public {
         bytes32 ask = _place(sellerA, ISpotCLOB.Side.Sell, 100, 1, 1);
         require(
-            !buyer.attemptPlaceWithZeroSteps(
-                exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1
+            !buyer.attemptPlaceWithMaxBookSteps(
+                exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 100, 1, 0
             ),
             "crossing order ignored step limit"
         );
@@ -355,6 +360,16 @@ contract SpotCLOBTest {
         _assertOrder(ask, 0, ISpotCLOB.OrderStatus.Open);
         _assertBalance(address(buyer), address(quote), 1_000_000, 0);
         _assertBestAsk(100);
+    }
+
+    function testBookStepLimitAllowsHundredThousand() public {
+        require(
+            buyer.attemptPlaceWithMaxBookSteps(
+                exchange, address(base), address(quote), ISpotCLOB.Side.Buy, 90, 1, 100_000
+            ),
+            "explicit book-step limit above default was rejected"
+        );
+        _assertBestBid(90);
     }
 
     function testCancelReturnsUnusedEscrowDirectlyToWallet() public {

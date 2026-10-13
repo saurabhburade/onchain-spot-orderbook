@@ -25,12 +25,10 @@ library SpotPriceMath {
     }
 
     /// @notice Minimum quote-token atoms required when a new agnostic order is admitted.
-    /// @dev Targets one tenth of a whole quote token. Zero-decimal tokens use one atom because a
-    /// fractional token cannot be represented by an ERC-20 balance.
+    /// @dev Targets ten whole quote tokens (10 USDC for a six-decimal USDC market).
     function minimumQuoteAmount(uint8 quoteDecimals) internal pure returns (uint256) {
-        if (quoteDecimals == 0) return 1;
-        if (quoteDecimals > 78) revert UnsupportedQuoteDecimals(quoteDecimals);
-        return 10 ** uint256(quoteDecimals - 1);
+        if (quoteDecimals > 76) revert UnsupportedQuoteDecimals(quoteDecimals);
+        return 10 ** uint256(quoteDecimals + 1);
     }
 
     /// @notice Smallest raw base quantity whose quote value meets the new-order admission floor.

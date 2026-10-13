@@ -29,6 +29,8 @@ contracts:
       - event: "OrderFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 totalFilledQuantity)"
       - event: "OrderPartiallyFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 remainingQuantity)"
       - event: "MarketOrderExecuted(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint8 side, uint128 requestedQuantity, uint128 filledQuantity, uint256 quoteQuantity)"
+      - event: "OrderQuarantined(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, address failedAsset)"
+      - event: "QuarantinedOrderClosed(bytes32 indexed orderId, address indexed trader, address indexed receiver, address asset, uint256 amount)"
       - event: "BookUpdated(bytes32 indexed poolId, uint128 bestBid, uint128 bestAsk, uint64 sequence)"
       - event: "OrderCancelled(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint128 remainingQuantity)"
 

@@ -27,9 +27,9 @@ submitted orders, so a resting bid's reserved fee always remains sufficient for 
 The default two-address creation path is supply agnostic: price is quote tokens per whole base
 token with 18 fixed decimals (`priceX18`), while quantity is raw base-token atoms. This provides a
 single price range from `1e-18` to approximately `3.402823669e20` quote tokens per base token.
-The minimum quantity changes with price so every newly accepted limit order is worth at least one
-tenth of a quote token at its limit price. For six-decimal USDC, that admission floor is `100,000`
-atoms, or `0.1 USDC`. Recipient-tax funding is accepted only when the adjusted order still meets
+The minimum quantity changes with price so every newly accepted limit order is worth at least ten
+whole quote tokens at its limit price. For six-decimal USDC, that admission floor is `10,000,000`
+atoms, or `10 USDC`. Recipient-tax funding is accepted only when the adjusted order still meets
 the same floor.
 
 Legacy creation overloads can derive a pair's base lot from administrator-controlled decimal precision or accept
@@ -59,21 +59,27 @@ to both traders, price improvement is returned immediately, and cancellation ret
 directly to the order owner's wallet. Before accepting or matching an order, the book verifies that
 both market assets cover aggregate escrow and fee liabilities. An insolvent market rejects trading
 with `MarketInsolvent`; order owners may still cancel, receiving the pro-rata recoverable value of
-their remaining escrow. If a resting maker cannot receive a payout,
-the fill attempt rolls back atomically, the order is marked quarantined and immediately unlinked
-from the FIFO queue, and matching continues at the next executable order. The owner can later
-release all remaining escrow with `closeQuarantinedOrder(orderId, receiver)`. A quarantined order
-remains stored only as an escrow-recovery record with `resting == false`; no separate book cleanup
-is required. There is no general-purpose deposit or withdrawal balance.
+their remaining escrow. If a resting maker cannot receive a payout, the fill attempt rolls back
+atomically, the order is marked quarantined and immediately unlinked from the FIFO queue, and
+matching continues while the transaction remains within its gas and caller-selected book-step
+limits. The owner can later release all remaining escrow with
+`closeQuarantinedOrder(orderId, receiver)`. A quarantined order remains stored only as an
+escrow-recovery record with `resting == false`; no separate book cleanup is required. An out-of-gas
+revert still rolls back every quarantine made by that transaction, so large blocked prefixes
+require gas-safe repeated cleanup calls. There is no general-purpose deposit or withdrawal balance.
+The indexer records both quarantine lifecycle events, and the web app keeps quarantined orders
+visible with an owner-only recovery action that accepts an alternate receiver.
 
 Market orders accept a worst price, a minimum fill, and `minReceive`. For a buy, `minReceive` is
 raw base-token atoms actually received after any recipient-side transfer tax. For a sell, it is raw
 quote-token atoms actually received after per-fill taker fees and any recipient-side transfer tax.
 An unmet minimum reverts the entire operation. Setting `minReceive` to zero disables only that
-output check: the market order still requires at least one fill, observes the price limit and
-book-step cap, and may fill partially when `minFillQuantity` is also zero. Wallet-funded market
-inputs remain exact-transfer only so a short transfer can never consume another order's pooled
-escrow. Market orders never rest on the book. A zero price limit uses the configured pool boundary.
+output check: a market order normally requires at least one fill, observes the price limit and
+book-step cap, and may fill partially when `minFillQuantity` is also zero. A cleanup-only call that
+quarantines at least one maker may return a zero fill so its cleanup is not rolled back.
+Wallet-funded market inputs remain exact-transfer only so a short transfer can never consume
+another order's pooled escrow. Market orders never rest on the book. A zero price limit uses the
+configured pool boundary.
 
 The read interface exposes aggregated, sorted top-N price levels through `getOrderBook(poolId,
 depth)`, capped at 256 levels per side, as well as best-price and individual-level views. State
@@ -119,11 +125,11 @@ slots. Off-chain indexers may read raw slots through RPC, but those reads are st
   enters proportional order-close recovery.
 - Settlement is atomic: base and quote movements and order-state updates either all succeed or all
   revert.
-- A failed maker payout quarantines only that maker order; failed taker receipts revert the taker's
-  transaction and cannot remove an innocent resting order.
+- In a successful transaction, a failed maker payout quarantines only that maker order; failed
+  taker receipts revert the taker's transaction and cannot remove an innocent resting order.
 - Reentrancy, token transfer failures, fee-on-transfer behavior, and unsupported token behavior are
   handled explicitly before production deployment.
-- Market configuration, numeric precision, GTC-only order policy, replay protection, and
+- Market configuration, numeric precision, no-expiry resting-order policy, replay protection, and
   authorization checks are validated on-chain and covered by invariant and fuzz testing.
 
 ## Development
@@ -146,7 +152,8 @@ predecessor lookups against an independent set over the full `uint128` domain. `
 checks rounding, minimum-quantity saturation, and supported / rejected decimal relationships.
 
 `AgnosticPropertiesTest` checks randomized price-time matching, cancellation, per-fill fees,
-market price / minimum-output protections, atomic rollback, GTC behavior, and fee withdrawals.
+market price / minimum-output protections, atomic rollback, resting-order persistence, and fee
+withdrawals.
 `AgnosticInvariantTest` mixes limit and market orders in both directions, authorized and unauthorized
 cancellations, time advances, fee updates, and fee withdrawals across eight sparse prices from
 `1e7` to `type(uint128).max`. It checks wallet conservation, escrow liabilities derived from
@@ -170,7 +177,7 @@ Known limitations reproduced by tests:
 
 - Agnostic markets accept every positive `priceX18`, so improving a bid by one price unit creates
   a separate level and outranks an earlier bid even when both settle to the same quote atoms.
-- The `0.1` quote-token floor is an admission rule for new supply-agnostic limit orders, not a
+- The `10` quote-token floor is an admission rule for new supply-agnostic limit orders, not a
   minimum execution size. A partial remainder remains matchable while it settles at least one
   quote atom; only a zero-settlement remainder is cancelled and refunded. Market orders do not
   rest and rely on their explicit `minFillQuantity` and `minReceive` protections.
@@ -185,8 +192,11 @@ valid maker at the same price. The optimized local EVM measurement from 10 Octob
 | Unlink 100 blocked makers and fill the next valid order | 5,928,959 |
 | Match the next order after immediate unlinking | 325,394 |
 
-The stress match explicitly sets `maxBookSteps` to 101. The default remains 64; callers processing
-a larger blocked prefix must select a sufficient bound and pay the corresponding gas.
+The stress match explicitly sets `maxBookSteps` to 101. The default is 10,000 steps; callers can
+select any non-zero `uint32` bound through `placeLimitOrderWithMaxBookSteps` or
+`executeMarketOrder`. This is a work bound, not a gas guarantee: values that allow more work than
+the transaction gas limit can complete will OOG and roll back the whole transaction. Use a
+gas-safe bound and repeat cleanup calls for longer blocked prefixes.
 
 ### Supply-agnostic gas benchmark
 
@@ -365,7 +375,10 @@ The package has no external Solidity dependencies.
   production registry should use governance-approved tick parameters if configuration squatting
   is unacceptable. Lot precision is administrator-controlled and cannot be supplied by creators.
 - Quote-token removal only prevents future pair creation; existing books deliberately remain live.
-- Limit orders are good-til-cancelled and the order ABI has no expiry field.
+- Successfully resting limit orders have no expiry and remain until filled or owner-cancelled.
+  Incoming dust or still-crossed remainders may be automatically cancelled and refunded.
+- Quarantine cleanup is atomic per transaction. A bound that permits more work than available gas
+  can complete will OOG and roll back that transaction's cleanup.
 - Self-trade prevention, native-token handling, upgradeability, and governance transfer are
   intentionally not implemented.
 - Limit-order funding supports conventional recipient-tax tokens by measuring actual balance

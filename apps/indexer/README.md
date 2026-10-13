@@ -36,6 +36,10 @@ market, filled, partial-fill, and cancelled-order events; trades; opening and cl
 counts; and lot/base/quote volume. `Market` also keeps all-time totals, the current open-order count,
 and the latest trade price and timestamp.
 
+`OrderQuarantined` removes the affected order from the indexed open-order count and records its
+status as `QUARANTINED`. `QuarantinedOrderClosed` then records it as `CANCELLED` after the owner
+releases the remaining escrow to a receiver that can accept the token.
+
 Every fill charges both orders in the quote token at the fee each order captured when it was
 accepted. A maker and taker can therefore pay different rates after a market fee update.
 `TradingFeeCharged` events update the all-time and interval `quoteFees` totals. Fees are rounded

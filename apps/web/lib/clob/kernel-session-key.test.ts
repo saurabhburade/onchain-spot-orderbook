@@ -68,7 +68,7 @@ test("creates only CLOB order and exact-book approval permissions", () => {
       quoteAsset: "0x0000000000000000000000000000000000000012",
     },
   ]);
-  assert.equal(permissions.length, 5);
+  assert.equal(permissions.length, 6);
   assert.equal(permissions.filter((permission) => permission.rules.length > 0).length, 2);
   assert.ok(permissions.every((permission) => permission.callType === "0x00"));
   assert.ok(permissions.every((permission) => permission.valueLimit === 0n));

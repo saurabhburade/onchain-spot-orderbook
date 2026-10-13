@@ -57,7 +57,7 @@ export type IndexedOrder = {
   trader: Address;
   side: "BUY" | "SELL";
   kind: "LIMIT" | "MARKET";
-  status: "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED";
+  status: "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED" | "QUARANTINED";
   price: string;
   quantity: string;
   filledQuantity: string;

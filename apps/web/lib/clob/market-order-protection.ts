@@ -5,8 +5,9 @@ import { formatQuantity, formatQuote, parseQuantityToLots, quoteAmountRaw } from
 
 const BPS = 10_000n;
 const MAX_UINT128 = (1n << 128n) - 1n;
+const MAX_UINT32 = (1n << 32n) - 1n;
 export const DEFAULT_MARKET_SLIPPAGE_PERCENT = "1";
-export const MARKET_ORDER_MAX_BOOK_STEPS = 64n;
+export const DEFAULT_MAX_BOOK_STEPS = 10_000n;
 export const HIGH_SLIPPAGE_THRESHOLD_BPS = 2_000n;
 
 function ceilDiv(value: bigint, divisor: bigint) {
@@ -76,8 +77,10 @@ export function marketOrderTerms(input: {
   const { pool, side } = input;
   const quantity = parseQuantityToLots(input.quantity, pool);
   if (quantity > MAX_UINT128) throw new Error("Order quantity exceeds the supported range.");
-  const maxBookSteps = input.maxBookSteps ?? MARKET_ORDER_MAX_BOOK_STEPS;
-  if (maxBookSteps < 1n || maxBookSteps > 4_294_967_295n) throw new Error("Invalid order book step limit.");
+  const maxBookSteps = input.maxBookSteps ?? DEFAULT_MAX_BOOK_STEPS;
+  if (maxBookSteps < 1n || maxBookSteps > MAX_UINT32) {
+    throw new Error("Order book steps must fit in a non-zero uint32.");
+  }
   const priceLimit = marketPriceLimit(pool, side, input.referencePriceRaw, parseSlippageBps(input.slippagePercent));
   // A market buy names a maximum base size. Convert its quote value at the
   // reference price into the least base that the slippage price can buy.

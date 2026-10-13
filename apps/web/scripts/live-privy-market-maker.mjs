@@ -319,7 +319,7 @@ function buildRuntimeConfig(pool, baseDecimals) {
     takerEvery: integerSetting("MM_TAKER_EVERY", 1, 0, 1_000_000),
     takerWallet: integerSetting("MM_TAKER_WALLET", ACCOUNT_COUNT, 1, ACCOUNT_COUNT),
     maxRounds: integerSetting("MM_MAX_ROUNDS", 0, 0, 1_000_000),
-    maxBookSteps: integerSetting("MM_MAX_BOOK_STEPS", 64, 1, 1_024),
+    maxBookSteps: integerSetting("MM_MAX_BOOK_STEPS", 10_000, 1, 4_294_967_295),
     txTimeoutMs: integerSetting("MM_TX_TIMEOUT_MS", 180_000, 10_000, 600_000),
     cancelOnExit: booleanSetting("MM_CANCEL_ON_EXIT", false),
   };

@@ -30,7 +30,10 @@ function minimumQuantity(pool: PoolMetadata) {
 }
 
 function minimumOrderValue(pool: PoolMetadata) {
-  if (pool.agnosticPricing) return `${formatQuote(1n, pool)} ${pool.quoteSymbol}`;
+  if (pool.agnosticPricing) {
+    const tenQuoteTokens = 10n * 10n ** BigInt(pool.quoteDecimals);
+    return `${formatQuote(tenQuoteTokens, pool)} ${pool.quoteSymbol}`;
+  }
   const minimumPriceRaw = pool.minTick * pool.tickSize;
   return `${formatQuote(quoteAmountRaw(minimumPriceRaw, 1n, pool), pool)} ${pool.quoteSymbol}`;
 }

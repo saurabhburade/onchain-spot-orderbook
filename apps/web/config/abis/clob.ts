@@ -3,6 +3,11 @@ import type { Abi } from "viem";
 export const clobAbi = [
   {
     type: "error",
+    name: "InvalidMaxBookSteps",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NoLiquidity",
     inputs: [],
   },
@@ -196,6 +201,16 @@ export const clobAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "closeQuarantinedOrder",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "externalOrderId", type: "bytes32" },
+      { name: "receiver", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
     type: "event",
     name: "InsolventOrderClosed",
     inputs: [
@@ -281,6 +296,27 @@ export const clobAbi = [
       { name: "poolId", type: "bytes32", indexed: true },
       { name: "trader", type: "address", indexed: true },
       { name: "remainingQuantity", type: "uint128", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "OrderQuarantined",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "trader", type: "address", indexed: true },
+      { name: "failedAsset", type: "address", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "QuarantinedOrderClosed",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "trader", type: "address", indexed: true },
+      { name: "receiver", type: "address", indexed: true },
+      { name: "asset", type: "address", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
     ],
   },
 ] as const satisfies Abi;

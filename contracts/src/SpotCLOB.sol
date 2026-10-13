@@ -21,7 +21,7 @@ contract SpotCLOB is ISpotCLOB {
     using PriceBitmap for PriceBitmap.Data;
     using PriceTree for PriceTree.Data;
 
-    uint32 public constant DEFAULT_MAX_BOOK_STEPS = 64;
+    uint32 public constant DEFAULT_MAX_BOOK_STEPS = 10_000;
     uint16 public constant MAX_VIEW_DEPTH = 256;
     uint16 public constant BPS_DENOMINATOR = 10_000;
     uint8 public constant USER_ORDER_FLAG_OPEN = 1 << 0;
@@ -41,7 +41,6 @@ contract SpotCLOB is ISpotCLOB {
     error InvalidLotQuantity();
     error MinimumOrderNotionalNotMet(uint256 minimumQuoteAmount, uint256 actualQuoteAmount);
     error OrderNotOpen();
-    error MatchLimitExceeded();
     error NoLiquidity();
     error MinimumFillNotMet();
     error MinimumReceiveNotMet();
@@ -86,6 +85,12 @@ contract SpotCLOB is ISpotCLOB {
         address recipient;
         bool recognized;
         bool makerPayout;
+    }
+
+    struct MatchResult {
+        uint256 quoteQuantity;
+        uint256 receivedQuantity;
+        uint32 quarantinedOrders;
     }
 
     struct PriceLevel {
@@ -301,6 +306,7 @@ contract SpotCLOB is ISpotCLOB {
         nonReentrant
         returns (bytes32 orderId, uint128 filledQuantity, uint256 quoteQuantity)
     {
+        _requireValidMaxBookSteps(maxBookSteps);
         if (
             request.trader == address(0) || request.quantity == 0
                 || request.minFillQuantity > request.quantity
@@ -344,13 +350,16 @@ contract SpotCLOB is ISpotCLOB {
         orderId = bytes32(uint256(internalOrderId));
         _emitOrderPlaced(orderId, incoming, market);
         {
-            uint256 receivedQuantity;
-            (quoteQuantity, receivedQuantity) =
+            MatchResult memory result =
                 _match(id, internalOrderId, incoming, limitKey, maxBookSteps, true);
+            quoteQuantity = result.quoteQuantity;
             filledQuantity = request.quantity - incoming.remaining;
-            if (filledQuantity == 0) revert NoLiquidity();
-            if (filledQuantity < request.minFillQuantity) revert MinimumFillNotMet();
-            if (receivedQuantity < request.minReceive) revert MinimumReceiveNotMet();
+            if (filledQuantity == 0) {
+                if (result.quarantinedOrders == 0) revert NoLiquidity();
+            } else {
+                if (filledQuantity < request.minFillQuantity) revert MinimumFillNotMet();
+                if (result.receivedQuantity < request.minReceive) revert MinimumReceiveNotMet();
+            }
         }
 
         if (incoming.remaining != 0) {
@@ -685,6 +694,7 @@ contract SpotCLOB is ISpotCLOB {
         private
         returns (bytes32 externalOrderId)
     {
+        _requireValidMaxBookSteps(maxBookSteps);
         if (request.trader == address(0) || request.quantity == 0 || request.price == 0) {
             revert InvalidOrder();
         }
@@ -738,6 +748,10 @@ contract SpotCLOB is ISpotCLOB {
         }
     }
 
+    function _requireValidMaxBookSteps(uint32 maxBookSteps) private pure {
+        if (maxBookSteps == 0) revert InvalidMaxBookSteps();
+    }
+
     function _emitOrderPlaced(
         bytes32 externalOrderId,
         StoredOrder storage order,
@@ -763,22 +777,27 @@ contract SpotCLOB is ISpotCLOB {
         uint128 takerKey,
         uint32 maxBookSteps,
         bool takerUsesWallet
-    ) private returns (uint256 quoteQuantity, uint256 receivedQuantity) {
+    ) private returns (MatchResult memory result) {
         uint32 steps;
 
         while (taker.remaining != 0) {
             (bool exists, uint128 makerKey) = _bestOppositePrice(id, taker.side);
             if (!exists || !_crosses(taker.side, takerKey, makerKey)) break;
-            if (steps == maxBookSteps) revert MatchLimitExceeded();
+            if (steps == maxBookSteps) break;
             unchecked {
                 ++steps;
             }
 
-            (uint256 matchedQuote, uint256 matchedReceive, bool progressed) =
+            (uint256 matchedQuote, uint256 matchedReceive, bool progressed, bool quarantined) =
                 _matchOne(id, takerOrderId, taker, makerKey, takerUsesWallet);
             if (!progressed) break;
-            quoteQuantity += matchedQuote;
-            receivedQuantity += matchedReceive;
+            result.quoteQuantity += matchedQuote;
+            result.receivedQuantity += matchedReceive;
+            if (quarantined) {
+                unchecked {
+                    ++result.quarantinedOrders;
+                }
+            }
         }
     }
 
@@ -788,7 +807,10 @@ contract SpotCLOB is ISpotCLOB {
         StoredOrder storage taker,
         uint128 makerKey,
         bool takerUsesWallet
-    ) private returns (uint256 tradedQuote, uint256 receivedQuantity, bool progressed) {
+    )
+        private
+        returns (uint256 tradedQuote, uint256 receivedQuantity, bool progressed, bool quarantined)
+    {
         PriceLevel storage level = _sideBook(id, _opposite(taker.side)).levels[makerKey];
         uint64 makerOrderId = level.activeHeadOrderId;
         StoredOrder storage maker = _orders[makerOrderId];
@@ -796,13 +818,13 @@ contract SpotCLOB is ISpotCLOB {
         try this.settleMatchAtomic(takerOrderId, makerOrderId, makerKey, takerUsesWallet) returns (
             uint256 quoteAmount, uint256 receiveAmount
         ) {
-            if (quoteAmount == 0 && receiveAmount == 0) return (0, 0, false);
-            return (quoteAmount, receiveAmount, true);
+            if (quoteAmount == 0 && receiveAmount == 0) return (0, 0, false, false);
+            return (quoteAmount, receiveAmount, true, false);
         } catch (bytes memory reason) {
             PayoutFailure memory failure = _settlementFailure(reason);
             if (failure.recognized && failure.makerPayout && failure.recipient == maker.trader) {
                 _quarantineOrder(id, makerKey, makerOrderId, maker, failure.asset);
-                return (0, 0, true);
+                return (0, 0, true, true);
             }
             _revertBytes(reason);
         }
@@ -1370,7 +1392,7 @@ contract SpotCLOB is ISpotCLOB {
     }
 
     /// @dev Legacy markets retain their historical one-atom floor. Supply-agnostic markets use a
-    /// human-scale floor of one tenth of a quote token (100,000 atoms for six-decimal USDC).
+    /// human-scale floor of ten quote tokens (10,000,000 atoms for six-decimal USDC).
     function _minimumOrderQuoteAmount(Market storage market) private view returns (uint256) {
         if (!market.agnosticPricing) return 1;
         return SpotPriceMath.minimumQuoteAmount(market.quoteDecimals);

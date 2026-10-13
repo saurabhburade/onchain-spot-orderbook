@@ -17,24 +17,25 @@
 ## Executive summary
 
 The initial review reported eleven findings: one high-severity, three medium-severity, two
-low-severity, and five informational findings. This branch fixes ten findings. The remaining
-informational finding, I-02, is accepted as a documented settlement policy and bounded by fuzz
-tests.
+low-severity, and five informational findings. This branch fully fixes nine findings, mitigates
+M-02 while accepting its residual transaction-gas risk, and accepts I-02 as a documented
+settlement policy bounded by fuzz tests.
 
 The remediation also adds support for conventional recipient-tax tokens, aggregate escrow
 liability accounting, adversarial token-behavior tests, and three stateful invariant campaigns.
 
-| Severity | Reported | Fixed | Accepted | Open |
-| --- | ---: | ---: | ---: | ---: |
-| High | 1 | 1 | 0 | 0 |
-| Medium | 3 | 3 | 0 | 0 |
-| Low | 2 | 2 | 0 | 0 |
-| Informational | 5 | 4 | 1 | 0 |
-| **Total** | **11** | **10** | **1** | **0** |
+| Severity | Reported | Fixed | Mitigated | Accepted | Open |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| High | 1 | 1 | 0 | 0 | 0 |
+| Medium | 3 | 2 | 1 | 0 | 0 |
+| Low | 2 | 2 | 0 | 0 | 0 |
+| Informational | 5 | 4 | 0 | 1 | 0 |
+| **Total** | **11** | **9** | **1** | **1** | **0** |
 
 ### Status definitions
 
 - **Fixed** — runtime remediation is implemented and covered by a regression test.
+- **Mitigated** — runtime remediation reduces impact, but a documented residual risk remains.
 - **Accepted** — the behavior is retained as an explicit design policy, documented, and bounded by
   regression or property tests.
 - **Open** — the reported behavior remains and requires a future code or documentation change.
@@ -59,13 +60,13 @@ certificate or a guarantee that no other vulnerabilities exist.
 
 | ID | Severity | Finding | Status | Resolution |
 | --- | --- | --- | --- | --- |
-| H-01 | High | Expired-order walls can permanently halt a pair | **Fixed** | Expiry was removed from the limit-order ABI; orders are GTC-only |
+| H-01 | High | Expired-order walls can permanently halt a pair | **Fixed** | Expiry was removed; successfully resting limit orders have no time expiry |
 | M-01 | Medium | Fee increases can underfund old bid fee reserves and freeze sells | **Fixed** | Fee rate is snapshotted per order and maker/taker fees settle independently |
-| M-02 | Medium | A blacklisted maker payout can block FIFO matching | **Fixed** | Failed maker settlement is rolled back; the maker is quarantined and immediately unlinked |
+| M-02 | Medium | A blacklisted maker payout can block FIFO matching | **Mitigated** | Failed maker settlement quarantines and unlinks that maker, but OOG still rolls back the transaction |
 | M-03 | Medium | Negative rebases can make escrow insolvent | **Fixed** | Live solvency gate plus proportional owner cancellation and recovery |
 | L-01 | Low | Dust-priced ask can leave a crossed limit buy | **Fixed** | Unfillable or still-crossed incoming remainders are cancelled and refunded instead of resting |
 | L-02 | Low | Sender-surcharge tokens can enter escrow but cannot be released | **Fixed** | Funding rejects any transfer that debits the sender by more than the requested amount |
-| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Per-order fee carry plus a `0.1` quote-token new-order floor |
+| I-01 | Informational | Per-fill fee flooring allows sub-threshold fills to pay no fee | **Fixed** | Per-order fee carry plus a `10` quote-token new-order floor |
 | I-02 | Informational | Fragmented fills can pay less quote than one aggregate fill | **Accepted** | Per-fill quote flooring is retained and its maximum loss is property-tested |
 | I-03 | Informational | Saturated minimum quantity can still be unfillable | **Fixed** | The lens explicitly reverts when no `uint128` quantity can meet the admission floor |
 | I-04 | Informational | Factory NatSpec calls a per-side fee a taker fee | **Fixed** | Both factory interfaces now document the fee as per-side |
@@ -82,8 +83,10 @@ Expired makers were previously removed only during matching. Cleanup consumed th
 steps without filling the taker, and a revert rolled back every removal. A sufficiently large wall
 at one price could therefore become impossible to clear within the transaction gas limit.
 
-The selected design removes expiry from the limit-order ABI and stored order model. All accepted
-limit orders are good-til-cancelled. Consequently, an expired-order wall cannot be created.
+The selected design removes expiry from the limit-order ABI and stored order model. Limit orders
+that successfully rest have no time expiry and remain available until filled or owner-cancelled.
+Incoming dust or still-crossed remainders may instead be automatically cancelled and refunded by
+the L-01 safety policy. Consequently, an expired-order wall cannot be created.
 
 Regression coverage:
 
@@ -117,7 +120,10 @@ Regression coverage:
 ### M-02 — Blacklisted maker can block FIFO matching
 
 **Severity:** Medium  
-**Status:** Fixed
+**Status:** Mitigated
+
+**Residual limitation:** An out-of-gas revert still rolls back every quarantine made by that
+transaction.
 
 An inline payout to a blacklisted maker could revert the entire taker transaction and leave the
 maker at the FIFO head forever. The remediation isolates each fill in an atomic external self-call.
@@ -126,11 +132,15 @@ If a recognized maker payout fails, all changes from that fill roll back before 
 1. marks the maker order `Quarantined`;
 2. immediately unlinks it from the price level with `resting == false`;
 3. emits `OrderQuarantined`; and
-4. continues matching the next maker within the caller's `maxBookSteps` bound.
+4. continues matching the next maker until the order stops, the caller's `maxBookSteps` bound is
+   reached, or the transaction reverts. The default is 10,000; explicit calls accept any non-zero
+   `uint32` value.
 
 The quarantined order retains its escrow claim. Only its owner can call
 `closeQuarantinedOrder(orderId, receiver)`, which permits recovery to an alternate receiver. Failed
-taker receipts still revert the incoming transaction and do not quarantine an unrelated maker.
+taker receipts still revert the incoming transaction and do not quarantine an unrelated maker. The
+indexer tracks both quarantine lifecycle events, and the web app exposes the quarantined status and
+owner-only alternate-receiver recovery flow.
 
 Regression and stress coverage:
 
@@ -141,8 +151,12 @@ Regression and stress coverage:
 
 The 100-maker stress regression measured approximately 5,928,959 gas to unlink the blocked prefix
 and fill the next valid maker. The next match, after those makers had been removed, measured
-approximately 325,394 gas. Callers must still select a `maxBookSteps` value large enough for the
-prefix they intend to process.
+approximately 325,394 gas. `maxBookSteps` is a caller-selected work bound, not a gas guarantee. A
+bound that permits more quarantine work than the transaction gas limit can complete will still OOG
+and roll back the whole batch. Callers seeking reliable cleanup should choose a gas-safe bound and
+repeat cleanup transactions as necessary. The 10-quote-token admission floor raises the capital
+needed to construct a large blocked prefix, but quarantined escrow remains recoverable and is not a
+penalty.
 
 ### M-03 — Rebasing token can make escrow insolvent
 
@@ -213,7 +227,7 @@ Regression matrix:
 - `testFuzz_OneQuoteAtomMarketSliceFillsAndAccountsFeeDust` protects the exact boundary between an
   untradeable fractional quote atom and a valid one-atom fill;
 - [`testL01_ExactMinimumNotionalBoundaryFillsNormally`](../test/AuditPricingFindings.t.sol) protects
-  the exact `0.1` quote-token admission boundary; and
+  the exact `10` quote-token admission boundary; and
 - [`testL01_ZeroQuoteRefundIncludesFeeReserve`](../test/AuditPricingFindings.t.sol) verifies complete
   escrow and fee-reserve recovery without charging a fee.
 
@@ -260,14 +274,14 @@ across many fills therefore produces the same maker fee and proceeds as filling 
 Resting bid reserves preview the carried remainder, so accumulating a fee cannot underfund or
 freeze the bid.
 
-New supply-agnostic limit orders must also be worth at least one tenth of a quote token at their
-limit price. For six-decimal USDC this is `100,000` atoms (`0.1 USDC`). The check runs before
+New supply-agnostic limit orders must also be worth at least ten whole quote tokens at their
+limit price. For six-decimal USDC this is `10,000,000` atoms (`10 USDC`). The check runs before
 funding and again after recipient-side transfer tax adjusts the accepted quantity, so a taxed order
 cannot enter below the floor. The lens reports the corresponding minimum base quantity for each
 price. Legacy markets retain their historical one-atom floor.
 
 This is intentionally an admission rule, not a minimum fill size. A valid order may be partially
-filled below `0.1` quote token and continue matching. If its remaining quantity has zero quote-atom
+filled below `10` quote tokens and continue matching. If its remaining quantity has zero quote-atom
 settlement value, the existing L-01 cleanup unlinks it and returns its actual escrow. A theoretical
 fraction of an ERC-20 atom is never held and therefore cannot be transferred or refunded.
 
@@ -463,7 +477,9 @@ pnpm check
 - The optimized `SpotCLOB` runtime is 31,041 bytes. It fits Monad's documented 128 KiB runtime
   allowance but exceeds Ethereum's 24 KiB EIP-170 limit and is not portable to such chains without
   modularization.
-- Limit orders are GTC-only and the order ABI has no expiry field.
+- Successfully resting limit orders have no expiry. Incoming dust or still-crossed remainders can
+  be automatically cancelled and refunded instead of resting.
+- Quarantine progress is transaction-atomic: an OOG revert loses that transaction's cleanup.
 - Positive rebase surplus is not distributed to order owners.
 - Direction-dependent fees, reflection/reward, and malicious mutable-token accounting remain
   unsupported.

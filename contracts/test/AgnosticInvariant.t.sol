@@ -319,7 +319,7 @@ contract AgnosticInvariantHandler {
             quoteAsset: address(quote),
             side: (seed >> 8) & 1 == 0 ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell,
             price: 1e18,
-            quantity: 1e17 - 1,
+            quantity: 10e18 - 1,
             clientOrderId: 0
         });
 
@@ -332,8 +332,8 @@ contract AgnosticInvariantHandler {
                 == keccak256(
                     abi.encodeWithSelector(
                         SpotCLOB.MinimumOrderNotionalNotMet.selector,
-                        uint256(100_000),
-                        uint256(99_999)
+                        uint256(10_000_000),
+                        uint256(9_999_999)
                     )
                 ),
             "wrong sub-minimum rejection"
@@ -400,7 +400,7 @@ contract AgnosticInvariantHandler {
         }
         (ISpotCLOB.LimitOrder memory order, ISpotCLOB.OrderState memory state) = book.getOrder(id);
         if (state.kind == ISpotCLOB.OrderKind.Limit) {
-            require(_quote(order.price, state.quantity) >= 100_000, "sub-minimum order admitted");
+            require(_quote(order.price, state.quantity) >= 10_000_000, "sub-minimum order admitted");
         }
         require(
             state.filledQuantity == 0 || state.filledQuoteQuantity != 0,

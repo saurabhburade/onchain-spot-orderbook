@@ -162,6 +162,39 @@ test("accepts canonical market orders with minReceive", async () => {
   assert.equal(validated.calls[0]?.data, data);
 });
 
+test("allows only an order owner to recover quarantined escrow to a non-zero receiver", async () => {
+  const orderId = `0x${"01".repeat(32)}` as Hex;
+  const receiver = "0x0000000000000000000000000000000000000004" as Address;
+  const recovery = encodeFunctionData({
+    abi: clobAbi,
+    functionName: "closeQuarantinedOrder",
+    args: [orderId, receiver],
+  });
+  const validated = await encodeAllowedCalls([{ to: book, data: recovery }], book, orderValidationClient());
+  assert.equal(validated.calls[0]?.data, recovery);
+
+  const zeroReceiver = encodeFunctionData({
+    abi: clobAbi,
+    functionName: "closeQuarantinedOrder",
+    args: [orderId, "0x0000000000000000000000000000000000000000"],
+  });
+  await assert.rejects(
+    () => encodeAllowedCalls([{ to: book, data: zeroReceiver }], book, orderValidationClient()),
+    /non-zero receiver/,
+  );
+
+  await assert.rejects(
+    () =>
+      encodeAllowedCalls([{ to: book, data: recovery }], book, {
+        readContract: async (input: { functionName: string }) => {
+          if (input.functionName === "getPair") return book;
+          return [{ trader: receiver, baseAsset: token, quoteAsset: "0x0000000000000000000000000000000000000003" }];
+        },
+      }),
+    /Only the order owner/,
+  );
+});
+
 test("canonicalizes faucet claims and withdrawals before sponsorship", async () => {
   const network = clobContractsByChainId[10143];
   const faucet = network.faucetAddress;

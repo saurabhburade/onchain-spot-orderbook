@@ -23,6 +23,153 @@ const OTHER_TX_HASH = `0x${"bb".repeat(32)}`;
 const CANCEL_TX_HASH = `0x${"cc".repeat(32)}`;
 
 describe("CLOB handlers", () => {
+  it("tracks quarantined orders through owner-directed escrow recovery", async () => {
+    const testIndexer = createTestIndexer();
+    const [chainId] = testIndexer.chainIds;
+    if (chainId === undefined) throw new Error("Expected one configured EVM chain");
+
+    await testIndexer.process({
+      chains: {
+        [chainId]: {
+          simulate: [
+            {
+              contract: "SpotCLOBFactory",
+              event: "PairCreated",
+              srcAddress: FACTORY,
+              logIndex: 0,
+              block: { number: START_BLOCK, timestamp: 1_800_000_000 },
+              transaction: { hash: TX_HASH, from: TRADER },
+              params: {
+                pairId: POOL_ID,
+                baseAsset: BASE,
+                quoteAsset: QUOTE,
+                book: BOOK,
+                lotSize: 1n,
+                tickSize: 1n,
+                minTick: 1n,
+                maxTick: 1_000_000n,
+                tradingFeeBps: 10n,
+              },
+            },
+            {
+              contract: "SpotCLOB",
+              event: "OrderPlaced",
+              srcAddress: BOOK,
+              logIndex: 1,
+              block: { number: START_BLOCK + 1, timestamp: 1_800_000_001 },
+              transaction: { hash: TX_HASH },
+              params: {
+                orderId: ORDER_ID,
+                trader: TRADER,
+                poolId: POOL_ID,
+                baseAsset: BASE,
+                quoteAsset: QUOTE,
+                side: 1n,
+                price: 428_000n,
+                quantity: 3n,
+                clientOrderId: 42n,
+              },
+            },
+            {
+              contract: "SpotCLOB",
+              event: "OrderQuarantined",
+              srcAddress: BOOK,
+              logIndex: 2,
+              block: { number: START_BLOCK + 2, timestamp: 1_800_000_002 },
+              transaction: { hash: OTHER_TX_HASH },
+              params: {
+                orderId: ORDER_ID,
+                poolId: POOL_ID,
+                trader: TRADER,
+                failedAsset: QUOTE,
+              },
+            },
+            {
+              contract: "SpotCLOB",
+              event: "OrderPlaced",
+              srcAddress: BOOK,
+              logIndex: 3,
+              block: { number: START_BLOCK + 2, timestamp: 1_800_000_002 },
+              transaction: { hash: OTHER_TX_HASH },
+              params: {
+                orderId: OTHER_ORDER_ID,
+                trader: OTHER_TRADER,
+                poolId: POOL_ID,
+                baseAsset: BASE,
+                quoteAsset: QUOTE,
+                side: 0n,
+                price: 428_000n,
+                quantity: 3n,
+                clientOrderId: 43n,
+              },
+            },
+            {
+              contract: "SpotCLOB",
+              event: "MarketOrderExecuted",
+              srcAddress: BOOK,
+              logIndex: 4,
+              block: { number: START_BLOCK + 2, timestamp: 1_800_000_002 },
+              transaction: { hash: OTHER_TX_HASH },
+              params: {
+                orderId: OTHER_ORDER_ID,
+                poolId: POOL_ID,
+                trader: OTHER_TRADER,
+                side: 0n,
+                requestedQuantity: 3n,
+                filledQuantity: 0n,
+                quoteQuantity: 0n,
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(await testIndexer.Order.getOrThrow(orderEntityId(BOOK, ORDER_ID))).toMatchObject({
+      status: "QUARANTINED",
+      isOpen: false,
+      remainingQuantity: 3n,
+    });
+    expect(await testIndexer.Market.getOrThrow(POOL_ID)).toMatchObject({ openOrderCount: 0n });
+    expect(await testIndexer.Order.getOrThrow(orderEntityId(BOOK, OTHER_ORDER_ID))).toMatchObject({
+      kind: "MARKET",
+      status: "CANCELLED",
+      isOpen: false,
+      filledQuantity: 0n,
+      remainingQuantity: 3n,
+    });
+
+    await testIndexer.process({
+      chains: {
+        [chainId]: {
+          simulate: [
+            {
+              contract: "SpotCLOB",
+              event: "QuarantinedOrderClosed",
+              srcAddress: BOOK,
+              logIndex: 5,
+              block: { number: START_BLOCK + 3, timestamp: 1_800_000_003 },
+              transaction: { hash: CANCEL_TX_HASH },
+              params: {
+                orderId: ORDER_ID,
+                trader: TRADER,
+                receiver: OTHER_TRADER,
+                asset: BASE,
+                amount: 3n,
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(await testIndexer.Order.getOrThrow(orderEntityId(BOOK, ORDER_ID))).toMatchObject({
+      status: "CANCELLED",
+      isOpen: false,
+      updatedTxHash: CANCEL_TX_HASH,
+    });
+  });
+
   it("retains compatibility with the legacy PairCreated event", async () => {
     const testIndexer = createTestIndexer();
     const [chainId] = testIndexer.chainIds;

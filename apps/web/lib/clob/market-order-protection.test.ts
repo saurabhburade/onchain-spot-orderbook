@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import type { PoolMetadata } from "./types";
 
 const require = createRequire(import.meta.url);
-const { marketOrderTerms, marketPriceLimit, parseSlippageBps, requiresSlippageRiskAcceptance } =
+const { DEFAULT_MAX_BOOK_STEPS, marketOrderTerms, marketPriceLimit, parseSlippageBps, requiresSlippageRiskAcceptance } =
   require("./market-order-protection.ts") as typeof import("./market-order-protection");
 
 const pool: PoolMetadata = {
@@ -26,6 +26,20 @@ const pool: PoolMetadata = {
 };
 
 describe("market order protection", () => {
+  it("uses ten thousand matching steps for app-submitted orders", () => {
+    assert.equal(DEFAULT_MAX_BOOK_STEPS, 10_000n);
+    assert.doesNotThrow(() =>
+      marketOrderTerms({
+        pool,
+        side: "buy",
+        quantity: "10",
+        referencePriceRaw: 2_000_000n,
+        slippagePercent: "1",
+        maxBookSteps: 100_000n,
+      }),
+    );
+  });
+
   it("rounds slippage outward to valid ticks and converts base size to quote total", () => {
     const buy = marketOrderTerms({
       pool,
@@ -116,7 +130,7 @@ describe("market order protection", () => {
       slippagePercent: "0",
     });
     assert.equal(terms.priceLimit, 2n * 10n ** 18n);
-    assert.equal(terms.suggestedMinReceive, "19.979938");
+    assert.equal(terms.suggestedMinReceive, "19.970011");
   });
 
   it("rejects invalid or unrepresentable user protections", () => {

@@ -106,6 +106,7 @@ function orderStatus(status: number): OpenOrder["status"] {
   if (status === 1) return "open";
   if (status === 2) return "partially-filled";
   if (status === 3) return "filled";
+  if (status === 5) return "quarantined";
   return "cancelled";
 }
 
@@ -167,6 +168,8 @@ export function useUserOrders(poolId?: PoolId) {
 
         const walletAddress = tradingAddress;
         const zeroCursor = `0x${"0".repeat(64)}` as PoolId;
+        const allStatusFlags = metadata.legacyFactory ? 7 : 15;
+        const actionableStatusFlags = metadata.legacyFactory ? 1 : 9;
         const readOrderIds = async (statusFlags: number) => {
           const orderIds: PoolId[] = [];
           let cursor = zeroCursor;
@@ -184,7 +187,7 @@ export function useUserOrders(poolId?: PoolId) {
         };
         const readOrders = async (): Promise<UserOrderResult[0]> => {
           if (metadata.legacyFactory) {
-            const orderIds = await readOrderIds(7);
+            const orderIds = await readOrderIds(allStatusFlags);
             if (orderIds.length === 0) return [];
             const results = (await publicClient.multicall({
               allowFailure: false,
@@ -212,14 +215,14 @@ export function useUserOrders(poolId?: PoolId) {
               address: lensAddress as Address,
               abi: clobLensAbi,
               functionName: "getUserOrders",
-              args: [contractAddress, poolId, walletAddress, cursor, 256, 7],
+              args: [contractAddress, poolId, walletAddress, cursor, 256, allStatusFlags],
             })) as UserOrderResult;
             records.push(...page);
             cursor = nextCursor;
           } while (cursor !== zeroCursor);
           return records;
         };
-        const [records, openOrderIds] = await Promise.all([readOrders(), readOrderIds(1)]);
+        const [records, actionableOrderIds] = await Promise.all([readOrders(), readOrderIds(actionableStatusFlags)]);
 
         const orders: OpenOrder[] = records.map(({ orderId, order, state: orderState }) => ({
           orderId,
@@ -237,10 +240,10 @@ export function useUserOrders(poolId?: PoolId) {
           createdAt: orderState.createdAt,
           clientOrderId: order.clientOrderId,
         }));
-        const openOrderSet = new Set(openOrderIds);
+        const actionableOrderSet = new Set(actionableOrderIds);
         knownOrderIds.current = new Set(orders.map((order) => order.orderId));
         setData(orders);
-        setOpenData(orders.filter((order) => openOrderSet.has(order.orderId)));
+        setOpenData(orders.filter((order) => actionableOrderSet.has(order.orderId)));
         loadedRequestKey.current = requestKey;
         setState({ loading: false, error: null });
       } catch (error) {
@@ -261,6 +264,24 @@ export function useUserOrders(poolId?: PoolId) {
         eventName: "OrderPlaced",
         args: { poolId, trader: tradingAddress },
         onLogs: () => void refetch(),
+        onError: refreshOnError,
+      }),
+      eventClient.watchContractEvent({
+        address: contractAddress,
+        abi: clobAbi,
+        eventName: "OrderQuarantined",
+        args: { poolId, trader: tradingAddress },
+        onLogs: () => void refetch(),
+        onError: refreshOnError,
+      }),
+      eventClient.watchContractEvent({
+        address: contractAddress,
+        abi: clobAbi,
+        eventName: "QuarantinedOrderClosed",
+        args: { trader: tradingAddress },
+        onLogs: (logs) => {
+          if (logs.some((log) => log.args.orderId && knownOrderIds.current.has(log.args.orderId))) void refetch();
+        },
         onError: refreshOnError,
       }),
       eventClient.watchContractEvent({

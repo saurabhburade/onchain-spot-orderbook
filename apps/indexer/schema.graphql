@@ -13,6 +13,7 @@ enum OrderStatus {
   PARTIALLY_FILLED
   FILLED
   CANCELLED
+  QUARANTINED
 }
 
 type Market

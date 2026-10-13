@@ -262,8 +262,11 @@ async function verifiedOrderCall(
       throw new DirectUserOperationError("CLOB order trader must match operation.sender");
     }
     assets = [getAddress(request.baseAsset), getAddress(request.quoteAsset)];
-  } else if (decoded.functionName === "cancelOrder") {
-    const [orderId] = decoded.args as [Hex];
+  } else if (decoded.functionName === "cancelOrder" || decoded.functionName === "closeQuarantinedOrder") {
+    const [orderId, receiver] = decoded.args as [Hex, Address | undefined];
+    if (decoded.functionName === "closeQuarantinedOrder" && (!receiver || addressEqual(receiver, zeroAddress))) {
+      throw new DirectUserOperationError("Quarantined-order recovery requires a non-zero receiver");
+    }
     const result = await measure(
       () =>
         publicClient.readContract({
@@ -278,7 +281,7 @@ async function verifiedOrderCall(
     );
     const order = (result as [{ trader: Address; baseAsset: Address; quoteAsset: Address }])[0];
     if (!order || !addressEqual(order.trader, sender)) {
-      throw new DirectUserOperationError("Only the order owner may cancel a CLOB order");
+      throw new DirectUserOperationError("Only the order owner may cancel or recover a CLOB order");
     }
     assets = [getAddress(order.baseAsset), getAddress(order.quoteAsset)];
   } else {

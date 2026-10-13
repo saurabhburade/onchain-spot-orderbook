@@ -386,7 +386,7 @@ export function CreateMarketScreen() {
   const preview = useMemo(() => (pair ? buildMarketInput(pair) : null), [pair]);
   const priceRange = useMemo(() => (pair ? supportedPriceRange() : null), [pair]);
   const minimumOrderValue = pair
-    ? `${formatFraction(1n, 10n ** BigInt(pair.quote.decimals), 24)} ${pair.quote.symbol}`
+    ? `${formatFraction(10n * 10n ** BigInt(pair.quote.decimals), 10n ** BigInt(pair.quote.decimals), 24)} ${pair.quote.symbol}`
     : "—";
   const tokenPriceRangeTitle =
     priceRange && pair ? `${priceRange.minimum}–${priceRange.maximum} ${pair.quote.symbol}` : "—";

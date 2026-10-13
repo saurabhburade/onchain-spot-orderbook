@@ -34,17 +34,17 @@ contract SpotPriceMathTest {
     }
 
     function testSupplyAgnosticMinimumQuantityRegression() public view {
-        _assertMinimum(1e7, 10_000_000_000e18); // 0.00000000001 USDC/token.
-        _assertMinimum(1e12, 100_000e18); // 0.000001 USDC/token.
-        _assertMinimum(1e18, 1e17); // 1 USDC/token.
-        _assertMinimum(10e18, 1e16); // 10 USDC/token.
-        _assertMinimum(1e24, 1e11); // 1,000,000 USDC/token.
+        _assertMinimum(1e7, 1_000_000_000_000e18); // 0.00000000001 USDC/token.
+        _assertMinimum(1e12, 10_000_000e18); // 0.000001 USDC/token.
+        _assertMinimum(1e18, 10e18); // 1 USDC/token.
+        _assertMinimum(10e18, 1e18); // 10 USDC/token.
+        _assertMinimum(1e24, 1e13); // 1,000,000 USDC/token.
     }
 
-    function testMinimumQuoteAmountIsOneTenthOfToken() public view {
-        require(math.minimumQuoteAmount(6) == 100_000, "wrong USDC floor");
-        require(math.minimumQuoteAmount(18) == 1e17, "wrong 18-decimal floor");
-        require(math.minimumQuoteAmount(0) == 1, "zero-decimal floor is not one atom");
+    function testMinimumQuoteAmountIsTenTokens() public view {
+        require(math.minimumQuoteAmount(6) == 10_000_000, "wrong USDC floor");
+        require(math.minimumQuoteAmount(18) == 10e18, "wrong 18-decimal floor");
+        require(math.minimumQuoteAmount(0) == 10, "wrong zero-decimal floor");
     }
 
     function testTrillionTokenSupplyDoesNotLimitPriceRepresentation() public view {
@@ -160,10 +160,10 @@ contract SpotPriceMathTest {
     function _assertMinimum(uint128 priceX18, uint128 expectedQuantity) private view {
         uint128 quantity = math.minimumBaseQuantity(priceX18, 18, 6);
         require(quantity == expectedQuantity, "minimum quantity changed");
-        require(math.quoteAmount(priceX18, quantity, 18, 6) == 100_000, "minimum is not 0.1 USDC");
+        require(math.quoteAmount(priceX18, quantity, 18, 6) == 10_000_000, "minimum is not 10 USDC");
         if (quantity > 1) {
             require(
-                math.quoteAmount(priceX18, quantity - 1, 18, 6) < 100_000,
+                math.quoteAmount(priceX18, quantity - 1, 18, 6) < 10_000_000,
                 "smaller quantity meets admission floor"
             );
         }

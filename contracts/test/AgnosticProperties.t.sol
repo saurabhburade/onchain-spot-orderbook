@@ -17,6 +17,8 @@ contract AgnosticPropertiesTest {
     PropertyVm private constant vm =
         PropertyVm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint16 private constant FEE_BPS = 37;
+    uint128 private constant MINIMUM_QUANTITY = 10 ether;
+    uint128 private constant MINIMUM_QUOTE = 10_000_000;
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
     address private constant CAROL = address(0xCA401);
@@ -51,13 +53,14 @@ contract AgnosticPropertiesTest {
 
     function testFeeIncreaseKeepsBestBidFillableForLimitAndMarketSells() public {
         factory.setPairTradingFeeBps(address(base), address(quote), 10);
-        bytes32 firstBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17);
-        bytes32 secondBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 5e17);
+        uint128 orderQuantity = 12 ether;
+        bytes32 firstBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, orderQuantity);
+        bytes32 secondBid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, orderQuantity);
         factory.setPairTradingFeeBps(address(base), address(quote), 20);
-        bytes32 lowerBid = _limit(BOB, ISpotCLOB.Side.Buy, 9e17, 1e18);
+        bytes32 lowerBid = _limit(BOB, ISpotCLOB.Side.Buy, 9e17, 12 ether);
 
-        _market(CAROL, ISpotCLOB.Side.Sell, 5e17, 0, 5e17, 0, 64);
-        _limit(CAROL, ISpotCLOB.Side.Sell, 9e17, 5e17);
+        _market(CAROL, ISpotCLOB.Side.Sell, orderQuantity, 0, orderQuantity, 0, 64);
+        _limit(CAROL, ISpotCLOB.Side.Sell, 9e17, orderQuantity);
 
         (, ISpotCLOB.OrderState memory firstState) = book.getOrder(firstBid);
         (, ISpotCLOB.OrderState memory secondState) = book.getOrder(secondBid);
@@ -69,7 +72,7 @@ contract AgnosticPropertiesTest {
         );
         require(lowerState.filledQuantity == 0, "matching skipped price priority");
         require(
-            book.accruedTradingFees(address(quote)) == 3_000,
+            book.accruedTradingFees(address(quote)) == 72_000,
             "maker and taker fees used the wrong rates"
         );
         _assertSolvent();
@@ -79,53 +82,61 @@ contract AgnosticPropertiesTest {
         uint16 oldFee = oldSeed % 1_000;
         uint16 newFee = oldFee + 1 + newSeed % (1_000 - oldFee);
         factory.setPairTradingFeeBps(address(base), address(quote), oldFee);
-        bytes32 bid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18);
+        bytes32 bid = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, MINIMUM_QUANTITY);
         factory.setPairTradingFeeBps(address(base), address(quote), newFee);
-        (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Sell, 1e18, 0, 1e18, 0, 64);
-        require(filled == 1e18 && gross == 1e6, "old bid became unfillable");
+        (, uint128 filled, uint256 gross) =
+            _market(BOB, ISpotCLOB.Side.Sell, MINIMUM_QUANTITY, 0, MINIMUM_QUANTITY, 0, 64);
+        require(filled == MINIMUM_QUANTITY && gross == MINIMUM_QUOTE, "old bid became unfillable");
         (, ISpotCLOB.OrderState memory state) = book.getOrder(bid);
         require(state.status == ISpotCLOB.OrderStatus.Filled, "old bid remained open");
         require(
-            book.accruedTradingFees(address(quote)) == (uint256(oldFee) + uint256(newFee)) * 100,
+            book.accruedTradingFees(address(quote)) == (uint256(oldFee) + uint256(newFee)) * 1_000,
             "fill did not use both fee snapshots"
         );
         _assertSolvent();
     }
 
     function testOnePriceUnitImprovementJumpsExistingBidQueue() public {
-        bytes32 earlier = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, 1e18);
-        bytes32 improved = _limit(BOB, ISpotCLOB.Side.Buy, 1e18 + 1, 1e18);
+        bytes32 earlier = _limit(ALICE, ISpotCLOB.Side.Buy, 1e18, MINIMUM_QUANTITY);
+        bytes32 improved = _limit(BOB, ISpotCLOB.Side.Buy, 1e18 + 1, MINIMUM_QUANTITY);
         (uint256 firstQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18);
         (uint256 secondQuantity,,) = book.getPriceLevel(poolId, ISpotCLOB.Side.Buy, 1e18 + 1);
-        require(firstQuantity == 1e18 && secondQuantity == 1e18, "adjacent prices aggregated");
+        require(
+            firstQuantity == MINIMUM_QUANTITY && secondQuantity == MINIMUM_QUANTITY,
+            "adjacent prices aggregated"
+        );
         (, uint128 filled, uint256 gross) =
-            _market(CAROL, ISpotCLOB.Side.Sell, 1e18, 0, 1e18, 0, 64);
-        require(filled == 1e18 && gross == 1e6, "wrong adjacent-price fill");
+            _market(CAROL, ISpotCLOB.Side.Sell, MINIMUM_QUANTITY, 0, MINIMUM_QUANTITY, 0, 64);
+        require(filled == MINIMUM_QUANTITY && gross == MINIMUM_QUOTE, "wrong adjacent-price fill");
         (, ISpotCLOB.OrderState memory oldState) = book.getOrder(earlier);
         (, ISpotCLOB.OrderState memory newState) = book.getOrder(improved);
         require(
-            oldState.filledQuantity == 0 && newState.filledQuantity == 1e18, "priority mismatch"
+            oldState.filledQuantity == 0 && newState.filledQuantity == MINIMUM_QUANTITY,
+            "priority mismatch"
         );
         _assertSolvent();
     }
 
-    function testMinimumNewOrderNotionalIsOneTenthUsdc() public {
+    function testMinimumNewOrderNotionalIsTenUsdc() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                SpotCLOB.MinimumOrderNotionalNotMet.selector, uint256(100_000), uint256(99_999)
+                SpotCLOB.MinimumOrderNotionalNotMet.selector,
+                uint256(MINIMUM_QUOTE),
+                uint256(MINIMUM_QUOTE - 1)
             )
         );
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e17 - 1);
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e17);
-        (, uint128 filled, uint256 gross) = _market(BOB, ISpotCLOB.Side.Buy, 1e17, 0, 1e17, 0, 64);
-        require(filled == 1e17 && gross == 100_000, "minimum trade rejected");
-        require(quote.balanceOf(ALICE) == INITIAL + 99_630, "wrong minimum trade proceeds");
-        require(book.accruedTradingFees(address(quote)) == 740, "minimum trade fee changed");
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, MINIMUM_QUANTITY - 1);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, MINIMUM_QUANTITY);
+        (, uint128 filled, uint256 gross) =
+            _market(BOB, ISpotCLOB.Side.Buy, MINIMUM_QUANTITY, 0, MINIMUM_QUANTITY, 0, 64);
+        require(filled == MINIMUM_QUANTITY && gross == MINIMUM_QUOTE, "minimum trade rejected");
+        require(quote.balanceOf(ALICE) == INITIAL + 9_963_000, "wrong minimum trade proceeds");
+        require(book.accruedTradingFees(address(quote)) == 74_000, "minimum trade fee changed");
         _assertSolvent();
     }
 
     function testFuzz_ZeroQuoteMakerRemainderIsRefunded(uint96 dustSeed, bool makerBuys) public {
-        uint128 minimumQuantity = 1e17;
+        uint128 minimumQuantity = MINIMUM_QUANTITY;
         uint128 dust = 1 + uint128(dustSeed % (1e12 - 1));
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
         bytes32 maker = _limit(ALICE, makerSide, 1e18, minimumQuantity + dust);
@@ -153,7 +164,7 @@ contract AgnosticPropertiesTest {
     function testFuzz_SettlingSubFloorRemainderStaysMatchable(uint96 remainderSeed, bool makerBuys)
         public
     {
-        uint128 minimumQuantity = 1e17;
+        uint128 minimumQuantity = MINIMUM_QUANTITY;
         uint128 remainder =
             uint128(1e12 + uint256(remainderSeed) % (uint256(minimumQuantity) - 1e12));
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
@@ -186,7 +197,7 @@ contract AgnosticPropertiesTest {
     ) public {
         uint128 dust = uint128(1 + uint256(dustSeed) % (1e12 - 1));
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
-        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e17);
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, MINIMUM_QUANTITY);
         bytes32 before = _snapshot(maker);
 
         vm.expectRevert(SpotCLOB.NoLiquidity.selector);
@@ -201,7 +212,7 @@ contract AgnosticPropertiesTest {
     ) public {
         uint128 quantity = 1e12 + uint128(quantitySeed % 1e12);
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
-        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e17);
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, MINIMUM_QUANTITY);
 
         (bytes32 taker, uint128 filled, uint256 gross) = _market(
             BOB, makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy, quantity, 0, quantity, 0, 64
@@ -227,7 +238,7 @@ contract AgnosticPropertiesTest {
         uint32 splitSeed,
         bool makerBuys
     ) public {
-        uint128 totalQuote = 100_000 + uint128(totalSeed % 900_001);
+        uint128 totalQuote = MINIMUM_QUOTE + uint128(totalSeed % 90_000_001);
         uint128 totalQuantity = totalQuote * 1e12;
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
         bytes32 maker = _limit(ALICE, makerSide, 1e18, totalQuantity);
@@ -296,7 +307,7 @@ contract AgnosticPropertiesTest {
         for (uint256 i; i < makers.length; ++i) {
             uint256 draw = uint256(keccak256(abi.encode(seed, i)));
             uint128 price = uint128(1 + draw % 3) * 1e18;
-            uint128 quantity = uint128(1 + (draw >> 8) % 4) * 1e17;
+            uint128 quantity = uint128(1 + (draw >> 8) % 4) * MINIMUM_QUANTITY;
             makers[i] = Maker(_limit(ALICE, makerSide, price, quantity), price, quantity, 0, false);
             total += quantity;
         }
@@ -305,7 +316,7 @@ contract AgnosticPropertiesTest {
         book.cancelOrder(makers[cancelled].id);
         makers[cancelled].cancelled = true;
         total -= makers[cancelled].quantity;
-        uint128 requested = uint128(1 + (seed >> 8) % (total / 1e17)) * 1e17;
+        uint128 requested = uint128(1 + (seed >> 8) % (total / MINIMUM_QUANTITY)) * MINIMUM_QUANTITY;
         (uint256 expectedQuote, uint256 expectedTakerFee, uint256 expectedMakerFees) =
             _referenceMatching(makers, requested, makerBuys);
         (, uint128 filled, uint256 gross) = _market(
@@ -340,14 +351,14 @@ contract AgnosticPropertiesTest {
     }
 
     function testFuzz_MarketProtectionsRevertAtomically(uint256 seed, bool makerBuys) public {
-        uint128 quantity = uint128(1 + seed % 4) * 1e17;
+        uint128 quantity = uint128(1 + seed % 4) * MINIMUM_QUANTITY;
         uint128 price = uint128(1 + (seed >> 8) % 4) * 1e18;
         bytes32 maker =
             _limit(ALICE, makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell, price, quantity);
         ISpotCLOB.Side side = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
         bytes32 before = _snapshot(maker);
         vm.expectRevert(SpotCLOB.MinimumFillNotMet.selector);
-        _market(BOB, side, quantity + 1e17, price, quantity + 1e17, 0, 64);
+        _market(BOB, side, quantity + MINIMUM_QUANTITY, price, quantity + MINIMUM_QUANTITY, 0, 64);
         require(_snapshot(maker) == before, "min-fill failure changed state");
 
         uint256 gross = uint256(price) * quantity / 1e30;
@@ -364,24 +375,25 @@ contract AgnosticPropertiesTest {
         public
     {
         ISpotCLOB.Side makerSide = makerBuys ? ISpotCLOB.Side.Buy : ISpotCLOB.Side.Sell;
-        bytes32 maker = _limit(ALICE, makerSide, 1e18, 1e18);
+        bytes32 maker = _limit(ALICE, makerSide, 1e18, MINIMUM_QUANTITY);
         vm.warp(block.timestamp + 1 + delaySeed);
         ISpotCLOB.Side takerSide = makerBuys ? ISpotCLOB.Side.Sell : ISpotCLOB.Side.Buy;
-        _market(BOB, takerSide, 1e18, 0, 1e18, 0, 1);
+        _market(BOB, takerSide, MINIMUM_QUANTITY, 0, MINIMUM_QUANTITY, 0, 1);
         (, ISpotCLOB.OrderState memory makerState) = book.getOrder(maker);
         require(
-            makerState.status == ISpotCLOB.OrderStatus.Filled && makerState.filledQuantity == 1e18,
+            makerState.status == ISpotCLOB.OrderStatus.Filled
+                && makerState.filledQuantity == MINIMUM_QUANTITY,
             "GTC maker became unmatchable after time advance"
         );
         _assertSolvent();
     }
 
     function testFeeWithdrawalCannotSpendOrderEscrow() public {
-        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, 1e18);
-        _market(BOB, ISpotCLOB.Side.Buy, 1e18, 0, 1e18, 0, 64);
-        bytes32 bid = _limit(CAROL, ISpotCLOB.Side.Buy, 1e18, 1e18);
+        _limit(ALICE, ISpotCLOB.Side.Sell, 1e18, MINIMUM_QUANTITY);
+        _market(BOB, ISpotCLOB.Side.Buy, MINIMUM_QUANTITY, 0, MINIMUM_QUANTITY, 0, 64);
+        bytes32 bid = _limit(CAROL, ISpotCLOB.Side.Buy, 1e18, MINIMUM_QUANTITY);
         uint256 fees = book.accruedTradingFees(address(quote));
-        require(fees == 7_400, "fees were not exercised");
+        require(fees == 74_000, "fees were not exercised");
         bytes32 before = _snapshot(bid);
         vm.prank(ALICE);
         vm.expectRevert(SpotCLOB.Unauthorized.selector);

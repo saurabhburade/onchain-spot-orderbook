@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 
 import type { PoolMetadata } from "./types";
 
 const require = createRequire(import.meta.url);
-const { marketOrderTerms, marketPriceLimit, parseSlippageBps, requiresSlippageRiskAcceptance } =
-  require("./market-order-protection.ts") as typeof import("./market-order-protection");
+const {
+  DEFAULT_MAX_BOOK_STEPS,
+  marketOrderTerms,
+  marketPriceLimit,
+  parseMaxBookSteps,
+  parseSlippageBps,
+  requiresSlippageRiskAcceptance,
+} = require("./market-order-protection.ts") as typeof import("./market-order-protection");
+const tradeTicketSource = readFileSync(
+  new URL("../../views/trading/components/trade-ticket.tsx", import.meta.url),
+  "utf8",
+);
 
 const pool: PoolMetadata = {
   poolId: "0x0000000000000000000000000000000000000000000000000000000000000001",
@@ -26,6 +37,39 @@ const pool: PoolMetadata = {
 };
 
 describe("market order protection", () => {
+  it("uses ten thousand matching steps for app-submitted orders", () => {
+    assert.equal(DEFAULT_MAX_BOOK_STEPS, 10_000n);
+    assert.doesNotThrow(() =>
+      marketOrderTerms({
+        pool,
+        side: "buy",
+        quantity: "10",
+        referencePriceRaw: 2_000_000n,
+        slippagePercent: "1",
+        maxBookSteps: 100_000n,
+      }),
+    );
+  });
+
+  it("parses a caller-selected non-zero uint32 book-step limit", () => {
+    assert.equal(parseMaxBookSteps("64"), 64n);
+    assert.equal(parseMaxBookSteps("10000"), 10_000n);
+    assert.equal(parseMaxBookSteps("4294967295"), 4_294_967_295n);
+    assert.throws(() => parseMaxBookSteps(""), /whole number/);
+    assert.throws(() => parseMaxBookSteps("1.5"), /whole number/);
+    assert.throws(() => parseMaxBookSteps("0"), /between 1/);
+    assert.throws(() => parseMaxBookSteps("4294967296"), /between 1/);
+  });
+
+  it("lets traders set the book-step bound from order settings", () => {
+    assert.match(tradeTicketSource, /aria-label="Order settings"/);
+    assert.match(tradeTicketSource, /<Popover\.Root>/);
+    assert.match(tradeTicketSource, /htmlFor="max-book-steps"/);
+    assert.match(tradeTicketSource, /parseMaxBookSteps\(maxBookStepsInput\)/);
+    assert.match(tradeTicketSource, /onMarketOrder\([\s\S]*maxBookSteps: bookSteps\.value/);
+    assert.match(tradeTicketSource, /onLimitOrder\([\s\S]*maxBookSteps: bookSteps\.value/);
+  });
+
   it("rounds slippage outward to valid ticks and converts base size to quote total", () => {
     const buy = marketOrderTerms({
       pool,
@@ -116,7 +160,7 @@ describe("market order protection", () => {
       slippagePercent: "0",
     });
     assert.equal(terms.priceLimit, 2n * 10n ** 18n);
-    assert.equal(terms.suggestedMinReceive, "19.979938");
+    assert.equal(terms.suggestedMinReceive, "19.970011");
   });
 
   it("rejects invalid or unrepresentable user protections", () => {

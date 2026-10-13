@@ -54,7 +54,6 @@ function indexedOrder(overrides: Partial<IndexedOrder> = {}): IndexedOrder {
     filledQuantity: "10000",
     remainingQuantity: "0",
     quoteQuantity: "10050",
-    expiry: "0",
     clientOrderId: "0",
     createdAt: 1_789_674_243,
     createdTxHash: `0x${"07".repeat(32)}`,

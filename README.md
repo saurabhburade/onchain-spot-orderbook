@@ -71,9 +71,9 @@ the user's wallet or session private key.
 
 | Contract | Address |
 | --- | --- |
-| SpotCLOBFactory | [`0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB`](https://testnet.monadscan.com/address/0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB) |
-| SpotCLOBLens | [`0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402`](https://testnet.monadscan.com/address/0x6624c1f0580f8D70fF10C1CE85895Fe38c4CE402) |
-| Default USDT/USDC book | [`0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3`](https://testnet.monadscan.com/address/0xFA343f5221933C6c2a9fd0d951dC9125BF81B7B3) |
+| SpotCLOBFactory | [`0xC15149BB40F1c69a110b9EE09EA5961250f22406`](https://testnet.monadscan.com/address/0xC15149BB40F1c69a110b9EE09EA5961250f22406) |
+| SpotCLOBLens | [`0x517a087B090c213726aA1255C9Ac5dCB268Fd633`](https://testnet.monadscan.com/address/0x517a087B090c213726aA1255C9Ac5dCB268Fd633) |
+| Default USDT/USDC book | [`0xa8C0038ac677c669e143bcB6F73038f645e41032`](https://testnet.monadscan.com/address/0xa8C0038ac677c669e143bcB6F73038f645e41032) |
 | ERC20TokenFactory | [`0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc`](https://testnet.monadscan.com/address/0x898fcCf695D6f3a23B8Ef9F4d7C3EAf97ba837Cc) |
 | TokenFaucet | [`0xB8d1b7f2a722A0b5315eaF0840F652A95a758598`](https://testnet.monadscan.com/address/0xB8d1b7f2a722A0b5315eaF0840F652A95a758598) |
 
@@ -86,25 +86,25 @@ the order still needs liquidity and can fill partially.
 
 ## Monad gas benchmark
 
-Measured on the current `SpotCLOB` contract with `minReceive` support using
-`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 27 September 2026.
+Measured on code revision `fe824dd` with quarantine support using
+`forge test --match-contract EVMOrderActionBenchmarkTest -vv` on 12 October 2026.
 The market-order scenarios use `minReceive = 0`. Fixture seeding is excluded from
 measured gas. These are gas deltas around the actor-to-book calls in the Foundry
 harness, not deployed transaction receipts.
 
-- Monad Testnet gas price at measurement: `102 Gwei` (`0.000000102 MON/gas`)
-- Illustrative USD conversion: `$0.02668/MON` ([CoinGecko](https://www.coingecko.com/en/coins/monad), 27 September 2026)
+Fee columns retain the earlier illustration assumptions: `102 Gwei`
+(`0.000000102 MON/gas`) and `$0.025196/MON`. They are not current price quotes.
 
 | Action | Book before | Levels before | Matches | Total gas | Gas/match | Fee (MON) | Fee (USD) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Create limit, new price level | 0 | 0 | 0 | 732,580 | — | 0.074723160 | $0.001994 |
-| Create limit, existing price level | 1 | 1 | 0 | 212,962 | — | 0.021722124 | $0.000580 |
-| Cancel one resting order | 1 | 1 | 0 | 49,487 | — | 0.005047674 | $0.000135 |
-| Fill one resting order, limit | 1 | 1 | 1 | 492,175 | 492,175 | 0.050201850 | $0.001339 |
-| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,161,878 | 91,618 | 0.934511556 | $0.024933 |
-| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,006,360 | 100,127 | 0.510648720 | $0.013624 |
-| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 9,701,470 | 97,014 | 0.989549940 | $0.026401 |
-| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 19,103,658 | 95,518 | 1.948573116 | $0.051988 |
+| Create limit, new price level | 0 | 0 | 0 | 775,252 | — | 0.079075704 | $0.001992 |
+| Create limit, existing price level | 1 | 1 | 0 | 201,044 | — | 0.020506488 | $0.000517 |
+| Cancel one resting order | 1 | 1 | 0 | 52,622 | — | 0.005367444 | $0.000135 |
+| Fill one resting order, limit | 1 | 1 | 1 | 503,624 | 503,624 | 0.051369648 | $0.001294 |
+| Market fill, 100 orders at one level | 100 | 1 | 100 | 9,952,244 | 99,522 | 1.015128888 | $0.025577 |
+| Market fill, 50 orders in a dense book | 2,000 | 1,000 | 50 | 5,417,105 | 108,342 | 0.552544710 | $0.013922 |
+| Market fill, 100 orders in a dense book | 2,000 | 1,000 | 100 | 10,541,542 | 105,415 | 1.075237284 | $0.027092 |
+| Market fill, 200 orders in a dense book | 2,000 | 1,000 | 200 | 20,782,135 | 103,910 | 2.119777770 | $0.053410 |
 
 ## Development
 

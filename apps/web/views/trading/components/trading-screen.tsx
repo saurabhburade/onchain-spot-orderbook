@@ -255,6 +255,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
       pool && indexedMatchesBook
         ? indexed.data.candles.map((candle) => ({
             timestamp: candle.startTimestamp,
+            intervalSeconds: candle.intervalSeconds,
             open: Number(formatPrice(BigInt(candle.open), pool)),
             high: Number(formatPrice(BigInt(candle.high), pool)),
             low: Number(formatPrice(BigInt(candle.low), pool)),
@@ -326,7 +327,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
             : undefined),
     hash: clob.transaction.hash,
   };
-  const runLimit = async (input: { side: "buy" | "sell"; price: string; quantity: string }) => {
+  const runLimit = async (input: { side: "buy" | "sell"; price: string; quantity: string; maxBookSteps: bigint }) => {
     await clob.placeLimit({ ...input });
   };
   const runMarket = async (input: {
@@ -334,6 +335,7 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
     quantity: string;
     minReceive: string;
     slippagePercent: string;
+    maxBookSteps: bigint;
   }) => {
     const referencePriceRaw =
       input.side === "buy" ? clob.bestPrices.data?.ask?.priceRaw : clob.bestPrices.data?.bid?.priceRaw;
@@ -456,6 +458,9 @@ function MarketTradingView({ marketId, indexer }: { marketId: PoolId; indexer: T
         marketLoading={clob.pool.loading}
         onCancel={async (orderId) => {
           await clob.cancel(orderId);
+        }}
+        onCloseQuarantined={async (orderId, receiver) => {
+          await clob.closeQuarantined(orderId, receiver);
         }}
         onRecentTradesPageChange={updateIndexerRoute}
         orderHistory={orderHistory}

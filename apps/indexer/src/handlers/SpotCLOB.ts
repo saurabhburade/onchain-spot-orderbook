@@ -120,7 +120,6 @@ indexer.onEvent(
       filledQuantity: 0n,
       remainingQuantity: event.params.quantity,
       quoteQuantity: 0n,
-      expiry: event.params.expiry,
       clientOrderId: event.params.clientOrderId,
       createdAt: event.block.timestamp,
       createdBlock: event.block.number,
@@ -395,7 +394,12 @@ indexer.onEvent(
     context.Order.set({
       ...order,
       kind: "MARKET",
-      status: event.params.filledQuantity === event.params.requestedQuantity ? "FILLED" : "PARTIALLY_FILLED",
+      status:
+        event.params.filledQuantity === 0n
+          ? "CANCELLED"
+          : event.params.filledQuantity === event.params.requestedQuantity
+            ? "FILLED"
+            : "PARTIALLY_FILLED",
       isOpen: false,
       filledQuantity: event.params.filledQuantity,
       remainingQuantity: event.params.requestedQuantity - event.params.filledQuantity,
@@ -422,6 +426,60 @@ indexer.onEvent(
       openOrderCountBefore: market.openOrderCount,
       openOrderCountAfter: nextOpenOrderCount,
       delta: { limitOrderCount: -1n, marketOrderCount: 1n },
+    });
+  },
+);
+
+indexer.onEvent(
+  { contract: "SpotCLOB", event: "OrderQuarantined", fields: transactionFields },
+  async ({ event, context }) => {
+    const [market, order] = await Promise.all([
+      context.Market.getOrThrow(event.params.poolId),
+      context.Order.getOrThrow(orderEntityId(event.srcAddress, event.params.orderId)),
+    ]);
+    const nextOpenOrderCount = order.isOpen ? market.openOrderCount - 1n : market.openOrderCount;
+
+    context.Order.set({
+      ...order,
+      status: "QUARANTINED",
+      isOpen: false,
+      updatedAt: event.block.timestamp,
+      updatedBlock: event.block.number,
+      updatedTxHash: event.transaction.hash,
+    });
+
+    context.Market.set({
+      ...market,
+      openOrderCount: nextOpenOrderCount,
+      updatedAt: event.block.timestamp,
+      updatedBlock: event.block.number,
+    });
+
+    await recordMarketStats({
+      store: context.MarketIntervalStats,
+      marketId: event.params.poolId,
+      timestamp: event.block.timestamp,
+      blockNumber: event.block.number,
+      logIndex: event.logIndex,
+      txHash: event.transaction.hash,
+      openOrderCountBefore: market.openOrderCount,
+      openOrderCountAfter: nextOpenOrderCount,
+      delta: {},
+    });
+  },
+);
+
+indexer.onEvent(
+  { contract: "SpotCLOB", event: "QuarantinedOrderClosed", fields: transactionFields },
+  async ({ event, context }) => {
+    const order = await context.Order.getOrThrow(orderEntityId(event.srcAddress, event.params.orderId));
+    context.Order.set({
+      ...order,
+      status: "CANCELLED",
+      isOpen: false,
+      updatedAt: event.block.timestamp,
+      updatedBlock: event.block.number,
+      updatedTxHash: event.transaction.hash,
     });
   },
 );

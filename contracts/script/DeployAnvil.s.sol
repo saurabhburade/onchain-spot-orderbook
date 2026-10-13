@@ -221,7 +221,6 @@ contract DeployAnvil {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: clientOrderId
             })
         );
@@ -257,10 +256,10 @@ contract DeployAnvil {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = exchange.getBestPrices(poolId);
         require(
             bidExists && bidPrice == BID_PRICE_A && bidQuantity == BID_QUANTITY_A, "bad best bid"

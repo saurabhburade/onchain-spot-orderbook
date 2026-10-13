@@ -11,7 +11,7 @@ import { type AtomicCall, encodeAtomicBatch } from "@/lib/clob/atomic-batch";
 import { useClobChain } from "@/lib/clob/chain-context";
 import type { DirectUserOperationResult } from "@/lib/clob/direct-userop-client";
 import { submitDirectUserOperationWithSessionKey } from "@/lib/clob/kernel-session-client";
-import { marketOrderTerms } from "@/lib/clob/market-order-protection";
+import { DEFAULT_MAX_BOOK_STEPS, marketOrderTerms } from "@/lib/clob/market-order-protection";
 import { sendPrivySponsoredCalls, waitForPrivyTransaction } from "@/lib/clob/privy-wallet-api";
 import { headlessTransactionOptions } from "@/lib/clob/transaction-options";
 import type {
@@ -256,10 +256,9 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
               side: input.side === "buy" ? 0 : 1,
               price,
               quantity,
-              expiry: input.expiry ?? 0n,
               clientOrderId: input.clientOrderId ?? 0n,
             },
-            (input.maxBookSteps ?? 64n) as unknown as number,
+            (input.maxBookSteps ?? DEFAULT_MAX_BOOK_STEPS) as unknown as number,
           ],
         });
         return sendAtomicOrder(orderAsset, contractAddress, escrowAmount, data);
@@ -320,7 +319,7 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
             : 0n,
           clientOrderId: input.clientOrderId ?? 0n,
         } as const;
-        const maxBookSteps = (input.maxBookSteps ?? 64n) as unknown as number;
+        const maxBookSteps = (input.maxBookSteps ?? DEFAULT_MAX_BOOK_STEPS) as unknown as number;
         const data = encodeFunctionData({
           abi: clobAbi,
           functionName: "executeMarketOrder",
@@ -339,6 +338,30 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
         if (!contractAddress || !activeWallet || !tradingAddress)
           throw clobError(contractAddress) ?? new Error("Connect an Ethereum wallet before cancelling an order");
         const data = encodeFunctionData({ abi: clobAbi, functionName: "cancelOrder", args: [orderId] });
+        if (chainId === MONAD_TESTNET_CHAIN_ID) return sendDirectOrder([{ to: contractAddress, data }]);
+        const { hash } = await sendTransaction(
+          { chainId, data, to: contractAddress },
+          headlessTransactionOptions(activeWallet.address, chainId),
+        );
+        await waitForTransaction(chainId, hash);
+        return hash;
+      }),
+    [chainId, pool?.clobAddress, run, sendDirectOrder, sendTransaction, tradingAddress, wallet],
+  );
+
+  const closeQuarantined = useCallback(
+    (orderId: PoolId, receiver: Address) =>
+      run(async () => {
+        const contractAddress = pool?.clobAddress;
+        const activeWallet = wallet;
+        if (!contractAddress || !activeWallet || !tradingAddress) {
+          throw clobError(contractAddress) ?? new Error("Connect an Ethereum wallet before recovering escrow");
+        }
+        const data = encodeFunctionData({
+          abi: clobAbi,
+          functionName: "closeQuarantinedOrder",
+          args: [orderId, receiver],
+        });
         if (chainId === MONAD_TESTNET_CHAIN_ID) return sendDirectOrder([{ to: contractAddress, data }]);
         const { hash } = await sendTransaction(
           { chainId, data, to: contractAddress },
@@ -407,7 +430,17 @@ export function useClobActions(poolId?: PoolId, pool?: PoolMetadata | null, onCo
   );
 
   const resetTransaction = useCallback(() => setTransaction({ status: "idle", loading: false, error: null }), []);
-  return { transaction, placeLimit, executeMarket, cancel, anvilFaucet, resetTransaction, authenticated, ready };
+  return {
+    transaction,
+    placeLimit,
+    executeMarket,
+    cancel,
+    closeQuarantined,
+    anvilFaucet,
+    resetTransaction,
+    authenticated,
+    ready,
+  };
 }
 
 export function useClob(poolId?: PoolId, depth = 20) {

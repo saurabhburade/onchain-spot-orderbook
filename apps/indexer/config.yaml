@@ -26,12 +26,14 @@ contracts:
       - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick, uint16 tradingFeeBps)"
       - event: "MarketActivated(bytes32 indexed marketId, address indexed baseAsset, address indexed quoteAsset, uint128 lotSize, uint128 tickSize, uint24 minTick, uint24 maxTick)"
         name: MarketActivatedLegacy
-      - event: "OrderPlaced(bytes32 indexed orderId, address indexed trader, bytes32 indexed poolId, address baseAsset, address quoteAsset, uint8 side, uint128 price, uint128 quantity, uint64 expiry, uint64 clientOrderId)"
+      - event: "OrderPlaced(bytes32 indexed orderId, address indexed trader, bytes32 indexed poolId, address baseAsset, address quoteAsset, uint8 side, uint128 price, uint128 quantity, uint64 clientOrderId)"
       - event: "TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)"
       - event: "TradingFeeCharged(bytes32 indexed poolId, bytes32 indexed orderId, address indexed feePayer, address quoteAsset, uint256 amount)"
       - event: "OrderFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 totalFilledQuantity)"
       - event: "OrderPartiallyFilled(bytes32 indexed poolId, bytes32 indexed orderId, uint128 fillQuantity, uint128 remainingQuantity)"
       - event: "MarketOrderExecuted(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint8 side, uint128 requestedQuantity, uint128 filledQuantity, uint256 quoteQuantity)"
+      - event: "OrderQuarantined(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, address failedAsset)"
+      - event: "QuarantinedOrderClosed(bytes32 indexed orderId, address indexed trader, address indexed receiver, address asset, uint256 amount)"
       - event: "BookUpdated(bytes32 indexed poolId, uint128 bestBid, uint128 bestAsk, uint64 sequence)"
       - event: "OrderCancelled(bytes32 indexed orderId, bytes32 indexed poolId, address indexed trader, uint128 remainingQuantity)"
 
@@ -50,8 +52,8 @@ chains:
         ws: ${ENVIO_MONAD_REALTIME_WS_URL:-wss://rpc-testnet.monadinfra.com}
         for: fallback
         polling_interval: 400
-    start_block: 66120915
+    start_block: 70769331
     contracts:
       - name: SpotCLOBFactory
-        address: "0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB"
+        address: "0xC15149BB40F1c69a110b9EE09EA5961250f22406"
       - name: SpotCLOB

@@ -5,7 +5,7 @@ import test from "node:test";
 import type { TradeExecuted } from "@/lib/clob";
 
 const require = createRequire(import.meta.url);
-const { aggregatePriceCandles, buildPriceCandles, deriveMarketSummary } =
+const { aggregatePriceCandles, buildPriceCandles, deriveMarketSummary, selectPriceCandles } =
   require("./market-stats.ts") as typeof import("./market-stats");
 
 function trade(price: string, quoteQuantity: string, timestamp: number) {
@@ -34,6 +34,26 @@ test("aggregates 1-minute candles into ordered 15-minute OHLCV candles", () => {
   assert.deepEqual(candles, [
     { timestamp: 900, open: 2, high: 5, low: 1, close: 4, volume: 12 },
     { timestamp: 1_800, open: 6, high: 7, low: 5, close: 6.5, volume: 2 },
+  ]);
+});
+
+test("selects indexed candles for the requested chart interval", () => {
+  const candles = [
+    { timestamp: 900, open: 1, high: 2, low: 1, close: 2, volume: 4, intervalSeconds: 60 },
+    { timestamp: 900, open: 1, high: 3, low: 1, close: 2, volume: 9, intervalSeconds: 900 },
+  ];
+
+  assert.deepEqual(selectPriceCandles(candles, 900), [candles[1]]);
+});
+
+test("aggregates one-minute candles when an indexed interval is unavailable", () => {
+  const candles = [
+    { timestamp: 900, open: 1, high: 2, low: 1, close: 2, volume: 4, intervalSeconds: 60 },
+    { timestamp: 960, open: 2, high: 3, low: 2, close: 3, volume: 5, intervalSeconds: 60 },
+  ];
+
+  assert.deepEqual(selectPriceCandles(candles, 900), [
+    { timestamp: 900, open: 1, high: 3, low: 1, close: 3, volume: 9 },
   ]);
 });
 

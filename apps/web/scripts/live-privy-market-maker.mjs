@@ -71,11 +71,11 @@ const currentFactoryAbi = parseAbi([
 
 const clobAbi = parseAbi([
   "event TradeExecuted(bytes32 indexed poolId, bytes32 indexed takerOrderId, bytes32 indexed makerOrderId, address baseAsset, address quoteAsset, uint128 price, uint128 quantity, uint256 quoteQuantity)",
-  "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 expiry,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
+  "function placeLimitOrderWithMaxBookSteps((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 price,uint128 quantity,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId)",
   "function executeMarketOrder((address trader,address baseAsset,address quoteAsset,uint8 side,uint128 quantity,uint128 priceLimit,uint128 minFillQuantity,uint256 minReceive,uint64 clientOrderId) order,uint32 maxBookSteps) returns (bytes32 orderId,uint128 filledQuantity,uint256 quoteQuantity)",
   "function cancelOrder(bytes32 orderId)",
   "function getUserOrderIds(bytes32 poolId,address trader,bytes32 cursor,uint16 limit,uint8 statusFlags) view returns (bytes32[] orderIds,bytes32 nextCursor)",
-  "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint128 bidQuantity,bool askExists,uint128 askPrice,uint128 askQuantity)",
+  "function getBestPrices(bytes32 poolId) view returns (bool bidExists,uint128 bidPrice,uint256 bidQuantity,bool askExists,uint128 askPrice,uint256 askQuantity)",
   "function getOrderBook(bytes32 poolId,uint16 depth) view returns ((uint128 price,uint128 quantity)[] bids,(uint128 price,uint128 quantity)[] asks)",
 ]);
 
@@ -319,7 +319,7 @@ function buildRuntimeConfig(pool, baseDecimals) {
     takerEvery: integerSetting("MM_TAKER_EVERY", 1, 0, 1_000_000),
     takerWallet: integerSetting("MM_TAKER_WALLET", ACCOUNT_COUNT, 1, ACCOUNT_COUNT),
     maxRounds: integerSetting("MM_MAX_ROUNDS", 0, 0, 1_000_000),
-    maxBookSteps: integerSetting("MM_MAX_BOOK_STEPS", 64, 1, 1_024),
+    maxBookSteps: integerSetting("MM_MAX_BOOK_STEPS", 10_000, 1, 4_294_967_295),
     txTimeoutMs: integerSetting("MM_TX_TIMEOUT_MS", 180_000, 10_000, 600_000),
     cancelOnExit: booleanSetting("MM_CANCEL_ON_EXIT", false),
   };
@@ -339,7 +339,6 @@ function limitOrderCall(wallet, market, side, price, quantity, maxBookSteps, cli
           side,
           price,
           quantity,
-          expiry: 0n,
           clientOrderId,
         },
         maxBookSteps,

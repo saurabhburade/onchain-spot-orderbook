@@ -57,13 +57,12 @@ export type IndexedOrder = {
   trader: Address;
   side: "BUY" | "SELL";
   kind: "LIMIT" | "MARKET";
-  status: "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED";
+  status: "OPEN" | "PARTIALLY_FILLED" | "FILLED" | "CANCELLED" | "QUARANTINED";
   price: string;
   quantity: string;
   filledQuantity: string;
   remainingQuantity: string;
   quoteQuantity: string;
-  expiry: string;
   clientOrderId: string;
   createdAt: number;
   createdTxHash: Hash;
@@ -132,6 +131,19 @@ const tradeFields = `
   txHash
 `;
 
+const candleFields = `
+  id
+  marketId
+  intervalSeconds
+  startTimestamp
+  open
+  high
+  low
+  close
+  quoteVolume
+  tradeCount
+`;
+
 const marketListQuery = `
   query MarketList($from: Int!, $marketLimit: Int!, $tradeLimit: Int!) {
     Market(order_by: { createdAt: desc }, limit: $marketLimit) {
@@ -144,7 +156,7 @@ const marketListQuery = `
 `;
 
 const marketDetailQuery = `
-  query MarketDetail($marketId: String!, $from: Int!, $tradeLimit: Int!, $candleInterval: Int!, $candleLimit: Int!) {
+  query MarketDetail($marketId: String!, $from: Int!, $tradeLimit: Int!, $candleLimit: Int!) {
     Market(where: { id: { _eq: $marketId } }, limit: 1) {
       ${marketFields}
     }
@@ -155,22 +167,36 @@ const marketDetailQuery = `
     ) {
       ${tradeFields}
     }
-    MarketCandle(
-      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: $candleInterval } }
+    candles1m: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 60 } }
       order_by: { startTimestamp: desc }
       limit: $candleLimit
-    ) {
-      id
-      marketId
-      intervalSeconds
-      startTimestamp
-      open
-      high
-      low
-      close
-      quoteVolume
-      tradeCount
-    }
+    ) { ${candleFields} }
+    candles5m: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 300 } }
+      order_by: { startTimestamp: desc }
+      limit: $candleLimit
+    ) { ${candleFields} }
+    candles15m: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 900 } }
+      order_by: { startTimestamp: desc }
+      limit: $candleLimit
+    ) { ${candleFields} }
+    candles1h: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 3600 } }
+      order_by: { startTimestamp: desc }
+      limit: $candleLimit
+    ) { ${candleFields} }
+    candles4h: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 14400 } }
+      order_by: { startTimestamp: desc }
+      limit: $candleLimit
+    ) { ${candleFields} }
+    candles1d: MarketCandle(
+      where: { marketId: { _eq: $marketId }, intervalSeconds: { _eq: 86400 } }
+      order_by: { startTimestamp: desc }
+      limit: $candleLimit
+    ) { ${candleFields} }
   }
 `;
 
@@ -220,7 +246,6 @@ const orderHistoryQuery = `
       filledQuantity
       remainingQuantity
       quoteQuantity
-      expiry
       clientOrderId
       createdAt
       createdTxHash
@@ -231,7 +256,6 @@ const orderHistoryQuery = `
 `;
 
 const daySeconds = 24 * 60 * 60;
-export const marketChartCandleIntervalSeconds = 60;
 
 export async function fetchIndexedMarkets(endpoint: string, signal?: AbortSignal) {
   return requestIndexer<{ Market: IndexedMarket[]; Trade: IndexedTrade[] }>(
@@ -250,7 +274,12 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
   const data = await requestIndexer<{
     Market: IndexedMarket[];
     dayTrades: IndexedTrade[];
-    MarketCandle: IndexedCandle[];
+    candles1m: IndexedCandle[];
+    candles5m: IndexedCandle[];
+    candles15m: IndexedCandle[];
+    candles1h: IndexedCandle[];
+    candles4h: IndexedCandle[];
+    candles1d: IndexedCandle[];
   }>(
     endpoint,
     marketDetailQuery,
@@ -258,7 +287,6 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
       marketId,
       from: Math.floor(Date.now() / 1_000) - daySeconds,
       tradeLimit: 10_000,
-      candleInterval: marketChartCandleIntervalSeconds,
       candleLimit: 160,
     },
     signal,
@@ -267,7 +295,14 @@ export async function fetchIndexedMarketDetail(endpoint: string, marketId: PoolI
   return {
     market: data.Market[0] ?? null,
     dayTrades: data.dayTrades,
-    candles: data.MarketCandle.toReversed(),
+    candles: [
+      ...data.candles1m.toReversed(),
+      ...data.candles5m.toReversed(),
+      ...data.candles15m.toReversed(),
+      ...data.candles1h.toReversed(),
+      ...data.candles4h.toReversed(),
+      ...data.candles1d.toReversed(),
+    ],
   } satisfies IndexedMarketDetail;
 }
 

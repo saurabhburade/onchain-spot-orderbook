@@ -41,7 +41,7 @@ export type OpenOrder = {
   price: string;
   amount: string;
   filled: string;
-  status: string;
+  status: "open" | "partially-filled" | "filled" | "cancelled" | "quarantined";
   time: string;
   transactionHash?: string;
 };
@@ -87,4 +87,5 @@ export type TradeActions = {
     slippagePercent: string;
   }) => Promise<void>;
   cancelOrder?: (orderId: `0x${string}`) => Promise<void>;
+  closeQuarantinedOrder?: (orderId: `0x${string}`, receiver: `0x${string}`) => Promise<void>;
 };

@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { type Address, isAddress } from "viem";
 
 import {
   AlertDialog,
@@ -14,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type PoolMetadata, useClobChain } from "@/lib/clob";
@@ -69,6 +71,7 @@ type AccountPanelProps = {
   marketLoading?: boolean;
   pool: PoolMetadata | null;
   onCancel?: (orderId: `0x${string}`) => Promise<void>;
+  onCloseQuarantined?: (orderId: `0x${string}`, receiver: Address) => Promise<void>;
   onRecentTradesPageChange: (page: number) => void;
 };
 
@@ -114,6 +117,7 @@ export function AccountPanel({
   marketLoading,
   pool,
   onCancel,
+  onCloseQuarantined,
   onRecentTradesPageChange,
 }: AccountPanelProps) {
   const { config } = useClobChain();
@@ -121,6 +125,10 @@ export function AccountPanel({
   const [cancellingId, setCancellingId] = useState<`0x${string}` | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OpenOrder | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [recoveringId, setRecoveringId] = useState<`0x${string}` | null>(null);
+  const [orderToRecover, setOrderToRecover] = useState<OpenOrder | null>(null);
+  const [recoveryReceiver, setRecoveryReceiver] = useState("");
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [orderHistoryPage, setOrderHistoryPage] = useState(0);
   const [relativeTimeNow, setRelativeTimeNow] = useState<number | null>(null);
 
@@ -147,6 +155,25 @@ export function AccountPanel({
       setCancelError(error instanceof Error ? error.message : "The order could not be cancelled. Please try again.");
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function recover(orderId: `0x${string}`) {
+    if (!onCloseQuarantined) return;
+    if (!isAddress(recoveryReceiver)) {
+      setRecoveryError("Enter a valid address that can receive the escrow token.");
+      return;
+    }
+    setRecoveryError(null);
+    setRecoveringId(orderId);
+    try {
+      await onCloseQuarantined(orderId, recoveryReceiver);
+      setOrderToRecover(null);
+      setRecoveryReceiver("");
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : "The escrow could not be recovered. Please try again.");
+    } finally {
+      setRecoveringId(null);
     }
   }
 
@@ -204,7 +231,7 @@ export function AccountPanel({
       if (ordersLoading)
         return <EmptyState title="Loading orders" description="Reading your active orders from the exchange." />;
       if (!orders.length)
-        return <EmptyState title="No open orders" description="Resting limit orders will appear here." />;
+        return <EmptyState title="No open orders" description="Resting and quarantined orders will appear here." />;
       return (
         <>
           <Table>
@@ -215,49 +242,76 @@ export function AccountPanel({
                 <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Price</TableHead>
                 <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Amount</TableHead>
                 <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Filled</TableHead>
+                <TableHead className="h-9 px-4 text-right text-[10px] uppercase tracking-wider">Status</TableHead>
                 <TableHead className="h-9 w-12 px-4">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.orderId}>
-                  <TableCell className="px-4 py-2.5 text-xs font-medium">{order.market}</TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs">
-                    <span className={cn("font-medium", order.side === "buy" ? "text-chart-3" : "text-destructive")}>
-                      {order.side === "buy" ? "Buy" : "Sell"}
-                    </span>
-                    <span className="ml-1.5 text-muted-foreground">· {order.type}</span>
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums">{order.price}</TableCell>
-                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                    {order.amount}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                    {order.filled}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-right">
-                    <Button
-                      aria-label={`Cancel ${order.side} order at ${order.price}`}
-                      className="size-7 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                      disabled={cancellingId === order.orderId}
-                      onClick={() => {
-                        setCancelError(null);
-                        setOrderToCancel(order);
-                      }}
-                      size="icon"
-                      variant="ghost"
-                    >
-                      {cancellingId === order.orderId ? (
-                        <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-                      ) : (
-                        <X aria-hidden="true" />
+              {orders.map((order) => {
+                const quarantined = order.status === "quarantined";
+                const pending = quarantined ? recoveringId === order.orderId : cancellingId === order.orderId;
+                return (
+                  <TableRow key={order.orderId}>
+                    <TableCell className="px-4 py-2.5 text-xs font-medium">{order.market}</TableCell>
+                    <TableCell className="px-4 py-2.5 text-xs">
+                      <span className={cn("font-medium", order.side === "buy" ? "text-chart-3" : "text-destructive")}>
+                        {order.side === "buy" ? "Buy" : "Sell"}
+                      </span>
+                      <span className="ml-1.5 text-muted-foreground">· {order.type}</span>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums">
+                      {order.price}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                      {order.amount}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                      {order.filled}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "px-4 py-2.5 text-right text-xs",
+                        quarantined ? "font-medium text-destructive" : "text-muted-foreground",
                       )}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    >
+                      {formatStatus(order.status)}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-right">
+                      <Button
+                        aria-label={
+                          quarantined
+                            ? `Recover escrow for ${order.side} order at ${order.price}`
+                            : `Cancel ${order.side} order at ${order.price}`
+                        }
+                        className="size-7 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+                        disabled={pending}
+                        onClick={() => {
+                          if (quarantined) {
+                            setRecoveryError(null);
+                            setRecoveryReceiver("");
+                            setOrderToRecover(order);
+                          } else {
+                            setCancelError(null);
+                            setOrderToCancel(order);
+                          }
+                        }}
+                        size="icon"
+                        variant="ghost"
+                      >
+                        {pending ? (
+                          <LoaderCircle aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+                        ) : quarantined ? (
+                          <RotateCcw aria-hidden="true" />
+                        ) : (
+                          <X aria-hidden="true" />
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
 
@@ -334,6 +388,74 @@ export function AccountPanel({
                   ) : null}
                   {cancellingId ? "Cancelling…" : "Cancel order"}
                 </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog
+            onOpenChange={(open) => {
+              if (!open && !recoveringId) {
+                setOrderToRecover(null);
+                setRecoveryReceiver("");
+                setRecoveryError(null);
+              }
+            }}
+            open={Boolean(orderToRecover)}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Recover quarantined escrow</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Choose a receiver that can accept the escrow token. Use an alternate address if the order owner is
+                  blocked by that token.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <label className="grid gap-2 text-xs font-medium" htmlFor="quarantine-receiver">
+                Receiver address
+                <Input
+                  aria-invalid={Boolean(recoveryError)}
+                  autoComplete="off"
+                  disabled={Boolean(recoveringId)}
+                  id="quarantine-receiver"
+                  onChange={(event) => {
+                    setRecoveryReceiver(event.target.value.trim());
+                    setRecoveryError(null);
+                  }}
+                  placeholder="0x…"
+                  spellCheck={false}
+                  value={recoveryReceiver}
+                />
+              </label>
+
+              {recoveryError ? (
+                <p
+                  aria-live="polite"
+                  className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                  role="alert"
+                >
+                  {recoveryError}
+                </p>
+              ) : null}
+
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={Boolean(recoveringId)}>Keep escrow locked</AlertDialogCancel>
+                <Button
+                  disabled={!orderToRecover || Boolean(recoveringId)}
+                  onClick={() => {
+                    if (orderToRecover) void recover(orderToRecover.orderId);
+                  }}
+                  type="button"
+                >
+                  {recoveringId ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="animate-spin motion-reduce:animate-none"
+                      data-icon="inline-start"
+                    />
+                  ) : null}
+                  {recoveringId ? "Recovering…" : "Recover escrow"}
+                </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

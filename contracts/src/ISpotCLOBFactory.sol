@@ -85,7 +85,7 @@ interface ISpotCLOBFactory is IPoolRegistry {
         payable
         returns (bytes32 id, address book);
 
-    /// @notice Create a supply-agnostic market with an explicit taker trading fee.
+    /// @notice Create a supply-agnostic market with an explicit per-side trading fee.
     function createPairWithFee(address baseAsset, address quoteAsset, uint16 tradingFeeBps)
         external
         payable

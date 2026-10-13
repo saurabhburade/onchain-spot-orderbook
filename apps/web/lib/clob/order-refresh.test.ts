@@ -9,9 +9,18 @@ const userOrdersSource =
 const orderbookSource =
   marketDataHooksSource.split("export function useOrderbook")[1]?.split("export function useBestPrices")[0] ?? "";
 
-test("refreshes orders from wallet-filtered placement and cancellation events", () => {
+test("refreshes orders from wallet-filtered lifecycle events", () => {
   assert.match(userOrdersSource, /eventName: "OrderPlaced",[\s\S]*?args: \{ poolId, trader: tradingAddress \}/);
   assert.match(userOrdersSource, /eventName: "OrderCancelled",[\s\S]*?args: \{ poolId, trader: tradingAddress \}/);
+  assert.match(userOrdersSource, /eventName: "OrderQuarantined",[\s\S]*?args: \{ poolId, trader: tradingAddress \}/);
+  assert.match(userOrdersSource, /eventName: "QuarantinedOrderClosed",[\s\S]*?args: \{ trader: tradingAddress \}/);
+});
+
+test("loads quarantined orders and keeps them actionable", () => {
+  assert.match(userOrdersSource, /const allStatusFlags = metadata\.legacyFactory \? 7 : 15/);
+  assert.match(userOrdersSource, /const actionableStatusFlags = metadata\.legacyFactory \? 1 : 9/);
+  assert.match(userOrdersSource, /readOrderIds\(actionableStatusFlags\)/);
+  assert.match(accountHooksSource, /if \(status === 5\) return "quarantined"/);
 });
 
 test("keeps existing orders visible during event refetches", () => {

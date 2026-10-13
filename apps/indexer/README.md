@@ -36,9 +36,14 @@ market, filled, partial-fill, and cancelled-order events; trades; opening and cl
 counts; and lot/base/quote volume. `Market` also keeps all-time totals, the current open-order count,
 and the latest trade price and timestamp.
 
-Every fill charges the taker 10 basis points in the quote token. `TradingFeeCharged` events update
-the all-time and interval `quoteFees` totals. Fees are rounded down to the quote token's smallest
-unit, so very small fills can have a zero-atom fee.
+`OrderQuarantined` removes the affected order from the indexed open-order count and records its
+status as `QUARANTINED`. `QuarantinedOrderClosed` then records it as `CANCELLED` after the owner
+releases the remaining escrow to a receiver that can accept the token.
+
+Every fill charges both orders in the quote token at the fee each order captured when it was
+accepted. A maker and taker can therefore pay different rates after a market fee update.
+`TradingFeeCharged` events update the all-time and interval `quoteFees` totals. Fees are rounded
+down to the quote token's smallest unit, so very small fills can have a zero-atom fee.
 
 ## Requirements
 
@@ -54,8 +59,8 @@ pnpm codegen
 pnpm dev
 ```
 
-The default config starts at factory deployment block `66120915` and dynamically registers books
-created by `0x76853062bfDCCe89B7FFD92B3A23B858fe94DfAB`.
+The default config starts at factory deployment block `70769331` and dynamically registers books
+created by `0xC15149BB40F1c69a110b9EE09EA5961250f22406`.
 If this indexer already has data from the previous factory, stop it and run
 `pnpm exec envio start --restart` once (or `pnpm exec envio dev --restart` for development).
 This clears the indexed database and replays events from the configured start block.

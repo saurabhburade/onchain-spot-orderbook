@@ -29,7 +29,6 @@ contract EVMOrderActionTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: clientOrderId
             }),
             maxBookSteps
@@ -317,7 +316,7 @@ contract EVMOrderActionBenchmarkTest {
             uint128 price = BASE_PRICE + uint128(i) * PRICE_STEP;
             if (exchange.isPriceLevelActive(poolId, ISpotCLOB.Side.Sell, price)) {
                 ++activeLevels;
-                (uint128 quantity,,) = exchange.getPriceLevel(poolId, ISpotCLOB.Side.Sell, price);
+                (uint256 quantity,,) = exchange.getPriceLevel(poolId, ISpotCLOB.Side.Sell, price);
                 activeOrders += quantity / ONE_BASE;
             }
         }
@@ -327,10 +326,10 @@ contract EVMOrderActionBenchmarkTest {
         (
             bool bidExists,
             uint128 bidPrice,
-            uint128 bidQuantity,
+            uint256 bidQuantity,
             bool askExists,
             uint128 askPrice,
-            uint128 askQuantity
+            uint256 askQuantity
         ) = exchange.getBestPrices(poolId);
         require(bidExists == (expectedBidPrice != 0), "unexpected bid existence");
         require(askExists == (expectedAskPrice != 0), "unexpected ask existence");
@@ -348,7 +347,7 @@ contract EVMOrderActionBenchmarkTest {
         private
         view
     {
-        (uint128 quantity, bytes32 headOrderId, bytes32 tailOrderId) =
+        (uint256 quantity, bytes32 headOrderId, bytes32 tailOrderId) =
             exchange.getPriceLevel(poolId, side, price);
         require(quantity == expectedQuantity, "wrong price level quantity");
         require(headOrderId != bytes32(0), "missing price level head");

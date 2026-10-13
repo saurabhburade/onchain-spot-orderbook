@@ -12,6 +12,7 @@ export type PriceCandle = {
   low: number;
   close: number;
   volume: number;
+  intervalSeconds?: number;
 };
 
 function numericTrade(trade: TradeExecuted) {
@@ -81,11 +82,31 @@ export function aggregatePriceCandles(candles: PriceCandle[], intervalSeconds: n
       current.close = candle.close;
       current.volume += candle.volume;
     } else {
-      aggregated.set(timestamp, { ...candle, timestamp });
+      aggregated.set(timestamp, {
+        timestamp,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      });
     }
   }
 
   return [...aggregated.values()];
+}
+
+export function selectPriceCandles(candles: PriceCandle[], intervalSeconds: number): PriceCandle[] {
+  const taggedCandles = candles.filter((candle) => candle.intervalSeconds !== undefined);
+  if (taggedCandles.length > 0) {
+    const exactInterval = taggedCandles.filter((candle) => candle.intervalSeconds === intervalSeconds);
+    if (exactInterval.length > 0) return exactInterval;
+    const oneMinuteCandles = taggedCandles.filter((candle) => candle.intervalSeconds === candleIntervalSeconds);
+    return intervalSeconds === candleIntervalSeconds
+      ? oneMinuteCandles
+      : aggregatePriceCandles(oneMinuteCandles, intervalSeconds);
+  }
+  return intervalSeconds === candleIntervalSeconds ? candles : aggregatePriceCandles(candles, intervalSeconds);
 }
 
 export function deriveMarketSummary(

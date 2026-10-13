@@ -109,7 +109,6 @@ contract LotExtremesTest {
             side: ISpotCLOB.Side.Sell,
             price: 0,
             quantity: 1,
-            expiry: 0,
             clientOrderId: 1
         });
         (bool success,) = address(book).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (dustAsk)));
@@ -139,7 +138,7 @@ contract LotExtremesTest {
 
         _placeAsk(base, quote, book, lotSize, lotPrice);
 
-        (,,, bool askExists, uint128 bestAsk, uint128 askQuantity) =
+        (,,, bool askExists, uint128 bestAsk, uint256 askQuantity) =
             book.getBestPrices(book.marketId(address(base), address(quote)));
         require(askExists, "fractional-lot ask missing");
         require(bestAsk == lotPrice && askQuantity == 1, "fractional-lot ask changed");
@@ -153,7 +152,7 @@ contract LotExtremesTest {
 
         _placeAsk(base, quote, book, lotSize, lotPrice);
 
-        (,,, bool askExists, uint128 bestAsk, uint128 askQuantity) =
+        (,,, bool askExists, uint128 bestAsk, uint256 askQuantity) =
             book.getBestPrices(book.marketId(address(base), address(quote)));
         require(askExists, "billion-token ask missing");
         require(bestAsk == lotPrice && askQuantity == 1, "billion-token ask changed");
@@ -203,7 +202,6 @@ contract LotExtremesTest {
                 side: ISpotCLOB.Side.Sell,
                 price: price,
                 quantity: 1,
-                expiry: 0,
                 clientOrderId: 1
             })
         );

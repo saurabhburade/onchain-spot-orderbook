@@ -19,7 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TradeExecuted } from "@/lib/clob";
 
 import type { MarketSummary } from "@/lib/trading/market-data";
-import { aggregatePriceCandles, buildPriceCandles, compactNumber, type PriceCandle } from "@/lib/trading/market-stats";
+import { buildPriceCandles, compactNumber, type PriceCandle, selectPriceCandles } from "@/lib/trading/market-stats";
 
 type PriceChartProps = {
   summary: MarketSummary;
@@ -38,7 +38,14 @@ type HoveredCandle = {
 const chartSurfaceClass =
   "min-w-0 overflow-hidden bg-background p-0 ring-[0.5px] ring-border dark:ring-border lg:min-h-[464px] lg:flex-1 lg:rounded-none lg:border-r-[0.5px] lg:border-border lg:ring-0";
 const skeletonBarHeights = [24, 38, 31, 52, 45, 64, 48, 72, 58, 78, 68, 86, 73, 92, 81, 96];
-const chartIntervals = [60, 15 * 60] as const;
+const chartIntervals = [
+  { label: "1m", seconds: 60, visibleCandles: 60 },
+  { label: "5m", seconds: 5 * 60, visibleCandles: 72 },
+  { label: "15m", seconds: 15 * 60, visibleCandles: 96 },
+  { label: "1h", seconds: 60 * 60, visibleCandles: 120 },
+  { label: "4h", seconds: 4 * 60 * 60, visibleCandles: 90 },
+  { label: "1d", seconds: 24 * 60 * 60, visibleCandles: 90 },
+] as const;
 // Lightweight Charts parses RGB colors internally, so these mirror the app's OKLCH theme tokens.
 const chartPalettes = {
   light: {
@@ -63,7 +70,7 @@ const chartPalettes = {
   },
 } as const;
 
-type ChartInterval = (typeof chartIntervals)[number];
+type ChartInterval = (typeof chartIntervals)[number]["seconds"];
 
 function ChartSkeleton() {
   return (
@@ -128,12 +135,13 @@ export function PriceChart({ summary, candles: indexedCandles, trades = [], load
   const { resolvedTheme } = useTheme();
   const derivedCandles = useMemo(() => indexedCandles ?? buildPriceCandles(trades), [indexedCandles, trades]);
   const intervalCandles = useMemo(
-    () => (intervalSeconds === 60 ? derivedCandles : aggregatePriceCandles(derivedCandles, intervalSeconds)),
+    () => selectPriceCandles(derivedCandles, intervalSeconds),
     [derivedCandles, intervalSeconds],
   );
   const latestCandle = intervalCandles.at(-1) ?? null;
   const displayCandle = hovered?.candle ?? latestCandle;
-  const intervalLabel = intervalSeconds === 60 ? "1m" : "15m";
+  const intervalConfig = chartIntervals.find((interval) => interval.seconds === intervalSeconds) ?? chartIntervals[0];
+  const intervalLabel = intervalConfig.label;
   const chartReady = Boolean(resolvedTheme) && !loading && !error && derivedCandles.length > 0;
 
   useEffect(() => {
@@ -175,8 +183,8 @@ export function PriceChart({ summary, candles: indexedCandles, trades = [], load
       },
       rightPriceScale: {
         borderColor: palette.border,
-        mode: PriceScaleMode.Logarithmic,
-        scaleMargins: { top: 0.16, bottom: 0.24 },
+        mode: PriceScaleMode.Normal,
+        scaleMargins: { top: 0.12, bottom: 0.22 },
       },
       timeScale: {
         barSpacing: 9,
@@ -278,14 +286,13 @@ export function PriceChart({ summary, candles: indexedCandles, trades = [], load
 
     if (fittedIntervalRef.current !== intervalSeconds && intervalCandles.length > 0) {
       const finalIndex = intervalCandles.length - 1;
-      const visibleCandleCount = intervalSeconds === 60 ? 60 : 80;
       chart.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, intervalCandles.length - visibleCandleCount),
+        from: Math.max(0, intervalCandles.length - intervalConfig.visibleCandles),
         to: finalIndex + 4,
       });
       fittedIntervalRef.current = intervalSeconds;
     }
-  }, [chartReady, intervalCandles, intervalSeconds, resolvedTheme]);
+  }, [chartReady, intervalCandles, intervalConfig.visibleCandles, intervalSeconds, resolvedTheme]);
 
   if (loading) return <ChartSkeleton />;
   if (error || derivedCandles.length === 0) return <EmptyChart error={error} />;
@@ -322,7 +329,8 @@ export function PriceChart({ summary, candles: indexedCandles, trades = [], load
           <Tabs
             className="pointer-events-auto shrink-0 gap-0"
             onValueChange={(value) => {
-              setIntervalSeconds(value === "900" ? 15 * 60 : 60);
+              const selected = chartIntervals.find((interval) => String(interval.seconds) === value);
+              if (selected) setIntervalSeconds(selected.seconds);
               setHovered(null);
             }}
             value={String(intervalSeconds)}
@@ -335,10 +343,10 @@ export function PriceChart({ summary, candles: indexedCandles, trades = [], load
               {chartIntervals.map((interval) => (
                 <TabsTrigger
                   className="h-6 min-w-8 rounded-full px-2 text-[11px] tabular-nums"
-                  key={interval}
-                  value={String(interval)}
+                  key={interval.seconds}
+                  value={String(interval.seconds)}
                 >
-                  {interval === 60 ? "1m" : "15m"}
+                  {interval.label}
                 </TabsTrigger>
               ))}
             </TabsList>

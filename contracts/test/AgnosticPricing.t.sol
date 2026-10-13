@@ -61,7 +61,6 @@ contract AgnosticTrader {
                 side: side,
                 price: price,
                 quantity: quantity,
-                expiry: 0,
                 clientOrderId: 0
             })
         );
@@ -82,7 +81,6 @@ contract AgnosticTrader {
             side: side,
             price: price,
             quantity: quantity,
-            expiry: 0,
             clientOrderId: 0
         });
         (success,) = address(exchange).call(abi.encodeCall(SpotCLOB.placeLimitOrder, (order)));
@@ -117,8 +115,8 @@ contract AgnosticPricingTest {
     uint128 private constant LOW_PRICE = 1e7; // 0.00000000001 USDC/token
     uint128 private constant ONE_USDC = 1e18;
     uint128 private constant HIGH_PRICE = 1e24; // 1,000,000 USDC/token
-    uint128 private constant LOW_MIN_QUANTITY = 100_000 ether;
-    uint128 private constant HIGH_MIN_QUANTITY = 1e6; // 0.000000000001 token
+    uint128 private constant LOW_MIN_QUANTITY = 1_000_000_000_000 ether;
+    uint128 private constant HIGH_MIN_QUANTITY = 1e13; // 0.00001 token
 
     SpotCLOBFactory private factory;
     SpotCLOB private exchange;
@@ -197,7 +195,7 @@ contract AgnosticPricingTest {
         seller.cancel(exchange, high);
     }
 
-    function testLowPriceMinimumTradeSettlesOneUsdcAtom() public {
+    function testLowPriceMinimumTradeSettlesTenUsdc() public {
         seller.place(
             exchange,
             address(base),
@@ -209,12 +207,12 @@ contract AgnosticPricingTest {
         (uint128 filled, uint256 paid) =
             buyer.marketBuy(exchange, address(base), address(quote), LOW_MIN_QUANTITY);
 
-        require(filled == LOW_MIN_QUANTITY && paid == 1, "wrong low-price fill");
+        require(filled == LOW_MIN_QUANTITY && paid == 10_000_000, "wrong low-price fill");
         require(base.balanceOf(address(buyer)) == LOW_MIN_QUANTITY, "buyer base mismatch");
-        require(quote.balanceOf(address(seller)) == 1, "seller quote mismatch");
+        require(quote.balanceOf(address(seller)) == 9_990_000, "seller quote mismatch");
     }
 
-    function testMillionDollarPriceTradesOneTrillionthOfTokenForOneAtom() public {
+    function testMillionDollarPriceTradesOneHundredThousandthTokenForTenUsdc() public {
         seller.place(
             exchange,
             address(base),
@@ -226,9 +224,9 @@ contract AgnosticPricingTest {
         (uint128 filled, uint256 paid) =
             buyer.marketBuy(exchange, address(base), address(quote), HIGH_MIN_QUANTITY);
 
-        require(filled == HIGH_MIN_QUANTITY && paid == 1, "wrong high-price fill");
+        require(filled == HIGH_MIN_QUANTITY && paid == 10_000_000, "wrong high-price fill");
         require(base.balanceOf(address(buyer)) == HIGH_MIN_QUANTITY, "buyer base mismatch");
-        require(quote.balanceOf(address(seller)) == 1, "seller quote mismatch");
+        require(quote.balanceOf(address(seller)) == 9_990_000, "seller quote mismatch");
     }
 
     function testHundredTokenSupplyCanTradeAtOneMillionDollarsEach() public {
@@ -243,11 +241,11 @@ contract AgnosticPricingTest {
         require(paid == 100_000_000 * 1e6, "wrong notional");
     }
 
-    function testRejectsOrdersBelowOneQuoteAtomAtEveryRegressionPrice() public {
-        _assertMinimum(LOW_PRICE, 100_000 ether);
-        _assertMinimum(1e12, 1 ether); // 0.000001 USDC/token
-        _assertMinimum(ONE_USDC, 1e12); // 0.000001 token
-        _assertMinimum(10e18, 1e11); // 0.0000001 token
+    function testRejectsOrdersBelowTenQuoteTokensAtEveryRegressionPrice() public {
+        _assertMinimum(LOW_PRICE, 1_000_000_000_000 ether);
+        _assertMinimum(1e12, 10_000_000 ether); // 0.000001 USDC/token
+        _assertMinimum(ONE_USDC, 10 ether); // 10 tokens
+        _assertMinimum(10e18, 1 ether); // 1 token
         _assertMinimum(HIGH_PRICE, HIGH_MIN_QUANTITY);
     }
 
@@ -286,14 +284,14 @@ contract AgnosticPricingTest {
         uint128 minimum = lens.minimumOrderQuantity(exchange, address(base), address(quote), price);
         require(minimum == expected, "wrong minimum quantity");
         require(
-            lens.quoteAmount(exchange, address(base), address(quote), price, minimum) >= 1,
-            "minimum does not settle"
+            lens.quoteAmount(exchange, address(base), address(quote), price, minimum) >= 10_000_000,
+            "minimum does not meet admission floor"
         );
         require(
             !seller.attemptPlace(
                 exchange, address(base), address(quote), ISpotCLOB.Side.Sell, price, minimum - 1
             ),
-            "sub-atom order accepted"
+            "sub-minimum order accepted"
         );
     }
 }

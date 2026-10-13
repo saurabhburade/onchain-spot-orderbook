@@ -3,8 +3,23 @@ import type { Abi } from "viem";
 export const clobAbi = [
   {
     type: "error",
+    name: "InvalidMaxBookSteps",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "NoLiquidity",
     inputs: [],
+  },
+  {
+    type: "error",
+    name: "MarketInsolvent",
+    inputs: [
+      { name: "marketId", type: "bytes32" },
+      { name: "asset", type: "address" },
+      { name: "availableAssets", type: "uint256" },
+      { name: "liabilities", type: "uint256" },
+    ],
   },
   {
     type: "function",
@@ -22,6 +37,13 @@ export const clobAbi = [
   },
   {
     type: "function",
+    name: "totalEscrowLiability",
+    stateMutability: "view",
+    inputs: [{ name: "asset", type: "address" }],
+    outputs: [{ name: "amount", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "getOrderBook",
     stateMutability: "view",
     inputs: [
@@ -34,7 +56,7 @@ export const clobAbi = [
         type: "tuple[]",
         components: [
           { name: "price", type: "uint128" },
-          { name: "quantity", type: "uint128" },
+          { name: "quantity", type: "uint256" },
         ],
       },
       {
@@ -42,7 +64,7 @@ export const clobAbi = [
         type: "tuple[]",
         components: [
           { name: "price", type: "uint128" },
-          { name: "quantity", type: "uint128" },
+          { name: "quantity", type: "uint256" },
         ],
       },
     ],
@@ -55,10 +77,10 @@ export const clobAbi = [
     outputs: [
       { name: "bidExists", type: "bool" },
       { name: "bidPrice", type: "uint128" },
-      { name: "bidQuantity", type: "uint128" },
+      { name: "bidQuantity", type: "uint256" },
       { name: "askExists", type: "bool" },
       { name: "askPrice", type: "uint128" },
-      { name: "askQuantity", type: "uint128" },
+      { name: "askQuantity", type: "uint256" },
     ],
   },
   {
@@ -77,7 +99,6 @@ export const clobAbi = [
           { name: "side", type: "uint8" },
           { name: "price", type: "uint128" },
           { name: "quantity", type: "uint128" },
-          { name: "expiry", type: "uint64" },
           { name: "clientOrderId", type: "uint64" },
         ],
       },
@@ -137,7 +158,6 @@ export const clobAbi = [
           { name: "side", type: "uint8" },
           { name: "price", type: "uint128" },
           { name: "quantity", type: "uint128" },
-          { name: "expiry", type: "uint64" },
           { name: "clientOrderId", type: "uint64" },
         ],
       },
@@ -181,6 +201,26 @@ export const clobAbi = [
     outputs: [],
   },
   {
+    type: "function",
+    name: "closeQuarantinedOrder",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "externalOrderId", type: "bytes32" },
+      { name: "receiver", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "InsolventOrderClosed",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "asset", type: "address", indexed: true },
+      { name: "nominalEscrow", type: "uint256", indexed: false },
+      { name: "payout", type: "uint256", indexed: false },
+    ],
+  },
+  {
     type: "event",
     name: "BookUpdated",
     inputs: [
@@ -216,8 +256,16 @@ export const clobAbi = [
       { name: "side", type: "uint8", indexed: false },
       { name: "price", type: "uint128", indexed: false },
       { name: "quantity", type: "uint128", indexed: false },
-      { name: "expiry", type: "uint64", indexed: false },
       { name: "clientOrderId", type: "uint64", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "OrderQuantityAdjusted",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "requestedQuantity", type: "uint128", indexed: false },
+      { name: "acceptedQuantity", type: "uint128", indexed: false },
     ],
   },
   {
@@ -248,6 +296,27 @@ export const clobAbi = [
       { name: "poolId", type: "bytes32", indexed: true },
       { name: "trader", type: "address", indexed: true },
       { name: "remainingQuantity", type: "uint128", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "OrderQuarantined",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "poolId", type: "bytes32", indexed: true },
+      { name: "trader", type: "address", indexed: true },
+      { name: "failedAsset", type: "address", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "QuarantinedOrderClosed",
+    inputs: [
+      { name: "orderId", type: "bytes32", indexed: true },
+      { name: "trader", type: "address", indexed: true },
+      { name: "receiver", type: "address", indexed: true },
+      { name: "asset", type: "address", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
     ],
   },
 ] as const satisfies Abi;
@@ -281,7 +350,6 @@ export const clobLensAbi = [
               { name: "side", type: "uint8" },
               { name: "price", type: "uint128" },
               { name: "quantity", type: "uint128" },
-              { name: "expiry", type: "uint64" },
               { name: "clientOrderId", type: "uint64" },
             ],
           },
@@ -337,16 +405,16 @@ export const clobLensAbi = [
           { name: "sequence", type: "uint64" },
           { name: "bidExists", type: "bool" },
           { name: "bidPrice", type: "uint128" },
-          { name: "bidQuantity", type: "uint128" },
+          { name: "bidQuantity", type: "uint256" },
           { name: "askExists", type: "bool" },
           { name: "askPrice", type: "uint128" },
-          { name: "askQuantity", type: "uint128" },
+          { name: "askQuantity", type: "uint256" },
           {
             name: "bids",
             type: "tuple[]",
             components: [
               { name: "price", type: "uint128" },
-              { name: "quantity", type: "uint128" },
+              { name: "quantity", type: "uint256" },
             ],
           },
           {
@@ -354,7 +422,7 @@ export const clobLensAbi = [
             type: "tuple[]",
             components: [
               { name: "price", type: "uint128" },
-              { name: "quantity", type: "uint128" },
+              { name: "quantity", type: "uint256" },
             ],
           },
         ],

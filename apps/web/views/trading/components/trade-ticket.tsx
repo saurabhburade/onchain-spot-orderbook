@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, LoaderCircle } from "lucide-react";
+import { Popover } from "@base-ui/react/popover";
+import { ExternalLink, LoaderCircle, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RangeSlider } from "@/components/motion/range-slider";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import {
   DEFAULT_MARKET_SLIPPAGE_PERCENT,
+  DEFAULT_MAX_BOOK_STEPS,
   marketOrderTerms,
+  parseMaxBookSteps,
   parseSlippageBps,
   requiresSlippageRiskAcceptance,
 } from "@/lib/clob/market-order-protection";
@@ -22,7 +25,7 @@ import type { Balance, MarketSummary, OrderSide, OrderType, TransactionFeedback 
 import { formatCurrencyAmount } from "@/lib/trading/market-details-formatting";
 import { deriveAllocationPercentage } from "@/lib/trading/trade-ticket-allocation";
 import { formatTradingFeeRate } from "@/lib/trading/trade-ticket-fee";
-import { sanitizeDecimalInput } from "@/lib/utils";
+import { sanitizeDecimalInput, sanitizeIntegerInput } from "@/lib/utils";
 
 function clean(value: string) {
   return value.replaceAll(",", "").trim();
@@ -102,12 +105,13 @@ type TradeTicketProps = {
   marketPrice: string | null;
   marketPriceRaw: bigint | null;
   selectedOrder: { price: string; size: string } | null;
-  onLimitOrder: (input: { side: OrderSide; price: string; quantity: string }) => Promise<void>;
+  onLimitOrder: (input: { side: OrderSide; price: string; quantity: string; maxBookSteps: bigint }) => Promise<void>;
   onMarketOrder: (input: {
     side: OrderSide;
     quantity: string;
     minReceive: string;
     slippagePercent: string;
+    maxBookSteps: bigint;
   }) => Promise<void>;
   onSideChange: (side: OrderSide) => void;
   onConnect?: () => void;
@@ -139,14 +143,25 @@ export function TradeTicket({
   const [amount, setAmount] = useState("");
   const [allocation, setAllocation] = useState(0);
   const [slippagePercent, setSlippagePercent] = useState(DEFAULT_MARKET_SLIPPAGE_PERCENT);
+  const [maxBookStepsInput, setMaxBookStepsInput] = useState(DEFAULT_MAX_BOOK_STEPS.toString());
   const [highSlippageAccepted, setHighSlippageAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const transactionToastId = useRef<string | null>(null);
   const completedTransaction = useRef<string | null>(null);
   const isBuy = side === "buy";
   const balance = isBuy ? quoteBalance : baseBalance;
+  const bookSteps = useMemo<{ value: bigint | null; error: string | null }>(() => {
+    try {
+      return { value: parseMaxBookSteps(maxBookStepsInput), error: null };
+    } catch (error) {
+      return {
+        value: null,
+        error: error instanceof Error ? error.message : "Maximum book steps are invalid.",
+      };
+    }
+  }, [maxBookStepsInput]);
   const marketPreview = useMemo(() => {
-    if (!amount || !pool || marketPriceRaw === null) return null;
+    if (!amount || !pool || marketPriceRaw === null || bookSteps.value === null) return null;
     try {
       return marketOrderTerms({
         pool,
@@ -154,16 +169,18 @@ export function TradeTicket({
         quantity: amount,
         referencePriceRaw: marketPriceRaw,
         slippagePercent,
+        maxBookSteps: bookSteps.value,
       });
     } catch {
       return null;
     }
-  }, [amount, marketPriceRaw, pool, side, slippagePercent]);
+  }, [amount, bookSteps.value, marketPriceRaw, pool, side, slippagePercent]);
   const marketProtectionError = useMemo(() => {
     if (orderType !== "market") return null;
     try {
       parseSlippageBps(slippagePercent);
       if (!amount) return null;
+      if (bookSteps.value === null) return null;
       if (!pool || marketPriceRaw === null) return "Market price is unavailable.";
       marketOrderTerms({
         pool,
@@ -171,12 +188,13 @@ export function TradeTicket({
         quantity: amount,
         referencePriceRaw: marketPriceRaw,
         slippagePercent,
+        maxBookSteps: bookSteps.value,
       });
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : "Market order protection is invalid.";
     }
-  }, [amount, marketPriceRaw, orderType, pool, side, slippagePercent]);
+  }, [amount, bookSteps.value, marketPriceRaw, orderType, pool, side, slippagePercent]);
   const highSlippage = useMemo(() => {
     try {
       return requiresSlippageRiskAcceptance(slippagePercent);
@@ -228,6 +246,7 @@ export function TradeTicket({
         Boolean(amount) &&
         (orderType === "market" || Boolean(price)) &&
         !balanceError &&
+        !bookSteps.error &&
         !marketProtectionError &&
         (orderType !== "market" || !highSlippage || highSlippageAccepted)));
 
@@ -357,6 +376,9 @@ export function TradeTicket({
     if (!connected) return setFormError("Connect your wallet to trade.");
     if (!balance) return setFormError("Balance data is unavailable.");
     if (!amount || (orderType === "limit" && !price)) return setFormError("Enter a price and amount.");
+    if (bookSteps.error || bookSteps.value === null) {
+      return setFormError(bookSteps.error ?? "Maximum book steps are invalid.");
+    }
     if (orderType === "market" && marketProtectionError) return setFormError(marketProtectionError);
     if (orderType === "market" && highSlippage && !highSlippageAccepted) {
       return setFormError("Accept the high-slippage risk before placing this order.");
@@ -378,8 +400,9 @@ export function TradeTicket({
           quantity: amount,
           minReceive: marketPreview.suggestedMinReceive,
           slippagePercent,
+          maxBookSteps: bookSteps.value,
         });
-      } else await onLimitOrder({ side, price, quantity: amount });
+      } else await onLimitOrder({ side, price, quantity: amount, maxBookSteps: bookSteps.value });
       setAmount("");
       setHighSlippageAccepted(false);
     } catch (error) {
@@ -394,27 +417,68 @@ export function TradeTicket({
       }`}
     >
       <CardHeader className="px-0 pt-0 !pb-0">
-        <Tabs className="gap-0" onValueChange={(value) => selectOrderType(value as OrderType)} value={orderType}>
-          <TabsList
-            aria-label="Order type"
-            className={`w-full justify-start gap-0 overflow-x-auto rounded-none border-b border-border bg-transparent p-0 ${
-              mobileCompact ? "h-10! lg:h-12!" : "h-12!"
-            }`}
-            indicatorClassName="rounded-none border-0 bg-transparent after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:content-[''] dark:bg-transparent"
+        <div className="flex border-b border-border">
+          <Tabs
+            className="min-w-0 flex-1 gap-0"
+            onValueChange={(value) => selectOrderType(value as OrderType)}
+            value={orderType}
           >
-            {(["market", "limit"] as const).map((type) => (
-              <TabsTrigger
-                className={`h-full flex-none shrink-0 rounded-none text-xs capitalize data-active:text-foreground ${
-                  mobileCompact ? "px-2 lg:px-4" : "px-4"
-                }`}
-                key={type}
-                value={type}
-              >
-                {type}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+            <TabsList
+              aria-label="Order type"
+              className={`w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0 ${
+                mobileCompact ? "h-10! lg:h-12!" : "h-12!"
+              }`}
+              indicatorClassName="rounded-none border-0 bg-transparent after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:bg-primary after:content-[''] dark:bg-transparent"
+            >
+              {(["market", "limit"] as const).map((type) => (
+                <TabsTrigger
+                  className={`h-full flex-none shrink-0 rounded-none text-xs capitalize data-active:text-foreground ${
+                    mobileCompact ? "px-2 lg:px-4" : "px-4"
+                  }`}
+                  key={type}
+                  value={type}
+                >
+                  {type}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Popover.Root>
+            <Popover.Trigger
+              aria-invalid={Boolean(bookSteps.error)}
+              aria-label="Order settings"
+              className={`group grid shrink-0 place-items-center border-l border-border outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/30 data-popup-open:bg-muted ${
+                mobileCompact ? "size-10 lg:size-12" : "size-12"
+              } ${bookSteps.error ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+              title="Order settings"
+            >
+              <Settings2 aria-hidden="true" className="size-4" strokeWidth={1.5} />
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Positioner align="end" className="z-50 max-w-[calc(100vw-1.5rem)]" side="bottom" sideOffset={8}>
+                <Popover.Popup className="w-72 origin-(--transform-origin) rounded-xl bg-background p-3 text-foreground ring-1 ring-border transition-[opacity,scale,transform] duration-150 ease-out data-ending-style:-translate-y-1 data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-starting-style:-translate-y-1 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-none">
+                  <Popover.Title className="text-sm font-medium">Order settings</Popover.Title>
+                  <Popover.Description className="mt-1 text-xs text-pretty text-muted-foreground">
+                    Limit how many resting orders this transaction can inspect.
+                  </Popover.Description>
+                  <label className="mt-3 block text-xs font-medium text-muted-foreground" htmlFor="max-book-steps">
+                    Max book steps
+                  </label>
+                  <Input
+                    aria-invalid={Boolean(bookSteps.error)}
+                    className="mt-1.5 h-9 rounded-lg border-input bg-background text-right font-mono text-xs tabular-nums md:text-xs"
+                    id="max-book-steps"
+                    inputMode="numeric"
+                    onChange={(event) => setMaxBookStepsInput(sanitizeIntegerInput(event.target.value))}
+                    spellCheck={false}
+                    value={maxBookStepsInput}
+                  />
+                  {bookSteps.error ? <p className="mt-1.5 text-xs text-destructive">{bookSteps.error}</p> : null}
+                </Popover.Popup>
+              </Popover.Positioner>
+            </Popover.Portal>
+          </Popover.Root>
+        </div>
       </CardHeader>
       <CardContent
         className={`flex flex-1 flex-col ${
@@ -633,6 +697,11 @@ export function TradeTicket({
         {marketProtectionError && amount ? (
           <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {marketProtectionError}
+          </p>
+        ) : null}
+        {bookSteps.error ? (
+          <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {bookSteps.error}
           </p>
         ) : null}
         {formError && formError !== transaction.message ? (

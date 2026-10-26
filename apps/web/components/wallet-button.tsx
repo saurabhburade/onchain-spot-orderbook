@@ -59,7 +59,7 @@ function PrivyMark({ className }: { className?: string }) {
   );
 }
 
-function ConnectedWalletButton() {
+function ConnectedWalletButton({ fundingOnly = false }: { fundingOnly?: boolean }) {
   const { config, publicClient } = useClobChain();
   const {
     connect,
@@ -301,6 +301,38 @@ function ConnectedWalletButton() {
   }
 
   if (connected && address) {
+    const fundingDialog = (
+      <FundingDialog
+        action={fundingAction}
+        address={address}
+        assets={assets}
+        network={config.chain.name}
+        onActionChange={setFundingAction}
+        onImportAsset={importAsset}
+        onSelectedAssetChange={(key) => setSelectedAssetKeys((current) => ({ ...current, [config.chain.id]: key }))}
+        onWithdraw={withdraw}
+        selectedAssetKey={selectedAssetKey}
+      />
+    );
+    if (fundingOnly) {
+      return (
+        <>
+          <Button className="h-8 rounded-full px-4 text-xs" onClick={() => setFundingAction("deposit")}>
+            <ArrowDownToLine aria-hidden="true" data-icon="inline-start" />
+            Deposit
+          </Button>
+          <Button
+            className="h-8 rounded-full px-4 text-xs"
+            onClick={() => setFundingAction("withdraw")}
+            variant="outline"
+          >
+            <ArrowUpFromLine aria-hidden="true" data-icon="inline-start" />
+            Withdraw
+          </Button>
+          {fundingDialog}
+        </>
+      );
+    }
     return (
       <>
         <div className="contents">
@@ -444,17 +476,7 @@ function ConnectedWalletButton() {
             </Menu.Portal>
           </Menu.Root>
         </div>
-        <FundingDialog
-          action={fundingAction}
-          address={address}
-          assets={assets}
-          network={config.chain.name}
-          onActionChange={setFundingAction}
-          onImportAsset={importAsset}
-          onSelectedAssetChange={(key) => setSelectedAssetKeys((current) => ({ ...current, [config.chain.id]: key }))}
-          onWithdraw={withdraw}
-          selectedAssetKey={selectedAssetKey}
-        />
+        {fundingDialog}
       </>
     );
   }
@@ -500,4 +522,10 @@ export function WalletButton() {
   }
 
   return <ConnectedWalletButton />;
+}
+
+export function WalletFundingActions() {
+  const configured = usePrivyConfigured();
+  if (!configured) return null;
+  return <ConnectedWalletButton fundingOnly />;
 }

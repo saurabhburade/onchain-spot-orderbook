@@ -13,7 +13,7 @@ import { floatingMenuItemClassName, floatingMenuPopupClassName } from "@/compone
 import { WalletButton } from "@/components/wallet-button";
 import { useClobChain } from "@/lib/clob";
 
-type ActiveNavigation = "trade" | "markets" | "deploy" | "faucet";
+type ActiveNavigation = "trade" | "markets" | "portfolio" | "deploy" | "faucet";
 
 // A deliberately weighty, no-overshoot spring keeps the shared pill inside
 // the navigation row while still making route changes feel continuous.
@@ -32,21 +32,24 @@ function navigationItems(chainId: number, defaultPoolId?: `0x${string}`) {
       href: defaultPoolId ? `/${chainId}/markets/${defaultPoolId}/trade` : `/${chainId}/trade`,
     },
     { id: "markets" as const, label: "Markets", href: `/${chainId}/markets` },
+    { id: "portfolio" as const, label: "Portfolio", href: `/${chainId}/portfolio` },
     { id: "faucet" as const, label: "Faucet", href: `/${chainId}/faucet` },
   ];
 }
 
 function selectedNavigation(pathname: string, active: ActiveNavigation) {
   const pathnameSegments = pathname.split("/");
-  return pathnameSegments[2] === "deploy"
-    ? "deploy"
-    : pathnameSegments[2] === "faucet"
-      ? "faucet"
-      : pathnameSegments[2] === "trade" || (pathnameSegments[2] === "markets" && pathnameSegments[4] === "trade")
-        ? "trade"
-        : pathnameSegments[2] === "markets"
-          ? "markets"
-          : active;
+  return pathnameSegments[2] === "portfolio"
+    ? "portfolio"
+    : pathnameSegments[2] === "deploy"
+      ? "deploy"
+      : pathnameSegments[2] === "faucet"
+        ? "faucet"
+        : pathnameSegments[2] === "trade" || (pathnameSegments[2] === "markets" && pathnameSegments[4] === "trade")
+          ? "trade"
+          : pathnameSegments[2] === "markets"
+            ? "markets"
+            : active;
 }
 
 function Navigation({ active }: { active: ActiveNavigation }) {

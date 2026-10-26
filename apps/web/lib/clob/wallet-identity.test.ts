@@ -42,8 +42,7 @@ test("isolates the Privy trading wallet from the connected external EOA", () => 
 });
 
 test("keeps EOA identity actions in the Privy wallet menu", () => {
-  const connectedMenuSource =
-    walletButtonSource.split("if (connected && address)")[1]?.split("<FundingDialog")[0] ?? "";
+  const connectedMenuSource = walletButtonSource.split("<Menu.Root>")[1]?.split("</Menu.Root>")[0] ?? "";
 
   assert.match(walletButtonSource, /<Wallet aria-hidden="true"/);
   assert.match(connectedMenuSource, /aria-label=\{`Open trading wallet/);
@@ -65,8 +64,7 @@ test("keeps EOA identity actions in the Privy wallet menu", () => {
 });
 
 test("does not offer an embedded-only EOA connection state", () => {
-  const connectedMenuSource =
-    walletButtonSource.split("if (connected && address)")[1]?.split("<FundingDialog")[0] ?? "";
+  const connectedMenuSource = walletButtonSource.split("<Menu.Root>")[1]?.split("</Menu.Root>")[0] ?? "";
 
   assert.doesNotMatch(connectedMenuSource, /Connect EOA/);
   assert.doesNotMatch(connectedMenuSource, /aria-label="Connect an external EOA wallet"/);

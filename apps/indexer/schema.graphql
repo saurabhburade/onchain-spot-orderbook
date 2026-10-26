@@ -55,6 +55,7 @@ type Market
 type Order
   @index(fields: ["marketId", ["createdAt", "DESC"]])
   @index(fields: ["trader", ["createdAt", "DESC"]])
+  @index(fields: ["trader", "status", ["createdAt", "DESC"]])
   @index(fields: ["marketId", "status", ["createdAt", "DESC"]])
 {
   id: ID!
@@ -86,12 +87,18 @@ type Trade
   @index(fields: ["marketId", ["timestamp", "DESC"]])
   @index(fields: ["makerOrderId"])
   @index(fields: ["takerOrderId"])
+  @index(fields: ["makerTrader", ["timestamp", "DESC"]])
+  @index(fields: ["takerTrader", ["timestamp", "DESC"]])
 {
   id: ID!
   marketId: String!
   book: String!
   makerOrderId: String!
   takerOrderId: String!
+  makerTrader: String!
+  takerTrader: String!
+  makerSide: OrderSide!
+  takerSide: OrderSide!
   baseAsset: String!
   quoteAsset: String!
   price: BigInt!

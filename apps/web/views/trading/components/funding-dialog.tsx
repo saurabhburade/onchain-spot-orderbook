@@ -426,7 +426,7 @@ export function FundingDialog({
                         aria-expanded={assetSelectorOpen}
                         aria-haspopup="dialog"
                         aria-label={`Select withdrawal asset. Current asset: ${selectedAsset?.symbol ?? "none"}`}
-                        className="absolute inset-y-1 right-1 inline-flex min-w-20 items-center justify-end gap-1 rounded-lg px-2 font-mono text-[11px] text-muted-foreground outline-none transition-[color,background-color,transform] hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96]"
+                        className="absolute inset-y-1 right-1 inline-flex min-w-20 items-center justify-center gap-1 rounded-full px-3 font-mono text-[11px] text-muted-foreground outline-none transition-[color,background-color,transform] hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 active:scale-[0.96]"
                         disabled={withdrawing}
                         onClick={() => setAssetSelectorOpen(true)}
                         role="combobox"

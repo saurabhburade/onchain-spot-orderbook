@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, RotateCcw, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { type Address, isAddress } from "viem";
 
@@ -120,7 +121,7 @@ export function AccountPanel({
   onCloseQuarantined,
   onRecentTradesPageChange,
 }: AccountPanelProps) {
-  const { config } = useClobChain();
+  const { chainId, config } = useClobChain();
   const [activeTab, setActiveTab] = useState<AccountTab>("Recent Trades");
   const [cancellingId, setCancellingId] = useState<`0x${string}` | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<OpenOrder | null>(null);
@@ -636,20 +637,13 @@ export function AccountPanel({
                     {trade.size}
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                    {explorerUrl ? (
-                      <a
-                        className="inline-flex items-center gap-1 hover:text-foreground"
-                        href={`${explorerUrl}/address/${trade.account}`}
-                        rel="noreferrer"
-                        target="_blank"
-                        title={trade.account}
-                      >
-                        {shortHash(trade.account)}
-                        <ExternalLink aria-hidden="true" className="size-3" />
-                      </a>
-                    ) : (
-                      shortHash(trade.account)
-                    )}
+                    <Link
+                      className="inline-flex items-center gap-1 underline-offset-4 hover:text-foreground hover:underline"
+                      href={`/${chainId}/portfolio/${trade.account}`}
+                      title={`View portfolio for ${trade.account}`}
+                    >
+                      {shortHash(trade.account)}
+                    </Link>
                   </TableCell>
                   <TableCell className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
                     {trade.transactionHash && explorerUrl ? (

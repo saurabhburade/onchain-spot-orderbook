@@ -45,6 +45,22 @@ accepted. A maker and taker can therefore pay different rates after a market fee
 `TradingFeeCharged` events update the all-time and interval `quoteFees` totals. Fees are rounded
 down to the quote token's smallest unit, so very small fills can have a zero-atom fee.
 
+## Wallet portfolio pagination
+
+`Trade` records `makerTrader`, `takerTrader`, `makerSide`, and `takerSide` at execution time.
+Wallet portfolios query these indexed participants directly, so a recent fill of an old resting
+order does not require loading the account's historical orders. Open orders and order history
+use separate trader-filtered queries, each requesting 20 records plus one pagination sentinel.
+The open-order summary shows `20+` when the first page has more results; it does not scan every
+active order to calculate a total.
+
+**Rollout:** deploy this indexer schema and replay the existing history before deploying the
+updated portfolio trade query. Existing `Trade` rows need their participant fields backfilled;
+updating the handler alone only populates new fills. On self-hosted deployments, use the normal
+backup/replay process (the `--restart` commands below clear and rebuild the indexed database).
+Verify `Trade(limit: 1) { makerTrader takerTrader makerSide takerSide }` succeeds with populated
+fields before releasing the web app. No contract redeployment is required.
+
 ## Requirements
 
 - Node.js 22+

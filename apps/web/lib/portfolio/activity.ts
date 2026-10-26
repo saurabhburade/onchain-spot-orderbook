@@ -24,6 +24,10 @@ export type PortfolioTrade = {
   book: Address;
   makerOrderId: string;
   takerOrderId: string;
+  makerTrader: Address;
+  takerTrader: Address;
+  makerSide: "BUY" | "SELL";
+  takerSide: "BUY" | "SELL";
   price: string;
   quantity: string;
   quoteQuantity: string;
@@ -31,11 +35,11 @@ export type PortfolioTrade = {
   txHash: Hash;
 };
 
-export function personalTradeLegs(trade: PortfolioTrade, orders: Map<string, PortfolioOrder>) {
-  const legs: { order: PortfolioOrder; role: "Maker" | "Taker" }[] = [];
-  const maker = orders.get(trade.makerOrderId.toLowerCase());
-  const taker = orders.get(trade.takerOrderId.toLowerCase());
-  if (maker) legs.push({ order: maker, role: "Maker" });
-  if (taker) legs.push({ order: taker, role: "Taker" });
+export function personalTradeLegs(trade: PortfolioTrade, account: Address | null) {
+  const legs: { side: "BUY" | "SELL"; role: "Maker" | "Taker" }[] = [];
+  if (!account) return legs;
+  const owner = account.toLowerCase();
+  if (trade.makerTrader.toLowerCase() === owner) legs.push({ side: trade.makerSide, role: "Maker" });
+  if (trade.takerTrader.toLowerCase() === owner) legs.push({ side: trade.takerSide, role: "Taker" });
   return legs;
 }

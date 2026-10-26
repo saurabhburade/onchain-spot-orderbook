@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createTestIndexer } from "envio";
 import { describe, expect, it } from "vitest";
 import { candleEntityId, candleStart } from "../src/candles.js";
-import { bookUpdateEntityId, orderEntityId } from "../src/ids.js";
+import { bookUpdateEntityId, eventEntityId, orderEntityId } from "../src/ids.js";
 import { marketIntervalStatsEntityId } from "../src/market-stats.js";
 
 const deployment = JSON.parse(
@@ -455,6 +455,14 @@ describe("CLOB handlers", () => {
       filledQuantity: 2n,
       remainingQuantity: 0n,
       quoteQuantity: 856_000n,
+    });
+
+    const trade = await testIndexer.Trade.getOrThrow(eventEntityId(OTHER_TX_HASH, 5));
+    expect(trade).toMatchObject({
+      makerTrader: TRADER,
+      takerTrader: OTHER_TRADER,
+      makerSide: "BUY",
+      takerSide: "SELL",
     });
 
     const oneMinuteStart = candleStart(1_800_000_002, 60);

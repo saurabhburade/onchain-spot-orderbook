@@ -1,17 +1,21 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { Address } from "viem";
 
 import { clobAbi, erc20Abi } from "@/config/abis";
 import { subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import { useClobChain } from "@/lib/clob/chain-context";
 import type { MarketListing } from "@/lib/clob/types";
-import { loadPortfolioActivity } from "@/lib/indexer/portfolio-action";
+import { loadPortfolioOrders, loadPortfolioTrades } from "@/lib/indexer/portfolio-action";
 import { readPortfolioBalanceSnapshot } from "@/lib/portfolio/balance-snapshot";
 
-export function usePortfolio(markets: MarketListing[], tradesPage: number, account: Address | null) {
+export function usePortfolio(
+  markets: MarketListing[],
+  account: Address | null,
+  pagination: { tab: string; tradesPage: number; openOrdersPage: number; ordersPage: number },
+) {
   const { chainId, config, publicClient } = useClobChain();
   const tradingAddress = account;
   const queryClient = useQueryClient();
@@ -93,20 +97,46 @@ export function usePortfolio(markets: MarketListing[], tradesPage: number, accou
       ];
     },
   });
-  const activity = useQuery({
-    queryKey: ["portfolio-activity", ...scope, tradesPage],
-    enabled,
+  const openOrderOptions = (page: number) => ({
+    queryKey: ["portfolio-activity", ...scope, "open-orders", page] as const,
     retry: 1,
     refetchInterval: 15_000,
-    queryFn: () => loadPortfolioActivity({ chainId, account: tradingAddress ?? "", page: tradesPage }),
+    queryFn: () => loadPortfolioOrders({ chainId, account: tradingAddress ?? "", page, openOnly: true }),
   });
+  const openOrdersSummary = useQuery({ ...openOrderOptions(0), enabled });
+  const openOrders = useQuery({
+    ...openOrderOptions(pagination.openOrdersPage),
+    enabled: enabled && pagination.tab === "open-orders",
+  });
+  const orderHistory = useQuery({
+    queryKey: ["portfolio-activity", ...scope, "orders", pagination.ordersPage],
+    enabled: enabled && pagination.tab === "orders",
+    retry: 1,
+    refetchInterval: 15_000,
+    queryFn: () =>
+      loadPortfolioOrders({ chainId, account: tradingAddress ?? "", page: pagination.ordersPage, openOnly: false }),
+  });
+  const trades = useQuery({
+    queryKey: ["portfolio-activity", ...scope, "trades", pagination.tradesPage],
+    enabled: enabled && pagination.tab === "trades",
+    retry: 1,
+    refetchInterval: 15_000,
+    queryFn: () => loadPortfolioTrades({ chainId, account: tradingAddress ?? "", page: pagination.tradesPage }),
+  });
+  const refetchActivity = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: ["portfolio-activity", chainId, tradingAddress],
+      }),
+    [chainId, queryClient, tradingAddress],
+  );
   useEffect(
     () =>
       subscribeToBalanceRefresh(() => {
         void queryClient.invalidateQueries({ queryKey: ["portfolio-balances", chainId, tradingAddress] });
-        void queryClient.invalidateQueries({ queryKey: ["portfolio-activity", chainId, tradingAddress] });
+        void refetchActivity();
       }),
-    [chainId, queryClient, tradingAddress],
+    [chainId, queryClient, refetchActivity, tradingAddress],
   );
-  return { balances, activity };
+  return { balances, openOrders, openOrdersSummary, orderHistory, trades, refetchActivity };
 }

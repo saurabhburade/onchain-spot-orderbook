@@ -16,7 +16,7 @@ import { useClobChain } from "@/lib/clob/chain-context";
 import { listedTokenIconUrl } from "@/lib/clob/market-list";
 import { formatPrice, formatQuantity, formatQuote } from "@/lib/clob/utils";
 import { useClobWallet } from "@/lib/clob/wallet";
-import { type PortfolioOrder, personalTradeLegs } from "@/lib/portfolio/activity";
+import { personalTradeLegs } from "@/lib/portfolio/activity";
 import { orderHistoryPrice } from "@/lib/trading/order-history";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +28,6 @@ const tabs = [
   { value: "open-orders", label: "Open orders" },
   { value: "orders", label: "Order history" },
 ];
-const orderPageSize = 20;
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -141,17 +140,19 @@ function AccountPortfolio({ account }: { account: Address | null }) {
   const [tab, setTab] = useState("assets");
   const [tradesPage, setTradesPage] = useState(0);
   const [ordersPage, setOrdersPage] = useState(0);
-  const portfolio = usePortfolio(markets.data, tradesPage, account);
-  const { activity, balances } = portfolio;
+  const [openOrdersPage, setOpenOrdersPage] = useState(0);
+  const { balances, openOrders, openOrdersSummary, orderHistory, trades, refetchActivity } = usePortfolio(
+    markets.data,
+    account,
+    { tab, tradesPage, openOrdersPage, ordersPage },
+  );
+  const selectedActivity = tab === "trades" ? trades : tab === "orders" ? orderHistory : openOrders;
   const connected = Boolean(account);
   const marketById = new Map(
     markets.data.map((market) => [`${market.clobAddress.toLowerCase()}:${market.poolId.toLowerCase()}`, market]),
   );
-  const orders = activity.data?.orders ?? [];
-  const orderById = new Map(orders.map((order) => [order.id.toLowerCase(), order]));
-  const openOrders = orders.filter((order) => ["OPEN", "PARTIALLY_FILLED", "QUARANTINED"].includes(order.status));
   const explorer = config.chain.blockExplorers?.default.url;
-  const busy = balances.isFetching || activity.isFetching;
+  const busy = balances.isFetching || openOrdersSummary.isFetching || selectedActivity.isFetching;
 
   function marketFor(order: { book: string; marketId: string }) {
     return marketById.get(`${order.book.toLowerCase()}:${order.marketId.toLowerCase()}`);
@@ -167,9 +168,10 @@ function AccountPortfolio({ account }: { account: Address | null }) {
       </Link>
     );
   }
-  function orderRows(rows: PortfolioOrder[], pending: boolean) {
-    if (activity.isPending) return <RowsMessage columns={7}>Loading your orders…</RowsMessage>;
-    if (activity.isError && !activity.data)
+  function orderRows(query: typeof openOrders, pending: boolean) {
+    const rows = query.data?.items ?? [];
+    if (query.isPending) return <RowsMessage columns={7}>Loading your orders…</RowsMessage>;
+    if (query.isError && !query.data)
       return (
         <RowsMessage columns={7} error>
           Order history is unavailable. Refresh to try again.
@@ -237,7 +239,7 @@ function AccountPortfolio({ account }: { account: Address | null }) {
               onClick={() => {
                 void markets.refetch();
                 void balances.refetch();
-                void activity.refetch();
+                void refetchActivity();
               }}
               size="icon"
               variant="outline"
@@ -267,7 +269,9 @@ function AccountPortfolio({ account }: { account: Address | null }) {
               },
               {
                 title: "Open orders",
-                value: activity.data ? String(openOrders.length) : "—",
+                value: openOrdersSummary.data
+                  ? `${openOrdersSummary.data.items.length}${openOrdersSummary.data.hasMore ? "+" : ""}`
+                  : "—",
               },
               {
                 title: "Markets",
@@ -286,7 +290,7 @@ function AccountPortfolio({ account }: { account: Address | null }) {
               Market discovery is unavailable. Balances may be incomplete. Refresh to try again.
             </p>
           ) : null}
-          {activity.isError && activity.data ? (
+          {selectedActivity.isError && selectedActivity.data ? (
             <p className="text-sm text-destructive" role="alert">
               Activity could not be refreshed. The last loaded history is shown.
             </p>
@@ -295,14 +299,7 @@ function AccountPortfolio({ account }: { account: Address | null }) {
             className="min-w-0 border-b border-border [&_table]:text-xs [&_th]:h-9 [&_th]:bg-muted/45 [&_th]:px-4 [&_th]:text-[10px] [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-muted-foreground [&_td]:px-4 [&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4 sm:[&_th:first-child]:pl-6 sm:[&_td:first-child]:pl-6 sm:[&_th:last-child]:pr-6 sm:[&_td:last-child]:pr-6 lg:[&_th:first-child]:pl-5 lg:[&_td:first-child]:pl-5 lg:[&_th:last-child]:pr-5 lg:[&_td:last-child]:pr-5 xl:[&_th:first-child]:pl-6 xl:[&_td:first-child]:pl-6 xl:[&_th:last-child]:pr-6 xl:[&_td:last-child]:pr-6"
             aria-label="Portfolio activity"
           >
-            <Tabs
-              className="gap-0"
-              onValueChange={(value) => {
-                setTab(String(value));
-                setOrdersPage(0);
-              }}
-              value={tab}
-            >
+            <Tabs className="gap-0" onValueChange={(value) => setTab(String(value))} value={tab}>
               <div className="overflow-x-auto border-b border-border px-0 sm:px-2 lg:px-1 xl:px-2">
                 <TabsList
                   aria-label="Portfolio sections"
@@ -394,26 +391,26 @@ function AccountPortfolio({ account }: { account: Address | null }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activity.isPending ? (
+                    {trades.isPending ? (
                       <RowsMessage columns={7}>Loading your trades…</RowsMessage>
-                    ) : activity.isError && !activity.data ? (
+                    ) : trades.isError && !trades.data ? (
                       <RowsMessage columns={7} error>
                         Trade history is unavailable. Refresh to try again.
                       </RowsMessage>
-                    ) : !activity.data?.trades.length ? (
+                    ) : !trades.data?.items.length ? (
                       <RowsMessage columns={7}>
                         No trades on this page. Your maker and taker fills will appear here.
                       </RowsMessage>
                     ) : (
-                      activity.data.trades.flatMap((trade) =>
-                        personalTradeLegs(trade, orderById).map(({ order, role }) => {
+                      trades.data.items.flatMap((trade) =>
+                        personalTradeLegs(trade, account).map(({ side, role }) => {
                           const market = marketFor(trade);
                           return (
                             <TableRow key={`${trade.id}:${role}`}>
                               <TableCell>{marketLink(trade)}</TableCell>
                               <TableCell>
-                                <span className={cn(order.side === "BUY" ? "text-chart-3" : "text-destructive")}>
-                                  {order.side === "BUY" ? "Buy" : "Sell"}
+                                <span className={cn(side === "BUY" ? "text-chart-3" : "text-destructive")}>
+                                  {side === "BUY" ? "Buy" : "Sell"}
                                 </span>
                                 <span className="ml-2 text-xs text-muted-foreground">{role}</span>
                               </TableCell>
@@ -446,15 +443,15 @@ function AccountPortfolio({ account }: { account: Address | null }) {
                   </TableBody>
                 </Table>
                 <Pagination
-                  busy={activity.isFetching}
-                  hasMore={activity.data?.hasMoreTrades ?? false}
+                  busy={trades.isFetching}
+                  hasMore={trades.data?.hasMore ?? false}
                   onChange={setTradesPage}
                   page={tradesPage}
                 />
               </TabsContent>
               {["open-orders", "orders"].map((value) => {
-                const all = value === "open-orders" ? openOrders : orders;
-                const page = Math.min(ordersPage, Math.max(0, Math.ceil(all.length / orderPageSize) - 1));
+                const query = value === "open-orders" ? openOrders : orderHistory;
+                const page = value === "open-orders" ? openOrdersPage : ordersPage;
                 return (
                   <TabsContent key={value} value={value}>
                     <Table>
@@ -469,16 +466,12 @@ function AccountPortfolio({ account }: { account: Address | null }) {
                           <TableHead className="text-right">Transaction</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {orderRows(
-                          all.slice(page * orderPageSize, (page + 1) * orderPageSize),
-                          value === "open-orders",
-                        )}
-                      </TableBody>
+                      <TableBody>{orderRows(query, value === "open-orders")}</TableBody>
                     </Table>
                     <Pagination
-                      hasMore={(page + 1) * orderPageSize < all.length}
-                      onChange={setOrdersPage}
+                      hasMore={query.data?.hasMore ?? false}
+                      busy={query.isFetching}
+                      onChange={value === "open-orders" ? setOpenOrdersPage : setOrdersPage}
                       page={page}
                     />
                   </TabsContent>

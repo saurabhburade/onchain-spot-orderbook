@@ -8,34 +8,18 @@ import type * as Activity from "../portfolio/activity";
 const require = createRequire(import.meta.url);
 const { personalTradeLegs } = require("../portfolio/activity.ts") as typeof Activity;
 const owner = `0x${"ab".repeat(20)}` as Address;
-const book = `0x${"ef".repeat(20)}` as Address;
+const peer = `0x${"cd".repeat(20)}` as Address;
 const marketId = `0x${"34".repeat(32)}` as const;
-
-function order(id: string, side: "BUY" | "SELL"): Activity.PortfolioOrder {
-  return {
-    id,
-    orderId: marketId,
-    marketId,
-    book,
-    trader: owner,
-    side,
-    kind: "LIMIT",
-    status: "FILLED",
-    price: "100",
-    quantity: "10",
-    filledQuantity: "10",
-    remainingQuantity: "0",
-    quoteQuantity: "1000",
-    createdAt: 1,
-    createdTxHash: marketId,
-  };
-}
 const trade: Activity.PortfolioTrade = {
   id: "fill",
   marketId,
-  book,
+  book: peer,
   makerOrderId: "book:maker",
   takerOrderId: "book:taker",
+  makerTrader: owner,
+  takerTrader: peer,
+  makerSide: "SELL",
+  takerSide: "BUY",
   price: "100",
   quantity: "10",
   quoteQuantity: "1000",
@@ -43,26 +27,15 @@ const trade: Activity.PortfolioTrade = {
   txHash: marketId,
 };
 
-test("uses the owner's side for maker fills rather than the taker's opposite side", () => {
-  const maker = order(trade.makerOrderId, "SELL");
-  const [leg] = personalTradeLegs(trade, new Map([[maker.id, maker]]));
-  assert.equal(leg?.role, "Maker");
-  assert.equal(leg?.order.side, "SELL");
+test("uses the owner's maker side without fetching its historical order", () => {
+  assert.deepEqual(personalTradeLegs(trade, owner.toUpperCase() as Address), [{ side: "SELL", role: "Maker" }]);
 });
 
 test("includes taker fills, ignores unrelated fills, and preserves both legs of a self-trade", () => {
-  const maker = order(trade.makerOrderId, "SELL");
-  const taker = order(trade.takerOrderId, "BUY");
-  assert.deepEqual(personalTradeLegs(trade, new Map()), []);
-  assert.equal(personalTradeLegs(trade, new Map([[taker.id, taker]]))[0]?.role, "Taker");
-  assert.deepEqual(
-    personalTradeLegs(
-      trade,
-      new Map([
-        [maker.id, maker],
-        [taker.id, taker],
-      ]),
-    ).map((leg) => leg.role),
-    ["Maker", "Taker"],
-  );
+  assert.deepEqual(personalTradeLegs(trade, peer), [{ side: "BUY", role: "Taker" }]);
+  assert.deepEqual(personalTradeLegs({ ...trade, makerTrader: peer }, owner), []);
+  assert.deepEqual(personalTradeLegs({ ...trade, takerTrader: owner }, owner), [
+    { side: "SELL", role: "Maker" },
+    { side: "BUY", role: "Taker" },
+  ]);
 });

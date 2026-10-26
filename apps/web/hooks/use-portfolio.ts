@@ -9,6 +9,7 @@ import { subscribeToBalanceRefresh } from "@/lib/clob/balance-refresh";
 import { useClobChain } from "@/lib/clob/chain-context";
 import type { MarketListing } from "@/lib/clob/types";
 import { loadPortfolioActivity } from "@/lib/indexer/portfolio-action";
+import { readPortfolioBalanceSnapshot } from "@/lib/portfolio/balance-snapshot";
 
 export function usePortfolio(markets: MarketListing[], tradesPage: number, account: Address | null) {
   const { chainId, config, publicClient } = useClobChain();
@@ -47,28 +48,19 @@ export function usePortfolio(markets: MarketListing[], tradesPage: number, accou
     refetchInterval: 15_000,
     queryFn: async () => {
       if (!tradingAddress) throw new Error("Connect your trading wallet");
-      const [native, wallet, locked] = await Promise.all([
-        publicClient.getBalance({ address: tradingAddress }),
-        tokens.length
-          ? publicClient.multicall({
-              contracts: tokens.map((token) => ({
-                address: token.address,
-                abi: erc20Abi,
-                functionName: "balanceOf" as const,
-                args: [tradingAddress],
-              })),
-            })
-          : [],
-        escrows.length
-          ? publicClient.multicall({
-              contracts: escrows.map(({ book, asset }) => ({
-                address: book,
-                abi: clobAbi,
-                functionName: "balanceOf" as const,
-                args: [tradingAddress, asset],
-              })),
-            })
-          : [],
+      const { native, results } = await readPortfolioBalanceSnapshot(publicClient, tradingAddress, [
+        ...tokens.map((token) => ({
+          address: token.address,
+          abi: erc20Abi,
+          functionName: "balanceOf" as const,
+          args: [tradingAddress],
+        })),
+        ...escrows.map(({ book, asset }) => ({
+          address: book,
+          abi: clobAbi,
+          functionName: "balanceOf" as const,
+          args: [tradingAddress, asset],
+        })),
       ]);
       return [
         {
@@ -80,11 +72,11 @@ export function usePortfolio(markets: MarketListing[], tradesPage: number, accou
           locked: 0n,
         },
         ...tokens.map((token, index) => {
-          const result = wallet[index];
+          const result = results[index];
           let escrow: bigint | null = 0n;
           for (let i = 0; i < escrows.length; i++) {
             if (escrows[i].asset.toLowerCase() !== token.address.toLowerCase()) continue;
-            const entry = locked[i];
+            const entry = results[tokens.length + i];
             if (entry?.status !== "success") {
               escrow = null;
               break;

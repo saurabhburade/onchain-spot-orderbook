@@ -21,6 +21,7 @@ import { orderHistoryPrice } from "@/lib/trading/order-history";
 import { cn } from "@/lib/utils";
 
 import { AssetAddress } from "./asset-address";
+import { OrderStatusBadge } from "./order-status-badge";
 
 const tabs = [
   { value: "assets", label: "Assets" },
@@ -205,8 +206,8 @@ function AccountPortfolio({ account }: { account: Address | null }) {
           <TableCell className="text-right font-mono tabular-nums">
             {market ? formatQuantity(BigInt(order.filledQuantity), market) : "—"}
           </TableCell>
-          <TableCell className={cn("text-xs", order.status === "QUARANTINED" && "text-destructive")}>
-            {order.status.toLowerCase().replaceAll("_", " ")}
+          <TableCell>
+            <OrderStatusBadge status={order.status} />
           </TableCell>
           <TableCell className="text-right">
             <TransactionLink hash={order.createdTxHash} />
